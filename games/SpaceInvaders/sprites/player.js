@@ -72,6 +72,59 @@
     ctx.fillRect(1, 8,  2, 4);
   }
 
+  // ── Powerup sprites ───────────────────────────────────────────────────────
+  // Each powerup is 20×20, originX:10, originY:10 (center-center)
+
+  function drawPowerupBg(ctx, color, frame) {
+    // Dark background
+    ctx.fillStyle = frame === 0 ? 'rgba(0,0,20,0.85)' : 'rgba(0,10,30,0.9)';
+    ctx.fillRect(1, 1, 18, 18);
+    // Colored border (alternates slightly for animation)
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 20, 2);
+    ctx.fillRect(0, 18, 20, 2);
+    ctx.fillRect(0, 0, 2, 20);
+    ctx.fillRect(18, 0, 2, 20);
+  }
+
+  function drawPULightning(ctx) {
+    // Rapid Fire: orange lightning bolt
+    ctx.fillStyle = '#ff5500';
+    ctx.fillRect(11, 2,  5, 7);   // top segment (right-heavy)
+    ctx.fillRect(5,  7,  12, 4);  // diagonal crossbar
+    ctx.fillRect(4,  11, 5, 7);   // bottom segment (left-heavy)
+    ctx.fillStyle = '#ff9944';    // highlight
+    ctx.fillRect(12, 3, 2, 4);
+    ctx.fillRect(5, 8, 4, 2);
+  }
+
+  function drawPUDouble(ctx) {
+    // Double Shot: two yellow bullet shafts
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(4,  5, 4, 11);  // left shaft
+    ctx.fillRect(12, 5, 4, 11);  // right shaft
+    ctx.fillRect(5,  3, 2, 3);   // left tip
+    ctx.fillRect(13, 3, 2, 3);   // right tip
+    ctx.fillStyle = '#ffee88';   // highlight
+    ctx.fillRect(5, 6, 2, 7);
+    ctx.fillRect(13, 6, 2, 7);
+  }
+
+  function drawPUShield(ctx) {
+    // Shield: blue arch/chevron
+    ctx.fillStyle = '#4488ff';
+    ctx.fillRect(6,  2,  8, 3);   // top arch
+    ctx.fillRect(2,  4,  16, 4);  // upper body
+    ctx.fillRect(2,  8,  4, 6);   // left side
+    ctx.fillRect(14, 8,  4, 6);   // right side
+    ctx.fillRect(4,  14, 12, 3);  // lower body
+    ctx.fillRect(8,  17, 4, 2);   // bottom point
+    ctx.fillStyle = '#88bbff';    // inner glow
+    ctx.fillRect(7, 5, 6, 2);
+    ctx.fillRect(3, 9, 2, 3);
+    ctx.fillRect(15, 9, 2, 3);
+  }
+
   // ── Register sprites ──────────────────────────────────────────────────────
 
   window.addEventListener('GF:ready', function () {
@@ -123,6 +176,48 @@
             frames: [
               ctx => drawAlienBullet(ctx, 0),
               ctx => drawAlienBullet(ctx, 1),
+            ],
+          },
+        },
+      },
+
+      powerupRapidFire: {
+        frameWidth: 20, frameHeight: 20,
+        originX: 10, originY: 10,
+        animations: {
+          idle: {
+            fps: 5, loop: true,
+            frames: [
+              ctx => { drawPowerupBg(ctx, '#ff5500', 0); drawPULightning(ctx); },
+              ctx => { drawPowerupBg(ctx, '#ff7700', 1); drawPULightning(ctx); },
+            ],
+          },
+        },
+      },
+
+      powerupDoubleShot: {
+        frameWidth: 20, frameHeight: 20,
+        originX: 10, originY: 10,
+        animations: {
+          idle: {
+            fps: 5, loop: true,
+            frames: [
+              ctx => { drawPowerupBg(ctx, '#ffcc00', 0); drawPUDouble(ctx); },
+              ctx => { drawPowerupBg(ctx, '#ffee44', 1); drawPUDouble(ctx); },
+            ],
+          },
+        },
+      },
+
+      powerupShield: {
+        frameWidth: 20, frameHeight: 20,
+        originX: 10, originY: 10,
+        animations: {
+          idle: {
+            fps: 5, loop: true,
+            frames: [
+              ctx => { drawPowerupBg(ctx, '#4488ff', 0); drawPUShield(ctx); },
+              ctx => { drawPowerupBg(ctx, '#66aaff', 1); drawPUShield(ctx); },
             ],
           },
         },

@@ -85,6 +85,18 @@
       pause: ['KeyP',       'Escape'],
     },
 
+    // ── Powerups ─────────────────────────────────────────────────────────────
+    powerups: {
+      dropChance : 0.12,       // probability per alien kill
+      speed      : 65,         // fall speed px/s
+      duration   : 8,          // active seconds (except shield which lasts until hit)
+      types: [
+        { type: 'rapidFire', sprite: 'powerupRapidFire', color: '#ff5500' },
+        { type: 'doubleShot', sprite: 'powerupDoubleShot', color: '#ffcc00' },
+        { type: 'shield',    sprite: 'powerupShield',    color: '#4488ff' },
+      ],
+    },
+
     // ── Scoring ─────────────────────────────────────────────────────────────
     scoring: {
       extraLifeAt: 1500,
