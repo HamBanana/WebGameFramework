@@ -97,7 +97,6 @@ Your game's `index.html` includes `GameFramework.bundle.js` (or the source file)
 (function (GF) {
   'use strict';
   GF.GAME_CONFIG = {
-    frameworkPath: '../../framework',
     engine: { width: 800, height: 450, canvasId: 'gameCanvas', backgroundColor: '#1a1a2e' },
     physics: { gravity: 2200, floorY: 400, leftWall: 0, rightWall: 800 },
   };
@@ -146,9 +145,6 @@ Every game defines a `GF.GAME_CONFIG` object inside an IIFE before the main game
   'use strict';
 
   GF.GAME_CONFIG = {
-    // Path to the framework folder, relative to this game's index.html
-    frameworkPath: '../../framework',
-
     // Passed directly to the Engine constructor
     engine: {
       width: 800,           // Canvas width in pixels
@@ -278,9 +274,27 @@ engine.ctx       // CanvasRenderingContext2D
 engine.events    // EventBus
 engine.input     // InputManager
 engine.fps       // Current frames per second
+engine.systems   // Object with shortcut refs to all active systems
 ```
 
 The engine calls `.update(dt)` then `.render(ctx)` on every registered system each frame before invoking your `onUpdate` / `onRender` callbacks.
+
+**Accessing Systems from Scenes**
+
+Inside scene methods, you receive the `engine` parameter. Access systems via the shortcut property:
+
+```javascript
+class MyScene extends GF.Scene {
+  init(engine) {
+    // Access any system through engine.systems
+    engine.systems.physics.addBody(body);
+    engine.systems.sprites.createAnimator('hero', 'idle');
+    engine.systems.audio.play('sfx');
+  }
+}
+```
+
+Alternatively, capture a reference to the game object outside the scene and pass it during initialization if you need frequent access.
 
 ---
 
@@ -340,29 +354,34 @@ class GameplayScene extends GF.Scene {
 
   // Called once, the very first time this scene is pushed.
   // Heavy setup (spawning entities, building tilemaps) goes here.
+  // Access systems via engine.systems.SYSTEM_NAME
   init(engine) {
+    this.engine = engine;  // Save for later use
     this.player = spawnPlayer();
+    engine.systems.physics.addBody(this.player.body);
   }
 
   // Called every time this scene becomes the top of the stack
   // (after a pop returns to it, or on first push after init).
   enter(engine) {
-    engine.audio.playMusic('bgm', { fadeIn: 1 });
+    engine.systems.audio.playMusic('bgm', { fadeIn: 1 });
   }
 
   // Game logic — called every frame while active.
   update(dt, engine) {
     this.player.update(dt, engine);
+    // Access systems: engine.systems.physics, engine.systems.audio, etc.
   }
 
   // Drawing — called every frame while active.
   render(ctx, engine) {
     this.player.draw(ctx);
+    // Draw HUD after camera.end() to avoid world transform
   }
 
   // Called when another scene is pushed on top, covering this one.
   exit(engine) {
-    engine.audio.stopMusic({ fadeOut: 0.5 });
+    engine.systems.audio.stopMusic({ fadeOut: 0.5 });
   }
 
   // Called when this scene is permanently removed from the stack.
@@ -1239,7 +1258,6 @@ A complete, self-contained platformer skeleton showing all common patterns toget
 (function (GF) {
   'use strict';
   GF.GAME_CONFIG = {
-    frameworkPath: '../../framework',
     engine:  { width: 800, height: 450, canvasId: 'gameCanvas', backgroundColor: '#1a1a2e' },
     physics: { gravity: 2200, floorY: 408, leftWall: 0, rightWall: 800 },
     player:  { speed: 220, jumpPower: 680 },

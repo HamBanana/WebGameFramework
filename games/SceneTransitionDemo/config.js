@@ -1,4 +1,4 @@
-// GameFramework/games/SceneTransitionDemo/GAME_CONFIG.js
+// GameFramework/games/SceneTransitionDemo/config.js
 // Configuration for the Scene Transition Demo — showcases all four built-in
 // transition types (iris, fade, wipe, flash) between four distinct scenes.
 
@@ -51,7 +51,7 @@
   };
 
   // Apply any overrides set by the launcher once the framework is ready.
-  // Using GF:ready ensures this works whether GAME_CONFIG.js loads before
+  // Using GF:ready ensures this works whether config.js loads before
   // or after GameFramework.bundle.js (standalone vs. launcher flow).
   window.addEventListener('GF:ready', function () {
     GF.applyLauncherConfig('SceneTransitionDemo');

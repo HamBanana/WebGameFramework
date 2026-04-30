@@ -1,4 +1,4 @@
-// GameFramework/games/Acca/GAME_CONFIG.js
+// GameFramework/games/Acca/config.js
 // Game-specific configuration for Acca.
 // Sprite NAMES only — no asset paths.
 
@@ -137,7 +137,7 @@
   };
 
   // Apply any overrides set by the launcher once the framework is ready.
-  // Using GF:ready ensures this works whether GAME_CONFIG.js loads before
+  // Using GF:ready ensures this works whether config.js loads before
   // or after GameFramework.bundle.js (standalone vs. launcher flow).
   window.addEventListener('GF:ready', function () {
     GF.applyLauncherConfig('Acca');

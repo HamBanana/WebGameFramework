@@ -249,6 +249,34 @@
       border-color: rgba(255,255,255,0.2);
     }
 
+    /* ── Restart button ── */
+    .btn-restart {
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.5px;
+    }
+    .btn-restart:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+    }
+    .btn-restart:active {
+      transform: scale(0.98);
+    }
+    .btn-restart.restarting {
+      background: rgba(255,100,100,0.1);
+      border-color: rgba(255,100,100,0.3);
+      color: #ff6464;
+      cursor: not-allowed;
+    }
+
     /* ── Footer ── */
     footer {
       text-align: center;
@@ -271,13 +299,14 @@
     <div class="dot"></div>
     Server running · <span id="serverUrl">http://localhost:3000</span>
   </div>
+  <button class="btn-restart" id="restartBtn" title="Restart the server">↻ RESTART</button>
 </header>
 
 <div class="section-label">Select a Game</div>
 
 <div class="game-grid" id="gameGrid"></div>
 
-<footer>GameFramework · node serve.js to restart server</footer>
+<footer></footer>
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -323,6 +352,18 @@ function persistOverrides(gameId, sel) {
   const game      = GAMES.find(g => g.id === gameId);
   const overrides = buildOverrides(game, sel);
   localStorage.setItem('GF_CONFIG_' + gameId, JSON.stringify(overrides));
+
+  // Also save to the actual config.js file via API
+  saveConfigToServer(gameId, overrides);
+}
+
+function saveConfigToServer(gameId, config) {
+  fetch('/api/config/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gameId, config }),
+  })
+    .catch(err => console.error(`Failed to save config for ${gameId}:`, err));
 }
 
 // ── Render a single game card ─────────────────────────────────────────────────
@@ -437,6 +478,11 @@ document.addEventListener('click', e => {
     const game = GAMES.find(g => g.id === id);
     localStorage.removeItem('GF_LAUNCH_SEL_' + id);
     localStorage.removeItem('GF_CONFIG_' + id);
+
+    // Write the default values back to config.js so standalone play also
+    // reflects the reset (serve.js merges only the launcher-owned fields).
+    saveConfigToServer(id, buildOverrides(game, {}));
+
     const panel = document.getElementById('cfg-' + id);
     (game.config || []).forEach(cfg => {
       const chosenEl = document.querySelector(`[data-chosen="${id}-${cfg.key}"]`);
@@ -456,6 +502,57 @@ document.addEventListener('click', e => {
     if (!game) return;
     persistOverrides(id, loadSelections(id));
     window.open(game.path, '_blank');
+    return;
+  }
+
+  // Restart server
+  const restart = e.target.closest('#restartBtn');
+  if (restart) {
+    restart.disabled = true;
+    restart.classList.add('restarting');
+    restart.textContent = '⟳ RESTARTING...';
+
+    fetch('/api/server/restart', { method: 'POST' })
+      .then(() => {
+        // Server is restarting, show status
+        const dot = document.querySelector('.dot');
+        if (dot) dot.style.background = '#ff9800';
+        if (dot) dot.style.boxShadow = '0 0 6px #ff9800';
+
+        // Attempt to reconnect every 500ms
+        const checkInterval = setInterval(() => {
+          fetch('/api/games')
+            .then(r => {
+              if (r.ok) {
+                clearInterval(checkInterval);
+                dot.style.background = '#4caf50';
+                dot.style.boxShadow = '0 0 6px #4caf50';
+                restart.disabled = false;
+                restart.classList.remove('restarting');
+                restart.textContent = '↻ RESTART';
+              }
+            })
+            .catch(() => {
+              // Still restarting, keep trying
+            });
+        }, 500);
+
+        // Timeout after 30 seconds
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          restart.disabled = false;
+          restart.classList.remove('restarting');
+          restart.textContent = '↻ RESTART';
+          dot.style.background = '#f44336';
+          dot.style.boxShadow = '0 0 6px #f44336';
+        }, 30000);
+      })
+      .catch(err => {
+        console.error('Restart failed:', err);
+        restart.disabled = false;
+        restart.classList.remove('restarting');
+        restart.textContent = '↻ RESTART';
+      });
     return;
   }
 });

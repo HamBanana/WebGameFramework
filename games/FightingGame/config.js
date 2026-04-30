@@ -1,4 +1,4 @@
-// GameFramework/games/FightingGame/GAME_CONFIG.js
+// GameFramework/games/FightingGame/config.js
 // Game-specific configuration.
 // Uses sprite NAMES only — no asset paths.
 
@@ -26,7 +26,7 @@
     // ── Round settings ────────────────────────────────────────────────────────
     round: {
       totalRounds    : 3,      // best of 3
-      roundTime      : 60,     // seconds per round (0 = sudden death)
+      roundTime      : 5,     // seconds per round (0 = sudden death)
       koDuration     : 2.5,    // seconds to show KO screen before next round
       victoryDuration: 3.0,
     },
@@ -122,7 +122,7 @@
   };
 
   // Apply any overrides set by the launcher once the framework is ready.
-  // Using GF:ready ensures this works whether GAME_CONFIG.js loads before
+  // Using GF:ready ensures this works whether config.js loads before
   // or after GameFramework.bundle.js (standalone vs. launcher flow).
   window.addEventListener('GF:ready', function () {
     GF.applyLauncherConfig('FightingGame');

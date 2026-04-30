@@ -3,7 +3,7 @@
 //
 // This file owns the asset path for the Claude spritesheet so that games
 // only have to reference the sprite by NAME — no asset paths leak into
-// game code or GAME_CONFIG.js.
+// game code or config.js.
 //
 // Animations available on the "claude" sprite:
 //   idle      — 8 frames, looping

@@ -13,6 +13,38 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
+const vm   = require('vm');
+
+// Deep-merge `source` into `target` in place (arrays are replaced, not merged).
+function deepMergeObj(target, source) {
+  for (const k of Object.keys(source)) {
+    const v = source[k];
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      if (!target[k] || typeof target[k] !== 'object' || Array.isArray(target[k])) {
+        target[k] = {};
+      }
+      deepMergeObj(target[k], v);
+    } else {
+      target[k] = v;
+    }
+  }
+}
+
+// Execute a config.js IIFE in a sandbox and return the resolved GF.GAME_CONFIG
+// object (all JS local-variable references are evaluated, e.g. BOARD_LAYOUT).
+function extractConfigFromFile(content) {
+  try {
+    const sandbox = vm.createContext({
+      window: { addEventListener: function () {}, GF: {} },
+    });
+    vm.runInContext(content, sandbox);
+    const cfg = sandbox.window.GF && sandbox.window.GF.GAME_CONFIG;
+    // Return a plain deep-clone so vm internals don't leak
+    return cfg ? JSON.parse(JSON.stringify(cfg)) : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 const PORT = parseInt(process.argv[2] || '3000', 10);
 const ROOT = __dirname;
@@ -69,6 +101,99 @@ const server = http.createServer((req, res) => {
       'Access-Control-Allow-Origin': '*',
     });
     res.end(JSON.stringify(games));
+    return;
+  }
+
+  // ── API: save game config ─────────────────────────────────────────────────────
+  if (req.method === 'POST' && urlPath === '/api/config/save') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const { gameId, config: overrides } = JSON.parse(body);
+        const configFile = path.join(ROOT, 'games', gameId, 'config.js');
+
+        // Validate path to prevent directory traversal
+        if (!configFile.startsWith(ROOT)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Forbidden' }));
+          return;
+        }
+
+        if (!fs.existsSync(path.dirname(configFile))) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Game not found' }));
+          return;
+        }
+
+        const currentContent = fs.readFileSync(configFile, 'utf8');
+
+        // Verify the file has a GF.GAME_CONFIG block we can replace
+        if (!/GF\.GAME_CONFIG\s*=\s*\{/.test(currentContent)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid config.js format' }));
+          return;
+        }
+
+        // ── Step 1: extract the full current config ────────────────────────
+        // Run the IIFE in a vm sandbox so that any JS locals (e.g. BOARD_LAYOUT
+        // in Acca) are resolved before we serialise.  Falls back to a regex +
+        // JSON.parse if vm execution fails for any reason.
+        let currentConfig = extractConfigFromFile(currentContent);
+
+        if (!currentConfig) {
+          // Fallback: extract the raw JSON block and parse it
+          const m = currentContent.match(/GF\.GAME_CONFIG\s*=\s*({[\s\S]*?});/);
+          if (m) {
+            try { currentConfig = JSON.parse(m[1]); } catch (_) {}
+          }
+        }
+
+        if (!currentConfig) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Could not parse current config' }));
+          return;
+        }
+
+        // ── Step 2: merge the launcher overrides into the full config ──────
+        // Only the keys touched by the launcher are changed; everything else
+        // (physics, board layout, achievements, etc.) is preserved.
+        deepMergeObj(currentConfig, overrides);
+
+        // ── Step 3: write the merged config back ───────────────────────────
+        const configStr = JSON.stringify(currentConfig, null, 2);
+        const newContent = currentContent.replace(
+          /GF\.GAME_CONFIG\s*=\s*\{[\s\S]*?\};/,
+          `GF.GAME_CONFIG = ${configStr};`
+        );
+
+        fs.writeFileSync(configFile, newContent, 'utf8');
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify({ success: true, message: 'Config saved' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // ── API: restart server ───────────────────────────────────────────────────────
+  if (req.method === 'POST' && urlPath === '/api/server/restart') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify({ success: true, message: 'Server restarting...' }));
+
+    // Give the response time to send, then gracefully restart
+    setTimeout(() => {
+      process.exit(0);
+    }, 500);
     return;
   }
 

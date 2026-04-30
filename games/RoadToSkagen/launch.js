@@ -17,9 +17,9 @@ const { exec } = require('child_process');
 const PORT     = parseInt(process.argv[2] || '3000', 10);
 const GAME_DIR = __dirname;
 
-// Resolve the framework directory from the frameworkPath declared in GAME_CONFIG.js.
+// Resolve the framework directory from the frameworkPath declared in config.js.
 // This means moving the game folder anywhere only requires updating that one value.
-const configSrc     = fs.readFileSync(path.join(GAME_DIR, 'GAME_CONFIG.js'), 'utf8');
+const configSrc     = fs.readFileSync(path.join(GAME_DIR, 'config.js'), 'utf8');
 const fpMatch       = configSrc.match(/frameworkPath\s*:\s*['"]([^'"]+)['"]/);
 const FRAMEWORK_DIR = path.resolve(GAME_DIR, fpMatch ? fpMatch[1] : '../../framework');
 
