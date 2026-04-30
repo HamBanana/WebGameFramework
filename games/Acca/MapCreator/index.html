@@ -189,10 +189,14 @@
   <div class="sep"></div>
   <button id="btn-center">Center View</button>
   <div class="sep"></div>
+  <button id="btn-import">Import Map</button>
+  <button id="btn-save">Save Map</button>
+  <div class="sep"></div>
   <button id="btn-export">Export JS</button>
   <button id="btn-copy">Copy</button>
   <div class="sep"></div>
   <span id="status-bar">Ready</span>
+  <input type="file" id="file-input" accept=".json" style="display:none">
 </div>
 
 <!-- ── Main ─────────────────────────────────────────────────────────────────── -->
@@ -1185,6 +1189,84 @@ function loadDefault() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Save / Import (JSON file)
+// ─────────────────────────────────────────────────────────────────────────────
+function saveMap() {
+  const data = {
+    version:         1,
+    nextCellId:      S.nextCellId,
+    nextDistrictId:  S.nextDistrictId,
+    cells:           [...S.cells.values()],
+    connections:     [...S.connections],
+    districts:       [...S.districts.values()],
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'acca-map.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('Map saved as acca-map.json.');
+}
+
+function importMap(json) {
+  let data;
+  try { data = JSON.parse(json); }
+  catch { setStatus('Error: file is not valid JSON.'); return; }
+
+  if (!data.cells || !data.connections || !data.districts) {
+    setStatus('Error: file does not look like an Acca map export.'); return;
+  }
+
+  // Confirm if there is existing work
+  if (S.cells.size > 0 && !confirm('Load this map? Current map will be cleared.')) return;
+
+  S.cells.clear();
+  S.connections.clear();
+  S.districts.clear();
+
+  // ── Districts ────────────────────────────────────────────────────────────────
+  for (const d of data.districts) S.districts.set(d.id, d);
+
+  // Build a name→id lookup for the legacy format (cells reference district by name)
+  const districtByName = new Map([...S.districts.values()].map(d => [d.name, d.id]));
+
+  // ── Cells ────────────────────────────────────────────────────────────────────
+  // New format:  { id, x, y, type, districtId }   (districtId is a number | null)
+  // Legacy format: { id, x, y, type, district }   (district is a name string | null)
+  for (const c of data.cells) {
+    let districtId = c.districtId ?? null;
+    if (districtId === undefined || (districtId === null && c.district != null)) {
+      // Legacy: resolve name → id
+      districtId = (c.district != null) ? (districtByName.get(c.district) ?? null) : null;
+    }
+    S.cells.set(c.id, { id: c.id, x: c.x, y: c.y, type: c.type, districtId });
+  }
+
+  // ── Connections ──────────────────────────────────────────────────────────────
+  // New format:  ["from->to", ...]
+  // Legacy format: [{ from, to, direction: "both"|"forward" }, ...]
+  for (const k of data.connections) {
+    if (typeof k === 'string') {
+      S.connections.add(k);
+    } else {
+      // Legacy object — expand to internal string representation
+      S.connections.add(`${k.from}->${k.to}`);
+      if (k.direction === 'both') S.connections.add(`${k.to}->${k.from}`);
+    }
+  }
+
+  S.nextCellId     = data.nextCellId     ?? (Math.max(-1, ...S.cells.keys())     + 1);
+  S.nextDistrictId = data.nextDistrictId ?? (Math.max(-1, ...S.districts.keys()) + 1);
+  S.selectedCell = null; S.selectedDistrict = null; S.roadStart = null;
+
+  rebuildDistrictPanel(); updateCellInfo();
+  centerView();
+  setStatus(`Map imported — ${S.cells.size} cells, ${S.districts.size} districts.`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Wire UI
 // ─────────────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tool-btn').forEach(b => {
@@ -1230,6 +1312,20 @@ document.getElementById('btn-new').addEventListener('click', () => {
 document.getElementById('btn-load-default').addEventListener('click', () => {
   if (S.cells.size > 0 && !confirm('Load the default Acca layout? Current map will be cleared.')) return;
   loadDefault();
+});
+
+document.getElementById('btn-save').addEventListener('click', saveMap);
+
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('file-input').value = '';   // allow re-selecting same file
+  document.getElementById('file-input').click();
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => importMap(ev.target.result);
+  reader.readAsText(file);
 });
 
 document.getElementById('btn-export').addEventListener('click', () => {
