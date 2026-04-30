@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameFramework Launcher</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #08080f;
+      --surface:   #10101c;
+      --border:    rgba(255,255,255,0.07);
+      --text:      #d4d4e8;
+      --muted:     #5a5a78;
+      --accent:    #00e5ff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 28px 48px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    header .logo {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #fff;
+    }
+    header .logo span { color: var(--accent); }
+    header .version {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+    header .separator { flex: 1; }
+    header .status {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    header .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #4caf50;
+      box-shadow: 0 0 6px #4caf50;
+    }
+
+    /* ── Section title ── */
+    .section-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 36px 48px 16px;
+    }
+
+    /* ── Game grid ── */
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 20px;
+      padding: 0 48px;
+    }
+
+    /* ── Game card ── */
+    .game-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .game-card:hover {
+      border-color: var(--card-color, var(--accent));
+      box-shadow: 0 0 24px color-mix(in srgb, var(--card-color, var(--accent)) 20%, transparent);
+    }
+
+    /* banner strip at the top of each card */
+    .card-banner {
+      height: 5px;
+      background: var(--card-color, var(--accent));
+    }
+
+    .card-body { padding: 22px 22px 0; }
+
+    .card-icon { font-size: 36px; margin-bottom: 12px; }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .card-meta {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    /* ── Config panel ── */
+    .config-panel {
+      border-top: 1px solid var(--border);
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.35s ease, padding 0.25s ease;
+      padding: 0 22px;
+    }
+    .config-panel.open {
+      max-height: 600px;
+      padding: 18px 22px;
+    }
+
+    .config-heading {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .config-group {
+      margin-bottom: 16px;
+    }
+    .config-group label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .config-group label .val {
+      font-weight: 600;
+      color: var(--card-color, var(--accent));
+    }
+
+    /* segmented control */
+    .seg {
+      display: flex;
+      gap: 4px;
+    }
+    .seg button {
+      flex: 1;
+      padding: 6px 4px;
+      font-size: 11px;
+      font-family: inherit;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.5px;
+    }
+    .seg button.active {
+      background: color-mix(in srgb, var(--card-color, var(--accent)) 20%, transparent);
+      border-color: var(--card-color, var(--accent));
+      color: #fff;
+    }
+
+    .reset-btn {
+      font-size: 11px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      margin-top: 4px;
+      padding: 4px 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .reset-btn:hover { color: var(--text); }
+
+    /* ── Card actions ── */
+    .card-actions {
+      display: flex;
+      gap: 10px;
+      padding: 16px 22px 20px;
+    }
+
+    .btn-play {
+      flex: 1;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      font-family: inherit;
+      background: var(--card-color, var(--accent));
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: filter 0.15s, transform 0.1s;
+    }
+    .btn-play:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn-play:active { transform: translateY(0); filter: brightness(0.95); }
+
+    .btn-config {
+      padding: 12px 14px;
+      font-size: 16px;
+      font-family: inherit;
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-config:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+    .btn-config.active {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 40px 0 0;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">GAME<span>FRAMEWORK</span></div>
+    <div class="version">v2.0.0</div>
+  </div>
+  <div class="separator"></div>
+  <div class="status">
+    <div class="dot"></div>
+    Server running · <span id="serverUrl">http://localhost:3000</span>
+  </div>
+</header>
+
+<div class="section-label">Select a Game</div>
+
+<div class="game-grid" id="gameGrid"></div>
+
+<footer>GameFramework · node serve.js to restart server</footer>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let GAMES = [];  // populated from /api/games
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+function loadSelections(gameId) {
+  try {
+    const raw = localStorage.getItem('GF_LAUNCH_SEL_' + gameId);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveSelections(gameId, sel) {
+  localStorage.setItem('GF_LAUNCH_SEL_' + gameId, JSON.stringify(sel));
+}
+
+function buildOverrides(game, sel) {
+  const overrides = {};
+  for (const cfg of (game.config || [])) {
+    const chosen = sel[cfg.key] ?? cfg.def;
+    const patch  = (cfg.apply || {})[chosen];
+    if (patch) deepMerge(overrides, patch);
+  }
+  return overrides;
+}
+
+function deepMerge(target, source) {
+  for (const k of Object.keys(source)) {
+    const v = source[k];
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      if (!target[k] || typeof target[k] !== 'object') target[k] = {};
+      deepMerge(target[k], v);
+    } else {
+      target[k] = v;
+    }
+  }
+}
+
+function persistOverrides(gameId, sel) {
+  const game      = GAMES.find(g => g.id === gameId);
+  const overrides = buildOverrides(game, sel);
+  localStorage.setItem('GF_CONFIG_' + gameId, JSON.stringify(overrides));
+}
+
+// ── Render a single game card ─────────────────────────────────────────────────
+
+function renderCard(game) {
+  const sel  = loadSelections(game.id);
+  const card = document.createElement('div');
+  card.className = 'game-card';
+  card.style.setProperty('--card-color', game.color || 'var(--accent)');
+
+  const configRows = (game.config || []).map(cfg => {
+    const chosen = sel[cfg.key] ?? cfg.def;
+    const btns = cfg.opts.map(o =>
+      `<button class="seg-btn ${o === chosen ? 'active' : ''}"
+               data-game="${game.id}" data-key="${cfg.key}" data-val="${o}"
+               title="${cfg.help || ''}">${o}</button>`
+    ).join('');
+    return `
+      <div class="config-group">
+        <label>${cfg.key} <span class="val" data-chosen="${game.id}-${cfg.key}">${chosen}</span></label>
+        <div class="seg">${btns}</div>
+      </div>`;
+  }).join('');
+
+  const configSection = configRows
+    ? `<div class="config-panel" id="cfg-${game.id}">
+         <div class="config-heading">⚙ Configure</div>
+         ${configRows}
+         <button class="reset-btn" data-reset="${game.id}">Reset to defaults</button>
+       </div>`
+    : '';
+
+  const configBtn = configRows
+    ? `<button class="btn-config" id="toggle-${game.id}" data-toggle="${game.id}" title="Configure">⚙</button>`
+    : '';
+
+  const tags = (game.tags || []).map(t => `<span class="badge">${t}</span>`).join('');
+
+  card.innerHTML = `
+    <div class="card-banner"></div>
+    <div class="card-body">
+      <div class="card-icon">${game.icon || '🎮'}</div>
+      <div class="card-title">${game.title || game.id}</div>
+      ${tags ? `<div class="card-meta">${tags}</div>` : ''}
+      ${game.desc ? `<div class="card-desc">${game.desc}</div>` : ''}
+    </div>
+    ${configSection}
+    <div class="card-actions">
+      <button class="btn-play" data-play="${game.id}">▶ PLAY</button>
+      ${configBtn}
+    </div>`;
+
+  return card;
+}
+
+// ── Load games from server and render ────────────────────────────────────────
+
+const grid = document.getElementById('gameGrid');
+
+fetch('/api/games')
+  .then(r => r.json())
+  .then(games => {
+    GAMES = games;
+    games.forEach(game => grid.appendChild(renderCard(game)));
+
+    // Persist defaults on first load so games get config even before settings are opened
+    games.forEach(game => {
+      if (!localStorage.getItem('GF_CONFIG_' + game.id)) {
+        persistOverrides(game.id, loadSelections(game.id));
+      }
+    });
+  })
+  .catch(() => {
+    grid.innerHTML = '<p style="color:var(--muted);padding:48px">Could not load game list — is the server running?</p>';
+  });
+
+// ── Event delegation ──────────────────────────────────────────────────────────
+
+document.addEventListener('click', e => {
+  // Toggle config panel
+  const toggle = e.target.closest('[data-toggle]');
+  if (toggle) {
+    const id    = toggle.dataset.toggle;
+    const panel = document.getElementById('cfg-' + id);
+    const isOpen = panel.classList.toggle('open');
+    toggle.classList.toggle('active', isOpen);
+    toggle.textContent = isOpen ? '✕' : '⚙';
+    return;
+  }
+
+  // Segmented button
+  const segBtn = e.target.closest('.seg-btn');
+  if (segBtn) {
+    const { game, key, val } = segBtn.dataset;
+    const sel = loadSelections(game);
+    sel[key]  = val;
+    saveSelections(game, sel);
+    persistOverrides(game, sel);
+
+    segBtn.closest('.seg').querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+    segBtn.classList.add('active');
+
+    const chosenEl = document.querySelector(`[data-chosen="${game}-${key}"]`);
+    if (chosenEl) chosenEl.textContent = val;
+    return;
+  }
+
+  // Reset
+  const reset = e.target.closest('[data-reset]');
+  if (reset) {
+    const id   = reset.dataset.reset;
+    const game = GAMES.find(g => g.id === id);
+    localStorage.removeItem('GF_LAUNCH_SEL_' + id);
+    localStorage.removeItem('GF_CONFIG_' + id);
+    const panel = document.getElementById('cfg-' + id);
+    (game.config || []).forEach(cfg => {
+      const chosenEl = document.querySelector(`[data-chosen="${id}-${cfg.key}"]`);
+      if (chosenEl) chosenEl.textContent = cfg.def;
+      panel.querySelectorAll(`[data-key="${cfg.key}"]`).forEach(b => {
+        b.classList.toggle('active', b.dataset.val === cfg.def);
+      });
+    });
+    return;
+  }
+
+  // Play
+  const play = e.target.closest('[data-play]');
+  if (play) {
+    const id   = play.dataset.play;
+    const game = GAMES.find(g => g.id === id);
+    if (!game) return;
+    persistOverrides(id, loadSelections(id));
+    window.open(game.path, '_blank');
+    return;
+  }
+});
+</script>
+
+</body>
+</html>

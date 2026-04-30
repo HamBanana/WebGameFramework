@@ -1,0 +1,45 @@
+{
+  "id": "FightingGame",
+  "title": "Shadow Strike",
+  "icon": "⚔️",
+  "color": "#b06aff",
+  "tags": ["FIGHTING", "2 PLAYER", "LOCAL PVP"],
+  "desc": "A 2D fighter between Kuro and Hana. Battle over multiple rounds with punches, kicks, and special moves.",
+  "config": [
+    {
+      "key": "Difficulty",
+      "help": "Controls CPU reaction time and aggression.",
+      "opts": ["Easy", "Normal", "Hard", "Brutal"],
+      "def": "Normal",
+      "apply": {
+        "Easy":   { "ai": { "reactionTime": 0.40, "aggressionBias": 0.25, "jumpFrequency": 0.008 } },
+        "Normal": { "ai": { "reactionTime": 0.18, "aggressionBias": 0.55, "jumpFrequency": 0.018 } },
+        "Hard":   { "ai": { "reactionTime": 0.08, "aggressionBias": 0.78, "jumpFrequency": 0.030 } },
+        "Brutal": { "ai": { "reactionTime": 0.03, "aggressionBias": 0.95, "jumpFrequency": 0.050 } }
+      }
+    },
+    {
+      "key": "Rounds",
+      "help": "Best-of format.",
+      "opts": ["1", "Best of 3", "Best of 5"],
+      "def": "Best of 3",
+      "apply": {
+        "1":         { "round": { "totalRounds": 1 } },
+        "Best of 3": { "round": { "totalRounds": 3 } },
+        "Best of 5": { "round": { "totalRounds": 5 } }
+      }
+    },
+    {
+      "key": "Round Time",
+      "help": "Seconds per round.",
+      "opts": ["30s", "60s", "90s", "∞"],
+      "def": "60s",
+      "apply": {
+        "30s": { "round": { "roundTime": 30 } },
+        "60s": { "round": { "roundTime": 60 } },
+        "90s": { "round": { "roundTime": 90 } },
+        "∞":   { "round": { "roundTime": 0  } }
+      }
+    }
+  ]
+}

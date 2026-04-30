@@ -1,0 +1,166 @@
+### **Acca Game Design Document**
+
+#### **1. Game Overview**
+
+**Acca** is a 3D board game with a top-down perspective focusing on investments, resource management, and strategic competition. Players navigate a grid, establishing properties, building businesses, and competing to control regions. The game is designed to be fully playable with a controller, offering a rich blend of economic strategy and territorial domination.
+
+---
+
+#### **2. Core Gameplay Mechanics**
+
+**2.1 Grid Navigation**
+
+- Players move across a grid of cells using a controller.
+- Movement is restricted to adjacent cells, defined by neighbors (`up`, `down`, `left`, `right`).
+- Special cells include:
+  - **Chance Events**: Trigger random events impacting players.
+  - **Markets**: Allow players to buy resources or items.
+
+**2.2 Properties and Businesses**
+
+- Most cells can host properties, which cost money to establish.
+- Properties belong to a player’s company and can host multiple businesses.
+- Businesses require resources to build and maintain, and employees to operate.
+
+**2.3 Regional Control and Mayor Role**
+
+- Owning all properties in a region grants the player the title of Mayor.
+- Mayors collect taxes from the region’s population, tied to their happiness and size.
+- Unhappy populations may migrate to other regions, reducing tax income.
+
+**2.4 Population Management**
+
+- Each region has a population count that determines available employees.
+- Population happiness is influenced by:
+  - Tax rates set by the Mayor.
+  - Employment opportunities.
+  - Regional amenities and random events.
+
+**2.5 Trading and Interaction**
+
+- Players can trade resources, properties, and businesses.
+- Limited adversarial actions, like hostile takeovers, allow strategic disruption of opponents.
+
+---
+
+#### **3. Components and Their Roles**
+
+**3.1 Cells**
+
+- Basic units of the grid, hosting properties or special squares.
+- Linked to neighbors for player navigation.
+
+**3.2 Properties**
+
+- Owned by players and tied to a company.
+- Can host businesses that generate income and impact regional value.
+- Properties can be sold to or bought from other players.
+
+**3.3 Businesses**
+
+- Built within properties, requiring resources and money.
+- Provide jobs for the regional population and contribute to regional value.
+
+**3.4 Regions**
+
+- Groups of cells with unique traits and a population count.
+- Regional value is influenced by properties, businesses, and population happiness.
+
+**3.5 Companies**
+
+- Players start with one company but can create more to specialize in different industries.
+- Companies group properties and provide bonuses based on business types.
+
+**3.6 Population**
+
+- Determines employee availability for businesses.
+- Size and happiness affect taxes and migration behavior.
+
+---
+
+#### **4. Planned Features**
+
+**4.1 Mayor Role**
+
+- Collect taxes from the population of the controlled region.
+- Adjust tax rates, balancing income and happiness.
+- Lose mayoral status if another player takes over properties or the population migrates away.
+
+**4.2 Resource Management**
+
+- Resource types (e.g., wood, steel, electricity) are required for building and maintaining businesses.
+- Market prices fluctuate based on supply and demand.
+
+**4.3 Chance Events**
+
+- Introduce random, impactful scenarios:
+  - "Stock Market Crash": Lose 10% of cash.
+  - "Regional Festival": Boost happiness by 10%.
+
+**4.4 Trading and Sabotage**
+
+- Players can negotiate trades or perform hostile takeovers of properties at a multiplier of their value.
+- Introduce sabotage mechanics, such as temporary property shutdowns.
+
+**4.5 Businesses and Employees**
+
+- Businesses scale from small shops to large factories, each requiring varying employee numbers.
+- Idle businesses reduce happiness and regional value.
+
+**4.6 Visual and Audio Feedback**
+
+- Highlight active cells and properties.
+- Add sound effects for movement, events, and interactions.
+- Provide a UI overview of player performance and regional status.
+
+**4.7 Multiplayer Modes**
+
+- Competitive mode: Highest regional value wins.
+- Cooperative mode: Players collaborate to achieve shared objectives.
+
+---
+
+#### **5. Implementation Roadmap**
+
+**Phase 1: Core Systems**
+
+- Implement grid navigation and cell linking.
+- Establish properties and link them to regions.
+- Add player movement and controller integration.
+
+**Phase 2: Population and Businesses**
+
+- Develop population dynamics, happiness, and migration.
+- Introduce businesses with resource and employee requirements.
+
+**Phase 3: Regional Control and Mayor Role**
+
+- Implement regional ownership mechanics and tax systems.
+- Create a happiness management system with player-adjustable tax rates.
+
+**Phase 4: Interaction and Events**
+
+- Add chance events and trading systems.
+- Implement sabotage mechanics and dynamic property purchases.
+
+**Phase 5: Visual and Audio Feedback**
+
+- Add visual highlights, animations, and sound effects.
+- Create menus for tax adjustments, business upgrades, and resource management.
+
+**Phase 6: Multiplayer and Scenarios**
+
+- Introduce competitive and cooperative multiplayer modes.
+- Add predefined game scenarios with unique objectives.
+
+---
+
+#### **6. Open Questions**
+
+- How can we balance the tax system to avoid punishing players for high population growth?
+- Should migration between regions allow opposing players to capitalize on incoming populations?
+- How will properties and businesses handle endgame scenarios (e.g., auctions for final properties)?
+
+---
+
+This document will guide development by outlining the core features and mechanics. Please share feedback or suggest additional ideas to refine the plan further.

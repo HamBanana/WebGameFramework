@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<!-- GameFramework/games/Acca/MapCreator/index.html -->
+<!-- Standalone map creator tool for Acca. Not part of the framework runtime. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Acca – Map Creator</title>
+  <style>
+    :root {
+      --bg:      #0d1218;
+      --panel:   #131a22;
+      --panel2:  #1a2330;
+      --border:  #243040;
+      --accent:  #4a9eff;
+      --accent2: #ffcc44;
+      --text:    #c8d8e8;
+      --dim:     #5a7080;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Toolbar ───────────────────────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #toolbar h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-right: 8px;
+      letter-spacing: 0.04em;
+    }
+    .sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+    #status-bar {
+      margin-left: auto;
+      color: var(--dim);
+      font-size: 11px;
+      max-width: 440px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Buttons ───────────────────────────────────────────────────────────── */
+    button {
+      background: var(--panel2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 11px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.1s, border-color 0.1s;
+      white-space: nowrap;
+    }
+    button:hover             { background: #243040; border-color: #4a6080; }
+    button.active            { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.active:hover      { background: #3a8ee8; }
+    button.active-warn       { background: var(--accent2); color: #000; border-color: var(--accent2); }
+    button.active-warn:hover { background: #e6b800; }
+
+    /* ── Layout ────────────────────────────────────────────────────────────── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Left panel ────────────────────────────────────────────────────────── */
+    #left-panel {
+      width: 160px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #left-inner { flex: 1; overflow-y: auto; padding: 10px 8px; }
+
+    .section         { margin-bottom: 14px; }
+    .section-label   {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; padding-left: 2px;
+    }
+
+    .tool-btn {
+      display: flex; align-items: center; gap: 6px;
+      width: 100%; text-align: left; margin-bottom: 3px; padding: 6px 8px;
+    }
+    .tool-icon { font-size: 14px; line-height: 1; }
+
+    /* Road sub-options */
+    #road-opts              { display: none; margin-bottom: 10px; }
+    #road-opts.visible      { display: block; }
+    .road-opt-row           { display: flex; gap: 4px; }
+    .road-opt-row button    { flex: 1; padding: 5px 4px; font-size: 11px; }
+    #road-hint              { color: var(--dim); font-size: 10px; margin-top: 5px; padding: 0 2px; }
+
+    /* Type palette */
+    .type-btn {
+      display: flex; align-items: center; gap: 7px;
+      width: 100%; text-align: left; margin-bottom: 3px; padding: 5px 8px;
+    }
+    .type-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,.3); }
+
+    /* District list */
+    .district-row {
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 6px; border-radius: 4px; margin-bottom: 2px;
+      cursor: pointer; border: 1px solid transparent;
+    }
+    .district-row:hover      { background: var(--panel2); }
+    .district-row.active     { border-color: var(--accent); background: #192535; }
+    .d-swatch                { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+    .d-name                  { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .d-count                 { font-size: 10px; color: var(--dim); flex-shrink: 0; }
+    .d-del                   { opacity: 0; font-size: 12px; padding: 0 3px; background: none; border: none; color: #ff6b6b; min-width: unset; }
+    .district-row:hover .d-del { opacity: 1; }
+    .d-del:hover             { color: #ff3030 !important; background: none !important; border-color: transparent !important; }
+    .btn-sm                  { font-size: 11px; padding: 4px 8px; width: 100%; margin-top: 4px; }
+
+    /* ── Canvas ────────────────────────────────────────────────────────────── */
+    #canvas-area { flex: 1; overflow: hidden; position: relative; background: #080c12; }
+    #map-canvas  { display: block; position: absolute; top: 0; left: 0; cursor: crosshair; }
+
+    /* ── Right panel ───────────────────────────────────────────────────────── */
+    #right-panel {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #right-inner { flex: 1; overflow-y: auto; padding: 10px; }
+
+    .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; gap: 4px; font-size: 12px; }
+    .info-label { color: var(--dim); }
+
+    input[type="number"], input[type="text"] {
+      background: #0e1620; border: 1px solid var(--border);
+      color: var(--text); border-radius: 3px; padding: 3px 6px; font-size: 12px;
+    }
+    input[type="number"] { width: 60px; }
+    input[type="text"]   { width: 100%; }
+    input:focus          { outline: 1px solid var(--accent); }
+
+    .check-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: 12px; }
+
+    textarea {
+      width: 100%; background: #090e16; border: 1px solid var(--border);
+      color: #7ec88a; font-family: 'Consolas', monospace; font-size: 9px; line-height: 1.5;
+      border-radius: 3px; padding: 6px; resize: vertical; min-height: 130px;
+    }
+
+    #cell-info          { font-size: 12px; line-height: 1.75; }
+    #cell-info .none    { color: var(--dim); font-style: italic; }
+    .conn-tag           { display: inline-block; background: #243040; border-radius: 3px; padding: 1px 5px; font-size: 10px; margin: 1px 2px 1px 0; }
+
+    /* ── Scrollbars ────────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar       { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a3c50; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Toolbar ──────────────────────────────────────────────────────────────── -->
+<div id="toolbar">
+  <h1>⬡ ACCA MAP CREATOR</h1>
+  <div class="sep"></div>
+  <button id="btn-new">New</button>
+  <button id="btn-load-default">Load Default</button>
+  <div class="sep"></div>
+  <button id="btn-center">Center View</button>
+  <div class="sep"></div>
+  <button id="btn-export">Export JS</button>
+  <button id="btn-copy">Copy</button>
+  <div class="sep"></div>
+  <span id="status-bar">Ready</span>
+</div>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- Left panel -->
+  <div id="left-panel">
+    <div id="left-inner">
+
+      <div class="section">
+        <div class="section-label">Tools</div>
+        <button class="tool-btn active" data-tool="paint" ><span class="tool-icon">✏</span> Paint</button>
+        <button class="tool-btn"        data-tool="move"  ><span class="tool-icon">✥</span> Move</button>
+        <button class="tool-btn"        data-tool="erase" ><span class="tool-icon">⌫</span> Erase</button>
+        <button class="tool-btn"        data-tool="road"  ><span class="tool-icon">↔</span> Road</button>
+        <button class="tool-btn"        data-tool="district"><span class="tool-icon">⬡</span> District</button>
+      </div>
+
+      <!-- Road sub-options — visible only when road tool active -->
+      <div id="road-opts">
+        <div class="section-label">Road Direction</div>
+        <div class="road-opt-row">
+          <button id="road-two" class="active">↔ Two-way</button>
+          <button id="road-one">→ One-way</button>
+        </div>
+        <div id="road-hint">Click source, then target cell.</div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Cell Type</div>
+        <div id="type-palette"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Districts</div>
+        <div id="district-list"></div>
+        <button class="btn-sm" id="btn-add-district">+ New District</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="canvas-area">
+    <canvas id="map-canvas"></canvas>
+  </div>
+
+  <!-- Right panel -->
+  <div id="right-panel">
+    <div id="right-inner">
+
+      <div class="section">
+        <div class="section-label">Selected Cell</div>
+        <div id="cell-info"><span class="none">None selected</span></div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">View / Snap</div>
+        <div class="check-row">
+          <input type="checkbox" id="chk-snap" checked>
+          <label for="chk-snap">Snap to grid</label>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Grid size</span>
+          <input type="number" id="inp-snap" value="64" min="8" max="256">
+        </div>
+        <div class="info-row" style="margin-top:4px">
+          <span class="info-label">Zoom</span>
+          <span id="zoom-label">100%</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Export</div>
+        <textarea id="export-output" readonly placeholder="Click 'Export JS'…"></textarea>
+        <button style="width:100%;margin-top:4px" id="btn-copy-sm">Copy to Clipboard</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Square type registry — add new types here; the rest of the tool picks them up
+// ─────────────────────────────────────────────────────────────────────────────
+const SQUARE_TYPES = [
+  { id: 'start',        label: 'Start',        code: 'S',  color: '#d4a017', textColor: '#000' },
+  { id: 'bank',         label: 'Bank',         code: 'BK', color: '#2e7d52', textColor: '#fff' },
+  { id: 'shop',         label: 'Shop',         code: 'SH', color: '#1565c0', textColor: '#fff' },
+  { id: 'factory',      label: 'Factory',      code: 'FA', color: '#5d4037', textColor: '#e0c8a8' },
+  { id: 'empty',        label: 'Empty',        code: '.',  color: '#2a3540', textColor: '#7090a0' },
+  { id: 'trap',         label: 'Trap',         code: 'TR', color: '#b71c1c', textColor: '#ffc0c0' },
+  { id: 'toll_gate',    label: 'Toll Gate',    code: 'TG', color: '#e65100', textColor: '#fff'   },
+  { id: 'chance',       label: 'Chance',       code: 'C',  color: '#6a1b9a', textColor: '#e0b0ff'},
+  { id: 'stock_market', label: 'Stock Market', code: 'SM', color: '#006064', textColor: '#80deea'},
+];
+const TYPE_BY_ID = Object.fromEntries(SQUARE_TYPES.map(t => [t.id, t]));
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  District colour palette
+// ─────────────────────────────────────────────────────────────────────────────
+const DISTRICT_COLORS = [
+  '#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c',
+  '#3498db','#9b59b6','#e91e63','#00bcd4','#8bc34a',
+  '#ff5722','#607d8b','#795548','#009688','#673ab7',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Constants
+// ─────────────────────────────────────────────────────────────────────────────
+const CS       = 64;          // cell size in world units (px at zoom=1)
+const ADJ_DIST = CS + 4;      // auto-connect threshold: center-to-center ≤ this
+const MIN_ZOOM = 0.18;
+const MAX_ZOOM = 4.0;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────────────────────────────────────
+const S = {
+  // Map data
+  cells:       new Map(),    // id → { id, x, y, type, districtId }
+  connections: new Set(),    // "fromId->toId"
+  districts:   new Map(),    // id → { id, name, color }
+  nextCellId:       0,
+  nextDistrictId:   0,
+
+  // Tool state
+  tool:             'paint',
+  selectedType:     'start',
+  selectedCell:     null,      // cell id | null
+  selectedDistrict: null,      // district id | null
+  roadStart:        null,      // cell id | null
+  roadMode:         'two-way', // 'two-way' | 'one-way'
+
+  // Snap
+  snapOn:   true,
+  snapSize: CS,
+
+  // Viewport
+  panX: 200, panY: 150, zoom: 1.0,
+
+  // Input tracking
+  hover:        null,    // cell id under cursor | null
+  hoverWX:      0, hoverWY: 0,   // cursor in world coords
+  _hoverSX:     null, _hoverSY: null, // cursor in screen coords
+  isPainting:   false,
+  isDragging:   false,   // move-tool drag
+  dragId:       null,
+  dragOffX:     0, dragOffY: 0,
+  isPanning:    false,
+  panLastX:     0, panLastY: 0,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Canvas
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('map-canvas');
+const ctx    = canvas.getContext('2d');
+const area   = document.getElementById('canvas-area');
+
+function resizeCanvas() {
+  canvas.width  = area.clientWidth;
+  canvas.height = area.clientHeight;
+  render();
+}
+new ResizeObserver(resizeCanvas).observe(area);
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Coordinate helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function toWorld(sx, sy) {
+  return { wx: (sx - S.panX) / S.zoom, wy: (sy - S.panY) / S.zoom };
+}
+function toScreen(wx, wy) {
+  return { sx: wx * S.zoom + S.panX, sy: wy * S.zoom + S.panY };
+}
+function snapV(v) {
+  return S.snapOn ? Math.round(v / S.snapSize) * S.snapSize : v;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Cell helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function cellAt(wx, wy) {
+  // Last cell in iteration wins (topmost drawn)
+  let found = null;
+  for (const c of S.cells.values()) {
+    if (wx >= c.x && wx < c.x + CS && wy >= c.y && wy < c.y + CS) found = c.id;
+  }
+  return found;
+}
+
+function centerDist(a, b) {
+  const dx = (a.x + CS / 2) - (b.x + CS / 2);
+  const dy = (a.y + CS / 2) - (b.y + CS / 2);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function autoConnect(id) {
+  const c = S.cells.get(id);
+  for (const o of S.cells.values()) {
+    if (o.id === id) continue;
+    if (centerDist(c, o) <= ADJ_DIST) {
+      S.connections.add(`${id}->${o.id}`);
+      S.connections.add(`${o.id}->${id}`);
+    }
+  }
+}
+
+function placeCell(sx, sy) {
+  const { wx, wy } = toWorld(sx, sy);
+  const x = snapV(wx), y = snapV(wy);
+  // Update type if cell already occupies this position
+  for (const c of S.cells.values()) {
+    if (Math.abs(c.x - x) < 2 && Math.abs(c.y - y) < 2) {
+      c.type = S.selectedType;
+      return c.id;
+    }
+  }
+  const id = S.nextCellId++;
+  S.cells.set(id, { id, x, y, type: S.selectedType, districtId: null });
+  autoConnect(id);
+  return id;
+}
+
+function eraseCell(id) {
+  S.cells.delete(id);
+  for (const k of [...S.connections]) {
+    const [a, b] = k.split('->').map(Number);
+    if (a === id || b === id) S.connections.delete(k);
+  }
+  if (S.selectedCell === id) S.selectedCell = null;
+  if (S.roadStart    === id) S.roadStart    = null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  District helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function nextDColor() {
+  const used = new Set([...S.districts.values()].map(d => d.color));
+  return DISTRICT_COLORS.find(c => !used.has(c))
+    ?? DISTRICT_COLORS[S.districts.size % DISTRICT_COLORS.length];
+}
+function nextDName() {
+  const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return 'District ' + (S.districts.size < 26 ? abc[S.districts.size] : S.districts.size + 1);
+}
+function addDistrict(name, color) {
+  const id = S.nextDistrictId++;
+  S.districts.set(id, { id, name: name ?? nextDName(), color: color ?? nextDColor() });
+  S.selectedDistrict = id;
+  rebuildDistrictPanel();
+  return id;
+}
+function removeDistrict(id) {
+  S.districts.delete(id);
+  for (const c of S.cells.values()) if (c.districtId === id) c.districtId = null;
+  if (S.selectedDistrict === id) S.selectedDistrict = null;
+  rebuildDistrictPanel();
+  updateCellInfo();
+  render();
+}
+function districtCellCount(id) {
+  let n = 0;
+  for (const c of S.cells.values()) if (c.districtId === id) n++;
+  return n;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Road helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function handleRoadClick(id) {
+  if (S.roadStart === null) {
+    S.roadStart = id;
+    setStatus(`Road: #${id} selected as source — click target cell.`);
+    render(); return;
+  }
+  const a = S.roadStart, b = id;
+  S.roadStart = null;
+  if (a === b) { render(); return; }
+
+  const fwd = `${a}->${b}`, rev = `${b}->${a}`;
+
+  if (S.roadMode === 'two-way') {
+    const hasBoth = S.connections.has(fwd) && S.connections.has(rev);
+    if (hasBoth) {
+      S.connections.delete(fwd); S.connections.delete(rev);
+      setStatus(`Removed ↔ road between #${a} and #${b}.`);
+    } else {
+      S.connections.add(fwd); S.connections.add(rev);
+      setStatus(`Added ↔ road between #${a} and #${b}.`);
+    }
+  } else {
+    if (S.connections.has(fwd)) {
+      S.connections.delete(fwd);
+      setStatus(`Removed → road #${a} → #${b}.`);
+    } else {
+      S.connections.add(fwd);
+      setStatus(`Added → road #${a} → #${b}.`);
+    }
+  }
+  updateCellInfo();
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Rendering
+// ─────────────────────────────────────────────────────────────────────────────
+function render() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  renderBg();
+
+  ctx.save();
+  ctx.setTransform(S.zoom, 0, 0, S.zoom, S.panX, S.panY);
+  renderDistrictOverlays();
+  renderConnections();
+  renderCells();
+  renderOverlays();
+  ctx.restore();
+
+  renderRoadPreview();
+  document.getElementById('zoom-label').textContent = Math.round(S.zoom * 100) + '%';
+}
+
+function renderBg() {
+  ctx.fillStyle = '#080c12';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Dot grid aligned to world snap grid
+  const gs = S.snapSize * S.zoom;
+  if (gs < 6) return; // too small to draw
+  const ox = ((S.panX % gs) + gs) % gs;
+  const oy = ((S.panY % gs) + gs) % gs;
+  ctx.fillStyle = '#182636';
+  for (let x = ox; x < canvas.width; x += gs) {
+    for (let y = oy; y < canvas.height; y += gs) {
+      ctx.fillRect(x - 1, y - 1, 2, 2);
+    }
+  }
+}
+
+function renderDistrictOverlays() {
+  for (const cell of S.cells.values()) {
+    if (cell.districtId === null) continue;
+    const d = S.districts.get(cell.districtId);
+    if (!d) continue;
+    ctx.fillStyle = d.color + '22';
+    ctx.fillRect(cell.x - 5, cell.y - 5, CS + 10, CS + 10);
+  }
+}
+
+function renderConnections() {
+  const drawnBi = new Set(); // avoid drawing bidirectional pairs twice
+
+  for (const key of S.connections) {
+    const [as, bs] = key.split('->');
+    const a = +as, b = +bs;
+    const ca = S.cells.get(a), cb = S.cells.get(b);
+    if (!ca || !cb) continue;
+
+    const revKey = `${b}->${a}`;
+    const isBi   = S.connections.has(revKey);
+
+    if (isBi) {
+      const pKey = a < b ? `${a}:${b}` : `${b}:${a}`;
+      if (drawnBi.has(pKey)) continue;
+      drawnBi.add(pKey);
+    }
+
+    const cx1 = ca.x + CS / 2, cy1 = ca.y + CS / 2;
+    const cx2 = cb.x + CS / 2, cy2 = cb.y + CS / 2;
+    const dx = cx2 - cx1, dy = cy2 - cy1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) continue;
+
+    const margin = CS * 0.34; // keep arrows away from cell centres
+    const t1 = margin / len, t2 = 1 - margin / len;
+    if (t2 <= t1) continue;  // cells too close
+
+    if (isBi) {
+      // Offset the two arrows perpendicular to the line
+      const px = (-dy / len) * 5, py = (dx / len) * 5;
+      const ax1 = cx1 + dx * t1 + px, ay1 = cy1 + dy * t1 + py;
+      const ax2 = cx1 + dx * t2 + px, ay2 = cy1 + dy * t2 + py;
+      const bx1 = cx2 - dx * t1 - px, by1 = cy2 - dy * t1 - py;
+      const bx2 = cx2 - dx * t2 - px, by2 = cy2 - dy * t2 - py;
+      drawArrow(ax1, ay1, ax2, ay2, 'rgba(180,220,255,0.65)');
+      drawArrow(bx1, by1, bx2, by2, 'rgba(180,220,255,0.65)');
+    } else {
+      // One-way: amber arrow
+      const ax1 = cx1 + dx * t1, ay1 = cy1 + dy * t1;
+      const ax2 = cx1 + dx * t2, ay2 = cy1 + dy * t2;
+      drawArrow(ax1, ay1, ax2, ay2, 'rgba(255,190,60,0.85)');
+    }
+  }
+}
+
+function drawArrow(x1, y1, x2, y2, color) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const angle = Math.atan2(dy, dx);
+  const hl = 9;
+
+  ctx.strokeStyle = color;
+  ctx.fillStyle   = color;
+  ctx.lineWidth   = 1.5;
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hl * Math.cos(angle - Math.PI / 6), y2 - hl * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x2 - hl * Math.cos(angle + Math.PI / 6), y2 - hl * Math.sin(angle + Math.PI / 6));
+  ctx.closePath(); ctx.fill();
+}
+
+function renderCells() {
+  for (const cell of S.cells.values()) {
+    const t = TYPE_BY_ID[cell.type];
+    const { x, y } = cell;
+
+    // District border ring
+    if (cell.districtId !== null) {
+      const d = S.districts.get(cell.districtId);
+      if (d) {
+        ctx.strokeStyle = d.color;
+        ctx.lineWidth   = 3;
+        ctx.strokeRect(x - 2.5, y - 2.5, CS + 5, CS + 5);
+      }
+    }
+
+    // Base fill
+    ctx.fillStyle = t.color;
+    ctx.fillRect(x, y, CS, CS);
+
+    // Shading: bottom shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x, y + CS - 5, CS, 5);
+    // Top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(x, y, CS, 4);
+
+    // Border
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, CS - 1, CS - 1);
+
+    // Label (centre)
+    ctx.fillStyle    = t.textColor;
+    ctx.font         = 'bold 10px "Segoe UI",sans-serif';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(t.label, x + CS / 2, y + CS / 2);
+
+    // Type code (bottom-right, tiny)
+    ctx.fillStyle    = 'rgba(255,255,255,0.28)';
+    ctx.font         = '9px monospace';
+    ctx.textAlign    = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(t.code, x + CS - 3, y + CS - 2);
+
+    // Cell id (top-left, tiny)
+    ctx.fillStyle    = 'rgba(255,255,255,0.18)';
+    ctx.font         = '8px monospace';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`#${cell.id}`, x + 3, y + 2);
+  }
+}
+
+function renderOverlays() {
+  // Ghost preview in paint mode (where the next cell will appear)
+  if (S.tool === 'paint') {
+    const gx = snapV(S.hoverWX), gy = snapV(S.hoverWY);
+    const t   = TYPE_BY_ID[S.selectedType];
+    // Show ghost on empty space
+    if (S.hover === null) {
+      ctx.fillStyle   = t.color + '30';
+      ctx.fillRect(gx, gy, CS, CS);
+      ctx.strokeStyle = t.color + '70';
+      ctx.lineWidth   = 1;
+      ctx.strokeRect(gx + 0.5, gy + 0.5, CS - 1, CS - 1);
+    }
+  }
+
+  // Hover highlight
+  if (S.hover !== null) {
+    const c = S.cells.get(S.hover);
+    if (c) {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(c.x, c.y, CS, CS);
+    }
+  }
+
+  // Selection ring
+  if (S.selectedCell !== null) {
+    const c = S.cells.get(S.selectedCell);
+    if (c) {
+      ctx.strokeStyle = '#4a9eff';
+      ctx.lineWidth   = 2.5;
+      ctx.strokeRect(c.x + 1, c.y + 1, CS - 2, CS - 2);
+    }
+  }
+
+  // Road-start ring
+  if (S.roadStart !== null) {
+    const c = S.cells.get(S.roadStart);
+    if (c) {
+      ctx.strokeStyle = '#ffcc44';
+      ctx.lineWidth   = 3;
+      ctx.strokeRect(c.x + 2, c.y + 2, CS - 4, CS - 4);
+    }
+  }
+
+  // District-tool hover — show assignment preview
+  if (S.tool === 'district' && S.hover !== null && S.selectedDistrict !== null) {
+    const c = S.cells.get(S.hover);
+    const d = S.districts.get(S.selectedDistrict);
+    if (c && d) {
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(c.x + 1, c.y + 1, CS - 2, CS - 2);
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function renderRoadPreview() {
+  // Dashed line from road-start to current cursor (screen space)
+  if (S.tool !== 'road' || S.roadStart === null || S._hoverSX === null) return;
+  const src = S.cells.get(S.roadStart);
+  if (!src) return;
+  const { sx, sy } = toScreen(src.x + CS / 2, src.y + CS / 2);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,200,60,0.55)';
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(S._hoverSX, S._hoverSY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Input — mouse
+// ─────────────────────────────────────────────────────────────────────────────
+function getCanvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { sx: e.clientX - r.left, sy: e.clientY - r.top };
+}
+
+canvas.addEventListener('mousedown', e => {
+  // Middle-click or Alt+left → pan
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    e.preventDefault();
+    S.isPanning = true; S.panLastX = e.clientX; S.panLastY = e.clientY;
+    canvas.style.cursor = 'grabbing'; return;
+  }
+  if (e.button !== 0) return;
+
+  const { sx, sy } = getCanvasPos(e);
+  const { wx, wy } = toWorld(sx, sy);
+  const id = cellAt(wx, wy);
+
+  switch (S.tool) {
+    case 'paint':
+      S.isPainting = true;
+      S.selectedCell = placeCell(sx, sy);
+      updateCellInfo(); render();
+      setStatus(`Painted ${TYPE_BY_ID[S.selectedType].label}.`);
+      break;
+
+    case 'move':
+      if (id !== null) {
+        S.isDragging = true; S.dragId = id;
+        const c = S.cells.get(id);
+        S.dragOffX = wx - c.x; S.dragOffY = wy - c.y;
+        S.selectedCell = id; updateCellInfo();
+      }
+      break;
+
+    case 'erase':
+      S.isPainting = true;
+      if (id !== null) { eraseCell(id); updateCellInfo(); render(); }
+      break;
+
+    case 'road':
+      if (id !== null) handleRoadClick(id);
+      else { S.roadStart = null; setStatus('Road cancelled — clicked empty space.'); render(); }
+      break;
+
+    case 'district':
+      if (S.selectedDistrict === null) {
+        setStatus('Select or create a district first, then click cells to assign them.');
+      } else if (id !== null) {
+        const c = S.cells.get(id);
+        c.districtId = (c.districtId === S.selectedDistrict) ? null : S.selectedDistrict;
+        S.selectedCell = id; updateCellInfo(); rebuildDistrictPanel(); render();
+      }
+      break;
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const { sx, sy } = getCanvasPos(e);
+  S._hoverSX = sx; S._hoverSY = sy;
+
+  if (S.isPanning) {
+    S.panX += e.clientX - S.panLastX;
+    S.panY += e.clientY - S.panLastY;
+    S.panLastX = e.clientX; S.panLastY = e.clientY;
+    render(); return;
+  }
+
+  const { wx, wy } = toWorld(sx, sy);
+  S.hoverWX = wx; S.hoverWY = wy;
+  S.hover = cellAt(wx, wy);
+
+  if (S.isDragging && S.dragId !== null) {
+    const c = S.cells.get(S.dragId);
+    if (c) {
+      c.x = snapV(wx - S.dragOffX);
+      c.y = snapV(wy - S.dragOffY);
+      updateCellInfo();
+    }
+  } else if (S.isPainting) {
+    if (S.tool === 'paint' && S.hover === null) {
+      placeCell(sx, sy);
+    } else if (S.tool === 'erase' && S.hover !== null) {
+      eraseCell(S.hover); S.hover = null; updateCellInfo();
+    }
+  }
+  render();
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (e.button === 1 || S.isPanning) {
+    S.isPanning = false; canvas.style.cursor = cursorForTool(S.tool); return;
+  }
+  S.isPainting = false; S.isDragging = false; S.dragId = null;
+});
+
+canvas.addEventListener('mouseleave', () => {
+  S.hover = null; S.isPainting = false; S.isPanning = false;
+  S.isDragging = false; S._hoverSX = null; S._hoverSY = null;
+  render();
+});
+
+// Right-click → erase
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const { sx, sy } = getCanvasPos(e);
+  const { wx, wy } = toWorld(sx, sy);
+  const id = cellAt(wx, wy);
+  if (id !== null) { eraseCell(id); updateCellInfo(); render(); }
+});
+
+// Scroll → zoom around cursor
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const { sx, sy } = getCanvasPos(e);
+  const factor = e.deltaY < 0 ? 1 / 0.85 : 0.85;
+  const nz     = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, S.zoom * factor));
+  S.panX = sx - (sx - S.panX) * (nz / S.zoom);
+  S.panY = sy - (sy - S.panY) * (nz / S.zoom);
+  S.zoom = nz;
+  render();
+}, { passive: false });
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea')) return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    canvas.style.cursor = 'grab';
+    S._spaceDown = true;
+  }
+  if ((e.code === 'Delete' || e.code === 'Backspace') && S.selectedCell !== null) {
+    eraseCell(S.selectedCell); updateCellInfo(); render();
+  }
+  if (e.code === 'Escape') {
+    S.roadStart = null; render();
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') { S._spaceDown = false; canvas.style.cursor = cursorForTool(S.tool); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Cell info panel
+// ─────────────────────────────────────────────────────────────────────────────
+function updateCellInfo() {
+  const el = document.getElementById('cell-info');
+  if (S.selectedCell === null || !S.cells.has(S.selectedCell)) {
+    el.innerHTML = '<span class="none">None selected</span>'; return;
+  }
+  const cell = S.cells.get(S.selectedCell);
+  const t    = TYPE_BY_ID[cell.type];
+  const d    = cell.districtId !== null ? S.districts.get(cell.districtId) : null;
+
+  // Outgoing connections
+  const outTags = [...S.connections]
+    .filter(k => k.startsWith(`${cell.id}->`))
+    .map(k => {
+      const bid    = +k.split('->')[1];
+      const hasBi  = S.connections.has(`${bid}->${cell.id}`);
+      return `<span class="conn-tag">${hasBi ? '↔' : '→'} #${bid}</span>`;
+    }).join('');
+
+  // Incoming one-way connections (not already shown as ↔)
+  const inTags = [...S.connections]
+    .filter(k => {
+      const [a, b] = k.split('->').map(Number);
+      return b === cell.id && !S.connections.has(`${cell.id}->${a}`);
+    })
+    .map(k => `<span class="conn-tag">← #${k.split('->')[0]}</span>`)
+    .join('');
+
+  el.innerHTML = `
+    <div class="info-row"><span class="info-label">ID</span><span>#${cell.id}</span></div>
+    <div class="info-row"><span class="info-label">Pos</span><span>(${cell.x}, ${cell.y})</span></div>
+    <div class="info-row"><span class="info-label">Type</span><span style="color:${t.color}">${t.label}</span></div>
+    <div class="info-row"><span class="info-label">District</span>
+      <span style="color:${d ? d.color : 'var(--dim)'}">${d ? d.name : '—'}</span>
+    </div>
+    <div style="margin-top:7px;color:var(--dim);font-size:10px;margin-bottom:3px">Connections:</div>
+    <div>${outTags}${inTags}</div>
+    ${!outTags && !inTags ? '<span class="none" style="font-size:11px">None</span>' : ''}
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  District panel
+// ─────────────────────────────────────────────────────────────────────────────
+function rebuildDistrictPanel() {
+  const list = document.getElementById('district-list');
+  list.innerHTML = '';
+
+  if (S.districts.size === 0) {
+    const msg = document.createElement('div');
+    msg.style.cssText = 'color:var(--dim);font-size:11px;font-style:italic;padding:4px 2px;';
+    msg.textContent = 'No districts yet.';
+    list.appendChild(msg);
+    return;
+  }
+
+  for (const d of S.districts.values()) {
+    const row = document.createElement('div');
+    row.className = 'district-row' + (d.id === S.selectedDistrict ? ' active' : '');
+
+    const sw = document.createElement('span');
+    sw.className = 'd-swatch'; sw.style.background = d.color;
+
+    const nm = document.createElement('span');
+    nm.className = 'd-name'; nm.textContent = d.name;
+    nm.title = 'Double-click to rename';
+
+    const ct = document.createElement('span');
+    ct.className = 'd-count'; ct.textContent = districtCellCount(d.id);
+
+    const del = document.createElement('button');
+    del.className = 'd-del'; del.textContent = '×'; del.title = 'Delete district';
+    del.addEventListener('click', ev => { ev.stopPropagation(); removeDistrict(d.id); });
+
+    // Double-click to rename inline
+    nm.addEventListener('dblclick', ev => {
+      ev.stopPropagation();
+      const inp = document.createElement('input');
+      inp.type  = 'text'; inp.value = d.name;
+      inp.style.cssText = 'width:88px;font-size:11px;padding:1px 4px;';
+      nm.replaceWith(inp);
+      inp.focus(); inp.select();
+      const commit = () => { d.name = inp.value.trim() || d.name; rebuildDistrictPanel(); updateCellInfo(); };
+      inp.addEventListener('blur', commit);
+      inp.addEventListener('keydown', ke => {
+        if (ke.key === 'Enter') { commit(); }
+        if (ke.key === 'Escape') { rebuildDistrictPanel(); }
+        ke.stopPropagation();
+      });
+    });
+
+    row.append(sw, nm, ct, del);
+    row.addEventListener('click', () => {
+      S.selectedDistrict = (S.selectedDistrict === d.id) ? null : d.id;
+      if (S.selectedDistrict !== null && S.tool !== 'district') setTool('district');
+      rebuildDistrictPanel();
+    });
+
+    list.appendChild(row);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tool switching
+// ─────────────────────────────────────────────────────────────────────────────
+function cursorForTool(id) {
+  return { paint: 'crosshair', move: 'grab', erase: 'cell', road: 'pointer', district: 'default' }[id] || 'default';
+}
+
+function setTool(id) {
+  S.tool = id; S.roadStart = null;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`[data-tool="${id}"]`);
+  if (btn) btn.classList.add('active');
+  document.getElementById('road-opts').classList.toggle('visible', id === 'road');
+  canvas.style.cursor = cursorForTool(id);
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Type palette builder
+// ─────────────────────────────────────────────────────────────────────────────
+function buildPalette() {
+  const c = document.getElementById('type-palette');
+  for (const t of SQUARE_TYPES) {
+    const btn = document.createElement('button');
+    btn.className  = 'type-btn' + (t.id === S.selectedType ? ' active' : '');
+    btn.dataset.tid = t.id;
+    btn.innerHTML  = `<span class="type-swatch" style="background:${t.color}"></span>${t.label}`;
+    btn.addEventListener('click', () => {
+      S.selectedType = t.id;
+      document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (S.tool !== 'paint') setTool('paint');
+    });
+    c.appendChild(btn);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Status bar
+// ─────────────────────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('status-bar').textContent = msg;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Center view to fit all cells
+// ─────────────────────────────────────────────────────────────────────────────
+function centerView() {
+  if (S.cells.size === 0) {
+    S.panX = canvas.width / 3; S.panY = canvas.height / 3; S.zoom = 1;
+    render(); return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const c of S.cells.values()) {
+    minX = Math.min(minX, c.x);     minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x + CS); maxY = Math.max(maxY, c.y + CS);
+  }
+  const bw = maxX - minX, bh = maxY - minY;
+  const m  = 80;
+  S.zoom = Math.min((canvas.width - m * 2) / bw, (canvas.height - m * 2) / bh, 2);
+  S.panX = canvas.width  / 2 - (minX + bw / 2) * S.zoom;
+  S.panY = canvas.height / 2 - (minY + bh / 2) * S.zoom;
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Export
+// ─────────────────────────────────────────────────────────────────────────────
+function generateExport() {
+  const L = [];
+  L.push('// ── Acca Map Export ─────────────────────────────────────────────');
+  L.push('// Generated by Acca MapCreator. Paste into GAME_CONFIG.js.');
+  L.push('// Connections use cell IDs. Cells absent from MAP_CONNECTIONS');
+  L.push('// are auto-connected by the engine to adjacent cells at runtime.');
+  L.push('');
+
+  // Cells
+  L.push('const MAP_CELLS = [');
+  for (const c of S.cells.values()) {
+    const d = c.districtId !== null ? S.districts.get(c.districtId) : null;
+    L.push(`  { id:${c.id}, x:${c.x}, y:${c.y}, type:'${c.type}', district:${d ? `'${d.name}'` : 'null'} },`);
+  }
+  L.push('];');
+  L.push('');
+
+  // Connections
+  L.push('// direction: "both" = bidirectional, "forward" = one-way from→to');
+  L.push('const MAP_CONNECTIONS = [');
+  const done = new Set();
+  for (const k of S.connections) {
+    const [as, bs] = k.split('->');
+    const a = +as, b = +bs;
+    const pKey = a < b ? `${a}:${b}` : `${b}:${a}`;
+    const isBi = S.connections.has(`${b}->${a}`);
+    if (isBi) {
+      if (done.has(pKey)) continue;
+      done.add(pKey);
+      L.push(`  { from:${a}, to:${b}, direction:'both' },`);
+    } else {
+      L.push(`  { from:${a}, to:${b}, direction:'forward' },`);
+    }
+  }
+  L.push('];');
+  L.push('');
+
+  // Districts
+  L.push('const MAP_DISTRICTS = [');
+  for (const d of S.districts.values()) {
+    L.push(`  { id:${d.id}, name:'${d.name}', color:'${d.color}', cellCount:${districtCellCount(d.id)} },`);
+  }
+  L.push('];');
+
+  return L.join('\n');
+}
+
+function showExport() {
+  document.getElementById('export-output').value = generateExport();
+}
+function copyExport() {
+  const ta = document.getElementById('export-output');
+  if (!ta.value) showExport();
+  navigator.clipboard.writeText(ta.value)
+    .then(() => setStatus('Copied to clipboard!'))
+    .catch(() => { ta.select(); setStatus('Select all + Ctrl+C to copy.'); });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Default Acca layout loader
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_LAYOUT = [
+  ['S',  'P',  'P',  'C',  'P',  'P',  'P',  'P' ],
+  ['P',   null, null, null, null, null, null, 'P' ],
+  ['P',   null, 'M',  null, null, 'C',  null, 'P' ],
+  ['P',  'C',  null, null, 'M',  null,  null, 'P' ],
+  ['P',   null, null, 'C',  null, null, null, 'P' ],
+  ['P',  'P',  'P',  'P',  'M',  'P',  'P',  'P' ],
+];
+const DEFAULT_REGIONS = [
+  ['NW','NW','NW','NW','NE','NE','NE','NE'],
+  ['NW','NW','NW','NW','NE','NE','NE','NE'],
+  ['NW','NW','NW','NW','NE','NE','NE','NE'],
+  ['SW','SW','SW','SW','SE','SE','SE','SE'],
+  ['SW','SW','SW','SW','SE','SE','SE','SE'],
+  ['SW','SW','SW','SW','SE','SE','SE','SE'],
+];
+const LEGACY_CODE_TO_TYPE = { S:'start', P:'bank', C:'chance', M:'stock_market', '.':'empty' };
+const REGION_COLORS = { NW:'#e74c3c', NE:'#3498db', SW:'#2ecc71', SE:'#9b59b6' };
+
+function loadDefault() {
+  S.cells.clear(); S.connections.clear(); S.districts.clear();
+  S.nextCellId = 0; S.nextDistrictId = 0;
+  S.selectedCell = null; S.selectedDistrict = null; S.roadStart = null;
+
+  // Create districts
+  const dMap = {};
+  for (const [rname, color] of Object.entries(REGION_COLORS)) {
+    dMap[rname] = addDistrict(rname, color);
+  }
+
+  // Place cells
+  const rows = DEFAULT_LAYOUT.length, cols = DEFAULT_LAYOUT[0].length;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const code = DEFAULT_LAYOUT[r][c];
+      if (code === null) continue;
+      const typeId = LEGACY_CODE_TO_TYPE[code] ?? 'empty';
+      const id     = S.nextCellId++;
+      S.cells.set(id, {
+        id, x: c * CS, y: r * CS,
+        type: typeId,
+        districtId: dMap[DEFAULT_REGIONS[r][c]],
+      });
+    }
+  }
+
+  // Auto-connect all adjacent pairs
+  const arr = [...S.cells.values()];
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = i + 1; j < arr.length; j++) {
+      if (centerDist(arr[i], arr[j]) <= ADJ_DIST) {
+        S.connections.add(`${arr[i].id}->${arr[j].id}`);
+        S.connections.add(`${arr[j].id}->${arr[i].id}`);
+      }
+    }
+  }
+
+  rebuildDistrictPanel(); updateCellInfo();
+  centerView();
+  setStatus('Default Acca layout loaded with auto-connected cells and four districts (NW/NE/SW/SE).');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Wire UI
+// ─────────────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tool-btn').forEach(b => {
+  b.addEventListener('click', () => setTool(b.dataset.tool));
+});
+
+document.getElementById('road-two').addEventListener('click', () => {
+  S.roadMode = 'two-way';
+  document.getElementById('road-two').classList.add('active');
+  document.getElementById('road-one').classList.remove('active');
+});
+document.getElementById('road-one').addEventListener('click', () => {
+  S.roadMode = 'one-way';
+  document.getElementById('road-one').classList.add('active');
+  document.getElementById('road-two').classList.remove('active');
+});
+
+document.getElementById('btn-add-district').addEventListener('click', () => {
+  addDistrict(); render();
+  setStatus('New district created — click cells to assign them.');
+});
+
+document.getElementById('chk-snap').addEventListener('change', e => {
+  S.snapOn = e.target.checked;
+});
+document.getElementById('inp-snap').addEventListener('change', e => {
+  const v = parseInt(e.target.value, 10);
+  if (v >= 8 && v <= 256) { S.snapSize = v; render(); }
+});
+
+document.getElementById('btn-center').addEventListener('click', centerView);
+
+document.getElementById('btn-new').addEventListener('click', () => {
+  if (S.cells.size > 0 && !confirm('Clear the map? Unsaved work will be lost.')) return;
+  S.cells.clear(); S.connections.clear(); S.districts.clear();
+  S.nextCellId = 0; S.nextDistrictId = 0;
+  S.selectedCell = null; S.roadStart = null; S.selectedDistrict = null;
+  document.getElementById('export-output').value = '';
+  rebuildDistrictPanel(); updateCellInfo(); render();
+  setStatus('New blank map.');
+});
+
+document.getElementById('btn-load-default').addEventListener('click', () => {
+  if (S.cells.size > 0 && !confirm('Load the default Acca layout? Current map will be cleared.')) return;
+  loadDefault();
+});
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  showExport();
+  setStatus('Export generated — paste into GAME_CONFIG.js.');
+});
+document.getElementById('btn-copy').addEventListener('click', () => { showExport(); copyExport(); });
+document.getElementById('btn-copy-sm').addEventListener('click', copyExport);
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bootstrap
+// ─────────────────────────────────────────────────────────────────────────────
+buildPalette();
+rebuildDistrictPanel();
+// resizeCanvas() is called by ResizeObserver on first layout; renders automatically.
+setStatus(
+  'Paint cells freely · Road tool: click source → target (two-way or one-way) · ' +
+  'Adjacent cells auto-connect · Middle-click/Alt+drag to pan · Scroll to zoom · ' +
+  'Right-click or Delete to erase.'
+);
+</script>
+</body>
+</html>

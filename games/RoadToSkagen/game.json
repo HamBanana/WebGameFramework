@@ -1,0 +1,57 @@
+{
+  "id": "RoadToSkagen",
+  "title": "Road to Skagen",
+  "icon": "🇩🇰",
+  "color": "#4caf50",
+  "tags": ["ADVENTURE", "SOLO", "TEXT RPG"],
+  "desc": "Walk 387 km from Copenhagen to the tip of Denmark. Manage health, food, and money across dangerous terrain.",
+  "config": [
+    {
+      "key": "Difficulty",
+      "help": "Adjusts danger frequency and event magnitudes.",
+      "opts": ["Easy", "Normal", "Hard", "Nightmare"],
+      "def": "Normal",
+      "apply": {
+        "Easy":      { "eventChances": { "danger": 0.15, "weather": 0.12, "good": 0.30 } },
+        "Normal":    { "eventChances": { "danger": 0.35, "weather": 0.20, "good": 0.17 } },
+        "Hard":      { "eventChances": { "danger": 0.55, "weather": 0.28, "good": 0.10 } },
+        "Nightmare": { "eventChances": { "danger": 0.70, "weather": 0.35, "good": 0.05 } }
+      }
+    },
+    {
+      "key": "Starting Health",
+      "help": "Your health at the start of the journey.",
+      "opts": ["50", "75", "100"],
+      "def": "100",
+      "apply": {
+        "50":  { "start": { "health": 50,  "maxHealth": 100 } },
+        "75":  { "start": { "health": 75,  "maxHealth": 100 } },
+        "100": { "start": { "health": 100, "maxHealth": 100 } }
+      }
+    },
+    {
+      "key": "Starting Money",
+      "help": "Kr available at the start.",
+      "opts": ["100 kr", "200 kr", "300 kr", "500 kr"],
+      "def": "300 kr",
+      "apply": {
+        "100 kr": { "start": { "money": 100 } },
+        "200 kr": { "start": { "money": 200 } },
+        "300 kr": { "start": { "money": 300 } },
+        "500 kr": { "start": { "money": 500 } }
+      }
+    },
+    {
+      "key": "Starting Food",
+      "help": "Kg of food in your pack.",
+      "opts": ["5 kg", "10 kg", "15 kg", "20 kg"],
+      "def": "10 kg",
+      "apply": {
+        "5 kg":  { "start": { "food": 5  } },
+        "10 kg": { "start": { "food": 10 } },
+        "15 kg": { "start": { "food": 15 } },
+        "20 kg": { "start": { "food": 20 } }
+      }
+    }
+  ]
+}

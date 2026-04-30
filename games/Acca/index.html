@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Acca – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #05080d;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: monospace;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 1024px;
+      height: 576px;
+    }
+
+    #gameCanvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 2px solid rgba(80, 130, 200, 0.4);
+      box-shadow: 0 0 40px rgba(40, 90, 180, 0.5),
+                  inset 0 0 20px rgba(0, 0, 0, 0.7);
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="1024" height="576"></canvas>
+  </div>
+
+  <!-- ── Game config ──────────────────────────────────────────────────── -->
+  <script src="GAME_CONFIG.js"></script>
+
+  <!-- ── GameFramework ─────────────────────────────────────────────────── -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- ── Game sprites (register with GF.sprites) ──────────────────── -->
+  <script src="sprites/tokens.js"></script>
+  <script src="sprites/die.js"></script>
+  <script src="sprites/cells.js"></script>
+
+  <!-- ── Game logic ──────────────────────────────────────────────── -->
+  <script src="AccaGame.js"></script>
+</body>
+</html>

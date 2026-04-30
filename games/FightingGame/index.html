@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Shadow Strike – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: monospace;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 800px;
+      height: 480px;
+    }
+
+    #gameCanvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 2px solid rgba(170, 0, 255, 0.4);
+      box-shadow: 0 0 40px rgba(100, 0, 200, 0.6), inset 0 0 20px rgba(0,0,0,0.8);
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="480"></canvas>
+  </div>
+
+  <!-- ── Game config ──────────────────────────────────────────────────── -->
+  <script src="GAME_CONFIG.js"></script>
+
+  <!-- ── GameFramework ─────────────────────────────────────────────────── -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- ── Game sprites (register with GF.sprites) ──────────────────── -->
+  <script src="sprites/kuro.js"></script>
+  <script src="sprites/hana.js"></script>
+
+  <!-- ── Game logic ──────────────────────────────────────────────── -->
+  <script src="FightingGame.js"></script>
+</body>
+</html>

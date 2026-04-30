@@ -1,0 +1,43 @@
+{
+  "id": "SpaceInvaders",
+  "title": "Space Invaders",
+  "icon": "👾",
+  "color": "#00e5ff",
+  "tags": ["ARCADE", "SOLO", "SHOOTER"],
+  "desc": "Classic alien invasion! Defend Earth across escalating waves. Showcases all GameFramework features.",
+  "config": [
+    {
+      "key": "Player Speed",
+      "help": "How fast the cannon moves.",
+      "opts": ["Slow", "Normal", "Fast"],
+      "def": "Normal",
+      "apply": {
+        "Slow":   { "player": { "speed": 180 } },
+        "Normal": { "player": { "speed": 260 } },
+        "Fast":   { "player": { "speed": 340 } }
+      }
+    },
+    {
+      "key": "Starting Lives",
+      "help": "Lives at the start of the game.",
+      "opts": ["2", "3", "5"],
+      "def": "3",
+      "apply": {
+        "2": { "player": { "lives": 2 } },
+        "3": { "player": { "lives": 3 } },
+        "5": { "player": { "lives": 5 } }
+      }
+    },
+    {
+      "key": "Alien Speed",
+      "help": "Initial alien march speed.",
+      "opts": ["Easy", "Normal", "Hard"],
+      "def": "Normal",
+      "apply": {
+        "Easy":   { "aliens": { "moveSpeed": 16 } },
+        "Normal": { "aliens": { "moveSpeed": 28 } },
+        "Hard":   { "aliens": { "moveSpeed": 44 } }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Road to Skagen</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0e0a;
+            color: #c8e6c9;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 10px;
+            overflow-x: hidden;
+        }
+
+        /* Scanline overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.07) 2px,
+                rgba(0,0,0,0.07) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .game-wrapper {
+            width: 100%;
+            max-width: 860px;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(135deg, #1a2e1a, #0f1f0f);
+            border: 2px solid #4caf50;
+            padding: 16px 20px;
+            text-align: center;
+            margin-bottom: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 60%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(76,175,80,0.08), transparent);
+            animation: shimmer 4s infinite;
+        }
+        @keyframes shimmer { to { left: 200%; } }
+
+        .header h1 {
+            font-size: clamp(20px, 5vw, 32px);
+            color: #fff;
+            letter-spacing: 3px;
+            text-shadow: 0 0 20px rgba(76,175,80,0.8), 0 0 40px rgba(76,175,80,0.4);
+        }
+        .header h1 .flag { font-size: 0.85em; }
+        .header .subtitle {
+            color: #81c784;
+            font-size: 13px;
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+
+        /* ── ROUTE MAP ── */
+        .route-section {
+            background: #0d150d;
+            border: 2px solid #2e7d32;
+            border-top: none;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            overflow-x: auto;
+        }
+        .route-label {
+            font-size: 10px;
+            color: #4caf50;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+        }
+        .route-map {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            min-width: 600px;
+            position: relative;
+        }
+        .route-city {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            flex: 1;
+        }
+        .city-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #2e7d32;
+            border: 2px solid #4caf50;
+            z-index: 2;
+            transition: all 0.4s ease;
+            position: relative;
+        }
+        .city-dot.visited { background: #66bb6a; border-color: #a5d6a7; }
+        .city-dot.current {
+            background: #ffd700;
+            border-color: #fff;
+            box-shadow: 0 0 10px #ffd700, 0 0 20px rgba(255,215,0,0.5);
+            animation: pulse 1.2s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); box-shadow: 0 0 8px #ffd700; }
+            to   { transform: scale(1.3); box-shadow: 0 0 16px #ffd700, 0 0 30px rgba(255,215,0,0.4); }
+        }
+        .city-line {
+            flex: 1;
+            height: 2px;
+            background: #2e7d32;
+            position: relative;
+            top: -1px; /* align with dots */
+            margin-top: 5px;
+        }
+        .city-line.done { background: #66bb6a; }
+        .city-line-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding-top: 5px;
+        }
+        .city-name {
+            font-size: 9px;
+            color: #81c784;
+            margin-top: 5px;
+            text-align: center;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        .city-name.current { color: #ffd700; font-weight: bold; }
+        .city-name.visited { color: #a5d6a7; }
+
+        /* ── STATS PANEL ── */
+        .stats-panel {
+            background: #0d150d;
+            border: 2px solid #2e7d32;
+            border-top: none;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .stat-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .stat-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #81c784;
+        }
+        .stat-label span:last-child { color: #c8e6c9; }
+        .stat-bar-bg {
+            background: #1a2e1a;
+            height: 8px;
+            border: 1px solid #2e7d32;
+            overflow: hidden;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+        .bar-health  { background: linear-gradient(90deg, #e53935, #ef9a9a); }
+        .bar-food    { background: linear-gradient(90deg, #f57c00, #ffcc80); }
+        .bar-health.low  { background: linear-gradient(90deg, #b71c1c, #ef5350); animation: blink 0.7s infinite alternate; }
+        .bar-food.low    { background: linear-gradient(90deg, #e65100, #ff7043); animation: blink 0.7s infinite alternate; }
+        @keyframes blink { from { opacity: 1; } to { opacity: 0.4; } }
+
+        .meta-stats {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding-top: 4px;
+            border-top: 1px solid #1e3a1e;
+        }
+        .meta-stat { color: #c8e6c9; }
+        .meta-stat span { color: #ffd700; }
+
+        /* ── INVENTORY ── */
+        .inventory {
+            background: #0d150d;
+            border: 2px solid #2e7d32;
+            border-top: none;
+            padding: 10px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .inv-label { font-size: 10px; color: #4caf50; letter-spacing: 2px; margin-right: 4px; }
+        .inv-item {
+            font-size: 12px;
+            padding: 3px 10px;
+            border: 1px solid #2e7d32;
+            background: #1a2e1a;
+            color: #81c784;
+        }
+        .inv-item.owned  { border-color: #66bb6a; color: #c8e6c9; background: #1e3a1e; }
+        .inv-item.missing { opacity: 0.35; }
+
+        /* ── EVENT LOG ── */
+        .event-section {
+            background: #0a0e0a;
+            border: 2px solid #2e7d32;
+            border-top: none;
+            margin-bottom: 8px;
+        }
+        .event-section-label {
+            font-size: 10px;
+            color: #4caf50;
+            letter-spacing: 2px;
+            padding: 6px 16px 4px;
+            border-bottom: 1px solid #1e3a1e;
+        }
+        .event-log {
+            padding: 10px 16px;
+            height: 160px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            scroll-behavior: smooth;
+        }
+        .event-log::-webkit-scrollbar { width: 4px; }
+        .event-log::-webkit-scrollbar-track { background: #0d150d; }
+        .event-log::-webkit-scrollbar-thumb { background: #2e7d32; }
+
+        .log-entry {
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 6px 10px;
+            border-left: 3px solid #2e7d32;
+            background: #0d150d;
+            color: #c8e6c9;
+            opacity: 0;
+            animation: fadeIn 0.4s forwards;
+        }
+        @keyframes fadeIn { to { opacity: 1; } }
+
+        .log-entry.type-danger  { border-left-color: #ef5350; background: #1a0a0a; color: #ffcdd2; }
+        .log-entry.type-good    { border-left-color: #66bb6a; background: #0d1a0d; color: #c8e6c9; }
+        .log-entry.type-warning { border-left-color: #ffd740; background: #1a1500; color: #fff9c4; }
+        .log-entry.type-city    { border-left-color: #ffd700; background: #151000; color: #fff8e1; }
+        .log-entry.type-system  { border-left-color: #42a5f5; background: #0a0f1a; color: #bbdefb; }
+        .log-entry.faded        { opacity: 0.45; }
+
+        /* ── CONTROLS ── */
+        .controls-section {
+            background: #0d150d;
+            border: 2px solid #2e7d32;
+            border-top: none;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .btn {
+            background: #1a2e1a;
+            color: #c8e6c9;
+            border: 2px solid #2e7d32;
+            padding: 12px 8px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            touch-action: manipulation;
+            user-select: none;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn .key-hint {
+            position: absolute;
+            top: 3px; right: 5px;
+            font-size: 9px;
+            color: #4caf50;
+            opacity: 0.7;
+        }
+        .btn:hover, .btn:active {
+            background: #2e4f2e;
+            border-color: #66bb6a;
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(76,175,80,0.3);
+        }
+        .btn:disabled {
+            background: #111;
+            color: #333;
+            border-color: #1a1a1a;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn.btn-danger { border-color: #c62828; color: #ef9a9a; }
+        .btn.btn-danger:hover { background: #2e0a0a; border-color: #ef5350; color: #ffcdd2; }
+        .btn.btn-medicine { border-color: #1565c0; color: #90caf9; }
+        .btn.btn-medicine:hover { background: #0a1528; border-color: #42a5f5; }
+
+        .controls-bottom {
+            display: flex;
+            gap: 8px;
+        }
+        .controls-bottom .btn { flex: 1; }
+
+        /* ── SHOP ── */
+        .shop-section {
+            background: #0d0a1e;
+            border: 2px solid #5e35b1;
+            border-top: none;
+            padding: 14px 16px;
+            display: none;
+            margin-bottom: 8px;
+        }
+        .shop-title {
+            color: #ce93d8;
+            font-size: 14px;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+        .shop-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .shop-item {
+            background: #150e2e;
+            border: 1px solid #4a148c;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .shop-item-info { font-size: 12px; color: #ce93d8; }
+        .shop-item-info small { display: block; color: #9575cd; font-size: 10px; margin-top: 2px; }
+        .btn.btn-buy {
+            background: #1e0e38;
+            border-color: #7e57c2;
+            color: #ce93d8;
+            font-size: 12px;
+            padding: 6px 12px;
+            white-space: nowrap;
+        }
+        .btn.btn-buy:hover { background: #2e1a4e; border-color: #ab47bc; }
+
+        /* ── MODAL (Victory / Game Over) ── */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #0d150d;
+            border: 3px solid #4caf50;
+            padding: 30px 40px;
+            max-width: 480px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal.gameover { border-color: #ef5350; }
+        .modal h2 { font-size: 28px; margin-bottom: 16px; letter-spacing: 3px; }
+        .modal.victory h2 { color: #ffd700; text-shadow: 0 0 20px rgba(255,215,0,0.6); }
+        .modal.gameover h2 { color: #ef5350; text-shadow: 0 0 20px rgba(239,83,80,0.6); }
+        .modal .stat-line { font-size: 14px; color: #a5d6a7; margin: 6px 0; }
+        .modal .stat-line span { color: #fff; }
+        .modal .score { font-size: 22px; color: #ffd700; margin: 16px 0; }
+        .modal .btn { margin-top: 20px; width: 100%; padding: 14px; font-size: 15px; }
+
+        /* ── FOOTER ── */
+        .footer {
+            text-align: center;
+            font-size: 10px;
+            color: #2e7d32;
+            padding: 8px;
+            letter-spacing: 1px;
+        }
+
+        /* ── MOBILE ── */
+        @media (max-width: 580px) {
+            .controls-grid { grid-template-columns: repeat(2, 1fr); }
+            .shop-grid { grid-template-columns: 1fr; }
+            .stats-panel { grid-template-columns: 1fr; }
+            .meta-stats { flex-direction: column; gap: 4px; }
+        }
+
+        /* Flash effect for damage */
+        .flash-red { animation: flashRed 0.4s ease; }
+        .flash-green { animation: flashGreen 0.4s ease; }
+        @keyframes flashRed {
+            0%, 100% { background: #0d150d; }
+            50% { background: #2e0a0a; }
+        }
+        @keyframes flashGreen {
+            0%, 100% { background: #0d150d; }
+            50% { background: #0d2e0d; }
+        }
+
+        /* Day/night badge */
+        .day-badge {
+            display: inline-block;
+            font-size: 11px;
+            color: #ffd700;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+<div class="game-wrapper">
+
+    <!-- HEADER -->
+    <div class="header">
+        <h1><span class="flag">🇩🇰</span> ROAD TO SKAGEN <span class="flag">🇩🇰</span></h1>
+        <div class="subtitle">Survive the 387km journey from Copenhagen to the tip of Denmark</div>
+    </div>
+
+    <!-- ROUTE MAP -->
+    <div class="route-section">
+        <div class="route-label">▸ ROUTE</div>
+        <div class="route-map" id="routeMap">
+            <!-- generated by JS -->
+        </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-panel" id="statsPanel">
+        <div class="stat-row">
+            <div class="stat-label"><span>❤ HEALTH</span><span id="healthVal">100%</span></div>
+            <div class="stat-bar-bg"><div class="stat-bar-fill bar-health" id="healthBar" style="width:100%"></div></div>
+        </div>
+        <div class="stat-row">
+            <div class="stat-label"><span>🍖 FOOD</span><span id="foodVal">10 kg</span></div>
+            <div class="stat-bar-bg"><div class="stat-bar-fill bar-food" id="foodBar" style="width:100%"></div></div>
+        </div>
+        <div class="meta-stats">
+            <div class="meta-stat">📅 DAY <span id="dayVal">1</span></div>
+            <div class="meta-stat">📍 <span id="distVal">0</span>/387 km</div>
+            <div class="meta-stat">💰 <span id="moneyVal">300</span> kr</div>
+        </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="inventory">
+        <span class="inv-label">INVENTORY</span>
+        <span class="inv-item missing" id="inv-clothes">🧥 Clothes</span>
+        <span class="inv-item missing" id="inv-rifle">🔫 Rifle</span>
+        <span class="inv-item missing" id="inv-medicine">💊 Medicine ×0</span>
+        <span class="inv-item missing" id="inv-map">🗺 Map</span>
+    </div>
+
+    <!-- EVENT LOG -->
+    <div class="event-section" id="eventSection">
+        <div class="event-section-label">▸ TRAIL LOG</div>
+        <div class="event-log" id="eventLog"></div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls-section">
+        <div class="controls-grid">
+            <button class="btn" id="btn-walk"   onclick="walk()">   🚶 Walk    <span class="key-hint">W</span></button>
+            <button class="btn" id="btn-rest"   onclick="rest()">   😴 Rest    <span class="key-hint">A</span></button>
+            <button class="btn" id="btn-shop"   onclick="openShop()">🏪 Shop   <span class="key-hint">S</span></button>
+            <button class="btn" id="btn-hunt"   onclick="hunt()">   🏹 Hunt    <span class="key-hint">D</span></button>
+            <button class="btn" id="btn-work"   onclick="work()">   💼 Work    <span class="key-hint">Q</span></button>
+            <button class="btn" id="btn-forage" onclick="forage()"> 🍄 Forage  <span class="key-hint">E</span></button>
+        </div>
+        <div class="controls-bottom">
+            <button class="btn btn-medicine" id="btn-medicine" onclick="useMedicine()" disabled>
+                💊 Use Medicine <span class="key-hint">M</span>
+            </button>
+            <button class="btn btn-danger" onclick="restart()">🔄 Restart <span class="key-hint">R</span></button>
+        </div>
+    </div>
+
+    <!-- SHOP -->
+    <div class="shop-section" id="shopSection">
+        <div class="shop-title">🏪 GENERAL STORE — <span id="shopCityName">Town</span></div>
+        <div class="shop-grid">
+            <div class="shop-item">
+                <div class="shop-item-info">🍞 Food Rations (3 kg)<small>60 kr</small></div>
+                <button class="btn btn-buy" onclick="buyFood()">Buy</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">💊 Medicine (×2)<small>140 kr · Restores 40 health</small></div>
+                <button class="btn btn-buy" onclick="buyMedicine()">Buy</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">🧥 Warm Clothes<small>180 kr · Halves cold damage</small></div>
+                <button class="btn btn-buy" id="shopBuyClothes" onclick="buyClothes()">Buy</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">🔫 Hunting Rifle<small>240 kr · Hunt + deters robbers</small></div>
+                <button class="btn btn-buy" id="shopBuyRifle" onclick="buyRifle()">Buy</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">🗺 Trail Map<small>80 kr · +3 km/walk bonus</small></div>
+                <button class="btn btn-buy" id="shopBuyMap" onclick="buyMap()">Buy</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">🥩 Big Food Pack (8 kg)<small>150 kr</small></div>
+                <button class="btn btn-buy" onclick="buyBigFood()">Buy</button>
+            </div>
+        </div>
+        <button class="btn" onclick="closeShop()" style="width:100%">✖ Leave Store</button>
+    </div>
+
+    <div class="footer">WASD / QERM · TOUCH SUPPORTED · MADE IN DENMARK</div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+        <h2 id="modalTitle"></h2>
+        <div id="modalBody"></div>
+        <button class="btn" onclick="restart()">🔄 Play Again</button>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  GAME DATA
+// ═══════════════════════════════════════════
+
+const CITIES = [
+    { name: "Copenhagen", km: 0,   emoji: "🏙" },
+    { name: "Roskilde",   km: 30,  emoji: "⛪" },
+    { name: "Odense",     km: 130, emoji: "🌹" },
+    { name: "Fredericia", km: 175, emoji: "🏰" },
+    { name: "Aarhus",     km: 225, emoji: "🏢" },
+    { name: "Viborg",     km: 270, emoji: "🏛" },
+    { name: "Aalborg",    km: 320, emoji: "🌆" },
+    { name: "Hjørring",   km: 360, emoji: "🏠" },
+    { name: "Skagen",     km: 387, emoji: "⚓" },
+];
+const TOTAL_KM = 387;
+const MAX_FOOD  = 20;
+const SHOP_CITIES = [30, 130, 175, 225, 270, 320, 360]; // km values where shops exist
+
+const DANGERS = [
+    { text: "🚗 A German tourist convoy nearly runs you over! You leap into the ditch.",
+      damage: 30, canAvoid: () => false },
+    { text: "🐗 A wild boar charges from the undergrowth!",
+      damage: 35, canAvoid: () => G.rifle, avoidText: "You level your rifle — it bolts." },
+    { text: "🦶 Your ankle twists on a cobblestone. Sharp pain shoots up your leg.",
+      damage: 40, canAvoid: () => false },
+    { text: "🤢 Gas station pastry was a terrible idea. Food poisoning hits hard.",
+      damage: 30, canAvoid: () => G.medicine > 0, avoidText: "Medicine quells it quickly." },
+    { text: "👤 Two shady figures demand your money or your health.",
+      damage: 0,  canAvoid: () => G.rifle, avoidText: "The rifle changes their minds fast.", rob: true },
+    { text: "🐍 Denmark's only venomous snake — the adder — sinks its fangs in.",
+      damage: 45, canAvoid: () => G.medicine > 0, avoidText: "Anti-venom in your kit saves you." },
+    { text: "🌊 A rogue wave soaks everything. Hypothermia sets in.",
+      damage: 25, canAvoid: () => G.clothes, avoidText: "Your warm clothes keep the worst at bay.", coldDamage: true },
+    { text: "😤 Aggressive swan blocks the path and attacks relentlessly.",
+      damage: 20, canAvoid: () => false },
+    { text: "🕳 You stumble into a bog. Escaping costs you dearly.",
+      damage: 35, canAvoid: () => G.map, avoidText: "Your map shows a safe path around it." },
+    { text: "🍺 Rowdy Viking re-enactors pick a fight outside a mead hall.",
+      damage: 25, canAvoid: () => G.rifle, avoidText: "One look at the rifle and they back off." },
+    { text: "🌪 A sudden storm pins you down for hours. Exposure takes its toll.",
+      damage: 20, canAvoid: () => G.clothes, avoidText: "Warm clothes keep the exposure minimal.", coldDamage: true },
+    { text: "🧊 Ice on the road at dawn. You slide and fall hard.",
+      damage: 28, canAvoid: () => false },
+];
+
+const WEATHER_EVENTS = [
+    { text: "🌧 Danish drizzle — persistent, grey, weirdly calming. (+5 health, +3 km)", health: 5, km: 3 },
+    { text: "❄️ Cold snap from Norway. Your breath clouds the air.", health: 0, km: 0, cold: true },
+    { text: "☀️ Rare Danish sunshine! A warmth you forgot existed. (+15 health)", health: 15, km: 0 },
+    { text: "💨 North Sea gale. Every step is a negotiation.", health: 0, km: -3, cold: true },
+    { text: "🌈 Rainbow over the fjord. You feel invincible. (+10 health, +5 km)", health: 10, km: 5 },
+    { text: "🌫 Dense fog. Navigation is instinct. (-3 km)", health: 0, km: -3 },
+    { text: "🌤 Crisp autumn morning. The trail feels shorter. (+5 km)", health: 5, km: 5 },
+    { text: "⛈ Thunder over Jutland. You shelter and wait it out.", health: -5, km: 0 },
+];
+
+const GOOD_EVENTS = [
+    { text: "☕ A roadside café owner takes pity on you. Free coffee and pastry. (+12 health)", health: 12, money: 0, food: 0 },
+    { text: "🚜 Farmer offers cash for an hour's help loading bales. (+70 kr, +2 food)", health: 0, money: 70, food: 2 },
+    { text: "🫐 A hedgerow thick with wild blueberries. (+4 food)", health: 0, money: 0, food: 4 },
+    { text: "📸 Tourist mistakes you for a local guide. Pays handsomely. (+90 kr)", health: 0, money: 90, food: 0 },
+    { text: "🐟 Fisherman at a harbour gives you smoked herring. (+5 food)", health: 0, money: 0, food: 5 },
+    { text: "💸 Find a 100 kr note under a park bench. Someone's loss, your gain. (+100 kr)", health: 0, money: 100, food: 0 },
+    { text: "🏡 A Danish family invites you for hygge. Warm food, warm hearts. (+20 health, +3 food)", health: 20, money: 0, food: 3 },
+    { text: "🚉 Sympathetic conductor waves you past the ticket check. (+20 km bonus)", health: 0, money: 0, food: 0, km: 20 },
+    { text: "🍎 Old orchard with ripe apples nobody's claimed. (+4 food)", health: 0, money: 0, food: 4 },
+    { text: "🎸 Street musician tips you for holding the hat. (+50 kr)", health: 0, money: 50, food: 0 },
+    { text: "⛽ Gas station attendant gives you yesterday's sandwiches. (+3 food)", health: 0, money: 0, food: 3 },
+    { text: "💊 Medicine kit found in an abandoned shelter. (+2 medicine)", health: 0, money: 0, food: 0, medicine: 2 },
+];
+
+const CITY_EVENTS = {
+    30:  "⛪ You reach Roskilde! The Viking ships in the harbour are magnificent. You feel inspired. (+10 health)",
+    130: "🌹 Odense! Hans Christian Andersen's birthplace. A café gives free cake to travellers. (+15 health, +40 kr)",
+    175: "🏰 Fredericia! You cross into Jutland. The great bridge behind you. (+10 health)",
+    225: "🏢 Aarhus! Denmark's second city buzzes with life. You find work for a few hours. (+100 kr, +2 food)",
+    270: "🏛 Viborg! Ancient cathedral city. A priest hands you bread for the road. (+6 food)",
+    320: "🌆 Aalborg! Aquavit country. A sip of the local spirit warms you through. (+10 health)",
+    360: "🏠 Hjørring! Almost there. The sea air is sharp and clean. (+8 health)",
+};
+
+const REST_EVENTS = [
+    { text: "😤 Thieves raid your camp!", money: -40, food: 0, health: 0 },
+    { text: "🌪 Storm shreds your shelter!", money: 0, food: 0, health: -20 },
+    { text: "🐻 Something raids your food while you sleep.", money: 0, food: -3, health: 0 },
+];
+
+// ═══════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════
+
+let G = {};
+let logEntries = [];
+
+function initState() {
+    G = {
+        distance: 0, money: 300, health: 100, food: 10, day: 1,
+        clothes: false, medicine: 0, rifle: false, map: false,
+        gameOver: false, victory: false,
+        visitedCities: new Set([0]),
+        shopOpen: false,
+    };
+    logEntries = [];
+}
+
+// ═══════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════
+
+function renderRouteMap() {
+    const el = document.getElementById('routeMap');
+    el.innerHTML = '';
+    for (let i = 0; i < CITIES.length; i++) {
+        const c = CITIES[i];
+        const visited = G.distance >= c.km;
+        const current = getCurrentCityIndex() === i;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'route-city';
+
+        const dot = document.createElement('div');
+        dot.className = 'city-dot' + (current ? ' current' : visited ? ' visited' : '');
+        wrap.appendChild(dot);
+
+        const name = document.createElement('div');
+        name.className = 'city-name' + (current ? ' current' : visited ? ' visited' : '');
+        name.textContent = c.name;
+        wrap.appendChild(name);
+
+        el.appendChild(wrap);
+
+        if (i < CITIES.length - 1) {
+            const lineWrap = document.createElement('div');
+            lineWrap.className = 'city-line-wrap';
+            const line = document.createElement('div');
+            line.className = 'city-line' + (G.distance > c.km ? ' done' : '');
+            lineWrap.appendChild(line);
+            el.appendChild(lineWrap);
+        }
+    }
+}
+
+function getCurrentCityIndex() {
+    let idx = 0;
+    for (let i = 0; i < CITIES.length; i++) {
+        if (G.distance >= CITIES[i].km) idx = i;
+    }
+    return idx;
+}
+
+function getCurrentCityName() {
+    return CITIES[getCurrentCityIndex()].name;
+}
+
+function renderStats() {
+    const hp  = Math.max(0, Math.min(100, G.health));
+    const fp  = Math.max(0, Math.min(100, (G.food / MAX_FOOD) * 100));
+
+    document.getElementById('healthVal').textContent = hp + '%';
+    document.getElementById('foodVal').textContent   = G.food + ' kg';
+    document.getElementById('dayVal').textContent    = G.day;
+    document.getElementById('distVal').textContent   = G.distance;
+    document.getElementById('moneyVal').textContent  = G.money;
+
+    const hBar = document.getElementById('healthBar');
+    hBar.style.width = hp + '%';
+    hBar.className = 'stat-bar-fill bar-health' + (hp <= 25 ? ' low' : '');
+
+    const fBar = document.getElementById('foodBar');
+    fBar.style.width = Math.max(0, fp) + '%';
+    fBar.className = 'stat-bar-fill bar-food' + (G.food <= 3 ? ' low' : '');
+}
+
+function renderInventory() {
+    const toggle = (id, owned, label) => {
+        const el = document.getElementById(id);
+        el.textContent = label;
+        el.className = 'inv-item ' + (owned ? 'owned' : 'missing');
+    };
+    toggle('inv-clothes', G.clothes, '🧥 Clothes');
+    toggle('inv-rifle',   G.rifle,   '🔫 Rifle');
+    document.getElementById('inv-medicine').textContent = `💊 Medicine ×${G.medicine}`;
+    document.getElementById('inv-medicine').className = 'inv-item ' + (G.medicine > 0 ? 'owned' : 'missing');
+    toggle('inv-map', G.map, '🗺 Map');
+
+    document.getElementById('btn-medicine').disabled = G.medicine <= 0 || G.gameOver || G.victory;
+    document.getElementById('btn-hunt').disabled = !G.rifle || G.gameOver || G.victory;
+}
+
+function renderAll() {
+    renderStats();
+    renderInventory();
+    renderRouteMap();
+    updateShopButtons();
+}
+
+function addLog(text, type = 'neutral') {
+    logEntries.push({ text, type });
+    const log = document.getElementById('eventLog');
+
+    // fade older entries
+    Array.from(log.children).forEach((el, i, arr) => {
+        if (i < arr.length - 4) el.classList.add('faded');
+    });
+
+    const entry = document.createElement('div');
+    entry.className = `log-entry type-${type}`;
+    entry.innerHTML = text;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    // Flash stats panel
+    const panel = document.getElementById('statsPanel');
+    panel.classList.remove('flash-red', 'flash-green');
+    void panel.offsetWidth;
+    if (type === 'danger') panel.classList.add('flash-red');
+    else if (type === 'good') panel.classList.add('flash-green');
+}
+
+// ═══════════════════════════════════════════
+//  CORE MECHANICS
+// ═══════════════════════════════════════════
+
+function clamp(v, lo = 0, hi = Infinity) {
+    return Math.max(lo, Math.min(hi, v));
+}
+
+function applyDamage(amount) {
+    G.health -= amount;
+    G.health = clamp(G.health, 0, 100);
+}
+
+function heal(amount) {
+    G.health = clamp(G.health + amount, 0, 100);
+}
+
+function checkCityArrival() {
+    for (const c of CITIES) {
+        if (G.distance >= c.km && !G.visitedCities.has(c.km) && c.km > 0) {
+            G.visitedCities.add(c.km);
+            if (CITY_EVENTS[c.km]) {
+                let ev = CITY_EVENTS[c.km];
+                // Apply city bonuses
+                if (ev.includes('+10 health'))  heal(10);
+                if (ev.includes('+15 health'))  heal(15);
+                if (ev.includes('+8 health'))   heal(8);
+                if (ev.includes('+40 kr'))      G.money += 40;
+                if (ev.includes('+100 kr'))     G.money += 100;
+                if (ev.includes('+2 food'))     G.food = clamp(G.food + 2, 0, MAX_FOOD);
+                if (ev.includes('+6 food'))     G.food = clamp(G.food + 6, 0, MAX_FOOD);
+                addLog(`<strong>🏁 CITY REACHED: ${c.name}!</strong><br>${ev}`, 'city');
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+function checkState() {
+    if (G.distance >= TOTAL_KM) {
+        G.distance = TOTAL_KM;
+        G.victory = true;
+        showVictory();
+        return false;
+    }
+    if (G.health <= 0) {
+        G.health = 0;
+        G.gameOver = true;
+        showGameOver();
+        return false;
+    }
+    if (G.health <= 20 && !G.gameOver && !G.victory) {
+        addLog("⚠️ Health critically low! Rest or use medicine.", 'warning');
+    } else if (G.food <= 2 && !G.gameOver && !G.victory) {
+        addLog("⚠️ Almost out of food! Find some soon.", 'warning');
+    }
+    return true;
+}
+
+// ═══════════════════════════════════════════
+//  ACTIONS
+// ═══════════════════════════════════════════
+
+function walk() {
+    if (G.gameOver || G.victory) return;
+    closeShop();
+
+    if (G.food <= 0) {
+        applyDamage(20);
+        addLog("💀 Starvation! You collapse from hunger. (-20 health)", 'danger');
+        checkState();
+        renderAll();
+        return;
+    }
+    if (G.health <= 10) {
+        addLog("⚠️ Too wounded to walk. Rest or use medicine first.", 'warning');
+        return;
+    }
+
+    // Consume food
+    const foodUsed = clamp(Math.floor(Math.random() * 3) + 2, 0, G.food);
+    G.food = clamp(G.food - foodUsed, 0, MAX_FOOD);
+
+    // Distance walked
+    let base = Math.floor(Math.random() * 14) + 10;
+    if (G.map) base += 3;
+    G.distance += base;
+    G.distance = Math.min(G.distance, TOTAL_KM);
+
+    // Fatigue
+    const fatigue = Math.floor(Math.random() * 8) + 4;
+    applyDamage(fatigue);
+    G.day++;
+
+    let logged = false;
+
+    // Check for city arrival first
+    const arrivedCity = checkCityArrival();
+
+    // Random event roll
+    const roll = Math.random();
+    if (!arrivedCity) {
+        if (roll < 0.35) {
+            // Danger
+            const d = DANGERS[Math.floor(Math.random() * DANGERS.length)];
+            const avoid = d.canAvoid && d.canAvoid();
+            let msg = `Day ${G.day}: ${d.text}`;
+            if (avoid) {
+                msg += `<br><em>${d.avoidText || "You avoid the worst."}</em>`;
+                applyDamage(Math.floor((d.damage || 0) / 4));
+            } else {
+                if (d.damage) applyDamage(d.damage);
+                if (d.rob && G.money > 50) {
+                    const stolen = Math.floor(G.money * 0.45);
+                    G.money -= stolen;
+                    msg += ` They steal ${stolen} kr!`;
+                }
+                if (d.coldDamage && G.clothes) {
+                    // Cold damage already reduced by avoiding, but clothes halve it if not avoided
+                    heal(Math.floor(d.damage / 2));
+                    msg += " Your warm clothes soften the blow.";
+                }
+            }
+            addLog(msg + `<br><small>Walked ${base} km · Food used ${foodUsed} kg</small>`, 'danger');
+            logged = true;
+        } else if (roll < 0.55) {
+            // Weather
+            const w = WEATHER_EVENTS[Math.floor(Math.random() * WEATHER_EVENTS.length)];
+            if (w.health > 0) heal(w.health);
+            else if (w.health < 0) applyDamage(Math.abs(w.health));
+            if (w.km > 0) { G.distance = Math.min(G.distance + w.km, TOTAL_KM); }
+            else if (w.km < 0) { G.distance = Math.max(G.distance + w.km, 0); }
+            if (w.cold && G.clothes) {
+                heal(8);
+                addLog(`Day ${G.day}: ${w.text} (Warm clothes help! +8 health)<br><small>Walked ${base} km · Food used ${foodUsed} kg</small>`, 'neutral');
+            } else if (w.cold && !G.clothes) {
+                applyDamage(12);
+                addLog(`Day ${G.day}: ${w.text} You shiver badly. (-12 health)<br><small>Walked ${base} km · Food used ${foodUsed} kg</small>`, 'warning');
+            } else {
+                addLog(`Day ${G.day}: ${w.text}<br><small>Walked ${base} km · Food used ${foodUsed} kg</small>`, 'good');
+            }
+            logged = true;
+        } else if (roll < 0.72) {
+            // Good event
+            const ev = GOOD_EVENTS[Math.floor(Math.random() * GOOD_EVENTS.length)];
+            if (ev.health)   heal(ev.health);
+            if (ev.money)    G.money += ev.money;
+            if (ev.food)     G.food = clamp(G.food + ev.food, 0, MAX_FOOD);
+            if (ev.km)       G.distance = Math.min(G.distance + ev.km, TOTAL_KM);
+            if (ev.medicine) G.medicine += ev.medicine;
+            addLog(`Day ${G.day}: ${ev.text}<br><small>Walked ${base} km · Food used ${foodUsed} kg</small>`, 'good');
+            logged = true;
+        }
+    }
+
+    if (!logged && !arrivedCity) {
+        const locale = getCurrentCityName();
+        const flavours = [
+            `The road stretches on. ${locale} in the rear-view.`,
+            `Rolling fields of Danish yellow. Beautiful, brutal.`,
+            `A heron lifts from a ditch. You keep walking.`,
+            `Wind at your back today. Small mercies.`,
+            `The asphalt shimmers. Keep the North Star ahead.`,
+            `Birch trees line the road. Peaceful kilometre.`,
+        ];
+        const f = flavours[Math.floor(Math.random() * flavours.length)];
+        addLog(`Day ${G.day}: ${f}<br><small>Walked ${base} km · Food used ${foodUsed} kg</small>`, 'neutral');
+    }
+
+    checkState();
+    renderAll();
+}
+
+function rest() {
+    if (G.gameOver || G.victory) return;
+    closeShop();
+
+    const recovered = Math.floor(Math.random() * 15) + 10;
+    heal(recovered);
+    const foodUsed = clamp(Math.floor(Math.random() * 2) + 1, 0, G.food);
+    G.food -= foodUsed;
+    G.day++;
+
+    if (Math.random() < 0.22) {
+        const ev = REST_EVENTS[Math.floor(Math.random() * REST_EVENTS.length)];
+        if (ev.money)  G.money  = clamp(G.money  + ev.money,  0);
+        if (ev.food)   G.food   = clamp(G.food   + ev.food,   0, MAX_FOOD);
+        if (ev.health) applyDamage(Math.abs(ev.health));
+        addLog(`Day ${G.day}: 😴 Resting... ${ev.text}<br><small>+${recovered} health · Food used ${foodUsed} kg</small>`, 'danger');
+    } else {
+        const restFlavours = [
+            "You sleep under a barn roof. Dreams of the coast.",
+            "A bus shelter does the job. Surprisingly restful.",
+            "Campfire under the open sky. Stars over Jutland.",
+            "You find a church pew unlocked. Forgiveness and sleep.",
+        ];
+        const f = restFlavours[Math.floor(Math.random() * restFlavours.length)];
+        addLog(`Day ${G.day}: 😴 ${f}<br><small>+${recovered} health · Food used ${foodUsed} kg</small>`, 'good');
+    }
+
+    checkState();
+    renderAll();
+}
+
+function hunt() {
+    if (G.gameOver || G.victory) return;
+    if (!G.rifle) { addLog("❌ You need a rifle to hunt. Buy one at a shop.", 'warning'); return; }
+    closeShop();
+
+    G.day++;
+    applyDamage(Math.floor(Math.random() * 5) + 3);
+
+    if (Math.random() < 0.62) {
+        const gained = Math.floor(Math.random() * 8) + 4;
+        G.food = clamp(G.food + gained, 0, MAX_FOOD);
+        const prey = ["pheasant", "rabbit", "deer", "hare"];
+        const p = prey[Math.floor(Math.random() * prey.length)];
+        addLog(`Day ${G.day}: 🏹 Successful hunt! A ${p} — ${gained} kg of good meat.`, 'good');
+    } else {
+        applyDamage(Math.floor(Math.random() * 10) + 5);
+        const fails = ["Rifle jams at the worst moment.", "Spooked it. Hours wasted.", "Boar turns the hunt around."];
+        addLog(`Day ${G.day}: 🏹 Hunt failed. ${fails[Math.floor(Math.random() * fails.length)]}`, 'danger');
+    }
+
+    checkState();
+    renderAll();
+}
+
+function work() {
+    if (G.gameOver || G.victory) return;
+    closeShop();
+
+    G.day++;
+    const foodUsed = clamp(Math.floor(Math.random() * 2) + 1, 0, G.food);
+    G.food -= foodUsed;
+
+    const jobs = [
+        { name: "Farm labouring",    pay: [55, 85],  risk: 0.10 },
+        { name: "Construction help", pay: [70, 120], risk: 0.15 },
+        { name: "Fish processing",   pay: [65, 100], risk: 0.08 },
+        { name: "Delivery run",      pay: [80, 140], risk: 0.10 },
+        { name: "Tour guiding",      pay: [60, 105], risk: 0.05 },
+        { name: "Dock loading",      pay: [75, 115], risk: 0.12 },
+    ];
+    const job = jobs[Math.floor(Math.random() * jobs.length)];
+    const earned = Math.floor(Math.random() * (job.pay[1] - job.pay[0])) + job.pay[0];
+
+    if (Math.random() < job.risk) {
+        const injury = Math.floor(Math.random() * 15) + 8;
+        applyDamage(injury);
+        const partPay = Math.floor(earned * 0.5);
+        G.money += partPay;
+        addLog(`Day ${G.day}: 💼 ${job.name} — injured! Earned ${partPay} kr anyway.`, 'danger');
+    } else {
+        G.money += earned;
+        addLog(`Day ${G.day}: 💼 ${job.name} — ${earned} kr earned.`, 'good');
+    }
+
+    checkState();
+    renderAll();
+}
+
+function forage() {
+    if (G.gameOver || G.victory) return;
+    closeShop();
+
+    G.day++;
+    applyDamage(Math.floor(Math.random() * 5) + 4);
+
+    if (Math.random() < 0.68) {
+        const finds = [
+            { name: "wild strawberries",  food: 3, money: 0 },
+            { name: "chanterelle mushrooms", food: 2, money: 50 },
+            { name: "returnable bottles",   food: 0, money: 30 },
+            { name: "rose hips",            food: 3, money: 0 },
+            { name: "sea buckthorn",        food: 4, money: 0 },
+        ];
+        const f = finds[Math.floor(Math.random() * finds.length)];
+        G.food  = clamp(G.food  + f.food,  0, MAX_FOOD);
+        G.money += f.money;
+        addLog(`Day ${G.day}: 🍄 Found ${f.name}!${f.food ? ` (+${f.food} kg food)` : ''}${f.money ? ` (+${f.money} kr)` : ''}`, 'good');
+    } else {
+        addLog(`Day ${G.day}: 🍄 Nothing edible. The hedgerows have been stripped.`, 'neutral');
+    }
+
+    checkState();
+    renderAll();
+}
+
+function useMedicine() {
+    if (G.medicine <= 0 || G.gameOver || G.victory) return;
+    G.medicine--;
+    heal(40);
+    addLog(`💊 Medicine taken. (+40 health · ${G.medicine} doses remaining)`, 'good');
+    checkState();
+    renderAll();
+}
+
+// ═══════════════════════════════════════════
+//  SHOP
+// ═══════════════════════════════════════════
+
+function nearestShopCity() {
+    // Returns name of nearest shop city if within range
+    for (const km of SHOP_CITIES) {
+        if (Math.abs(G.distance - km) <= 15) {
+            return CITIES.find(c => c.km === km)?.name || 'Town';
+        }
+    }
+    // Also allow shop from the start
+    if (G.distance < 15) return 'Copenhagen';
+    return null;
+}
+
+function openShop() {
+    if (G.gameOver || G.victory) return;
+    const city = nearestShopCity();
+    if (!city) {
+        addLog("❌ No shops out here. Head to the next town.", 'warning');
+        return;
+    }
+    document.getElementById('shopCityName').textContent = city;
+    document.getElementById('shopSection').style.display = 'block';
+    updateShopButtons();
+    G.shopOpen = true;
+}
+
+function closeShop() {
+    document.getElementById('shopSection').style.display = 'none';
+    G.shopOpen = false;
+}
+
+function updateShopButtons() {
+    document.getElementById('shopBuyClothes').textContent = G.clothes  ? '✓ Owned' : 'Buy';
+    document.getElementById('shopBuyClothes').disabled    = G.clothes;
+    document.getElementById('shopBuyRifle').textContent   = G.rifle    ? '✓ Owned' : 'Buy';
+    document.getElementById('shopBuyRifle').disabled      = G.rifle;
+    document.getElementById('shopBuyMap').textContent     = G.map      ? '✓ Owned' : 'Buy';
+    document.getElementById('shopBuyMap').disabled        = G.map;
+}
+
+function tryBuy(cost, condition, onSuccess, errorMsg) {
+    if (condition) { addLog("❌ " + errorMsg, 'warning'); return; }
+    if (G.money < cost) { addLog(`❌ Need ${cost} kr. You only have ${G.money} kr.`, 'warning'); return; }
+    G.money -= cost;
+    onSuccess();
+    renderAll();
+}
+
+function buyFood()     { tryBuy(60,  false, () => { G.food = clamp(G.food + 3, 0, MAX_FOOD); addLog("🍞 Bought food rations. (+3 kg)", 'good'); }, ''); }
+function buyBigFood()  { tryBuy(150, false, () => { G.food = clamp(G.food + 8, 0, MAX_FOOD); addLog("🥩 Bought big food pack. (+8 kg)", 'good'); }, ''); }
+function buyMedicine() { tryBuy(140, false, () => { G.medicine += 2; addLog("💊 Bought medicine. (+2 doses)", 'good'); renderAll(); }, ''); }
+function buyClothes()  { tryBuy(180, G.clothes,  () => { G.clothes = true; addLog("🧥 Bought warm clothes. Cold weather halved.", 'good'); }, 'Already have clothes.'); }
+function buyRifle()    { tryBuy(240, G.rifle,    () => { G.rifle   = true; addLog("🔫 Bought hunting rifle. Can now hunt and deter robbers.", 'good'); }, 'Already have a rifle.'); }
+function buyMap()      { tryBuy(80,  G.map,      () => { G.map     = true; addLog("🗺 Bought trail map. +3 km bonus per walk.", 'good'); }, 'Already have a map.'); }
+
+// ═══════════════════════════════════════════
+//  WIN / LOSE
+// ═══════════════════════════════════════════
+
+function calcScore() {
+    let s = 1000;
+    s += G.health * 5;
+    s += G.money;
+    s += G.food * 10;
+    s -= G.day * 2;
+    return Math.max(0, Math.round(s));
+}
+
+function scoreRating(s) {
+    if (s >= 2000) return "🌟 LEGENDARY — A true Viking spirit!";
+    if (s >= 1500) return "⭐ EXCELLENT — Denmark is proud.";
+    if (s >= 1000) return "👍 GOOD — Worthy of Skagen.";
+    if (s >= 500)  return "😤 SURVIVED — Barely, but still.";
+    return "😅 SCRAPED THROUGH — Buy more food next time.";
+}
+
+function showVictory() {
+    const score = calcScore();
+    document.getElementById('modal').className = 'modal victory';
+    document.getElementById('modalTitle').textContent = '🎉 SKAGEN! 🎉';
+    document.getElementById('modalBody').innerHTML = `
+        <p class="stat-line">You reached the tip of Denmark!</p>
+        <p class="stat-line">📅 Days on the road: <span>${G.day}</span></p>
+        <p class="stat-line">❤ Health remaining: <span>${G.health}%</span></p>
+        <p class="stat-line">💰 Money left: <span>${G.money} kr</span></p>
+        <p class="stat-line">🍖 Food left: <span>${G.food} kg</span></p>
+        <div class="score">SCORE: ${score}</div>
+        <p class="stat-line">${scoreRating(score)}</p>
+        <p class="stat-line" style="margin-top:10px;font-size:11px;color:#81c784">
+            The two seas meet here — Kattegat and Skagerrak — just as you have met the end of your journey. 🇩🇰
+        </p>
+    `;
+    document.getElementById('modalOverlay').classList.add('active');
+    addLog(`🎉 <strong>YOU REACHED SKAGEN!</strong> Score: ${score}. ${scoreRating(score)}`, 'city');
+}
+
+function showGameOver() {
+    document.getElementById('modal').className = 'modal gameover';
+    document.getElementById('modalTitle').textContent = '💀 YOU DIED';
+    document.getElementById('modalBody').innerHTML = `
+        <p class="stat-line">The trail claimed another soul.</p>
+        <p class="stat-line">📍 Distance: <span>${G.distance}/387 km</span></p>
+        <p class="stat-line">📅 Days survived: <span>${G.day}</span></p>
+        <p class="stat-line">💰 Money left: <span>${G.money} kr</span></p>
+        <p class="stat-line" style="margin-top:10px;font-size:11px;color:#ef9a9a">
+            ${G.distance > 300 ? "So close to Skagen... Try again." :
+              G.distance > 200 ? "Past the halfway mark at least." :
+              "You barely left Copenhagen. Denmark is unforgiving."}
+        </p>
+    `;
+    document.getElementById('modalOverlay').classList.add('active');
+    addLog(`💀 <strong>GAME OVER</strong> — ${G.distance} km reached after ${G.day} days.`, 'danger');
+}
+
+// ═══════════════════════════════════════════
+//  RESTART
+// ═══════════════════════════════════════════
+
+function restart() {
+    document.getElementById('modalOverlay').classList.remove('active');
+    document.getElementById('shopSection').style.display = 'none';
+    document.getElementById('eventLog').innerHTML = '';
+    initState();
+    renderAll();
+    addLog("🇩🇰 <strong>Welcome to Road to Skagen!</strong> 387 km ahead. Copenhagen fades behind you. Survive.", 'system');
+    addLog("📖 <em>Tips: Shop in towns · Clothes halve cold damage · Map adds 3 km/walk · Medicine restores 40 health</em>", 'system');
+}
+
+// ═══════════════════════════════════════════
+//  KEYBOARD
+// ═══════════════════════════════════════════
+
+document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    switch (e.key.toLowerCase()) {
+        case 'w': walk();       break;
+        case 'a': rest();       break;
+        case 's': G.shopOpen ? closeShop() : openShop(); break;
+        case 'd': hunt();       break;
+        case 'q': work();       break;
+        case 'e': forage();     break;
+        case 'm': useMedicine(); break;
+        case 'r': restart();    break;
+    }
+});
+
+// Touch feedback
+document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('touchstart', e => { e.preventDefault(); btn.style.opacity = '0.7'; }, { passive: false });
+    btn.addEventListener('touchend',   e => { e.preventDefault(); btn.style.opacity = ''; btn.click(); });
+});
+
+// ── BOOT ──
+initState();
+restart();
+</script>
+</body>
+</html>

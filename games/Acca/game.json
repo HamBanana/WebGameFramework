@@ -1,0 +1,57 @@
+{
+  "id": "Acca",
+  "title": "Acca",
+  "icon": "🏙️",
+  "color": "#4da6ff",
+  "tags": ["BOARD GAME", "2–4 PLAYERS", "STRATEGY"],
+  "desc": "A city-building board game. Buy properties, corner regions, trade resources, and become the economic mayor.",
+  "config": [
+    {
+      "key": "Players",
+      "help": "Number of players (human turns in order).",
+      "opts": ["2", "3", "4"],
+      "def": "2",
+      "apply": {
+        "2": { "numberOfPlayers": 2 },
+        "3": { "numberOfPlayers": 3 },
+        "4": { "numberOfPlayers": 4 }
+      }
+    },
+    {
+      "key": "Starting Money",
+      "help": "Each player's starting cash.",
+      "opts": ["$500", "$1 000", "$1 500", "$2 500"],
+      "def": "$1 500",
+      "apply": {
+        "$500":   { "startingMoney": 500  },
+        "$1 000": { "startingMoney": 1000 },
+        "$1 500": { "startingMoney": 1500 },
+        "$2 500": { "startingMoney": 2500 }
+      }
+    },
+    {
+      "key": "Win Target",
+      "help": "Money-on-hand needed to win.",
+      "opts": ["$3 000", "$5 000", "$7 500", "$10 000"],
+      "def": "$5 000",
+      "apply": {
+        "$3 000":  { "win": { "target": 3000  } },
+        "$5 000":  { "win": { "target": 5000  } },
+        "$7 500":  { "win": { "target": 7500  } },
+        "$10 000": { "win": { "target": 10000 } }
+      }
+    },
+    {
+      "key": "Property Price",
+      "help": "Base cost to purchase a property.",
+      "opts": ["$100", "$200", "$300", "$400"],
+      "def": "$200",
+      "apply": {
+        "$100": { "property": { "basePrice": 100 } },
+        "$200": { "property": { "basePrice": 200 } },
+        "$300": { "property": { "basePrice": 300 } },
+        "$400": { "property": { "basePrice": 400 } }
+      }
+    }
+  ]
+}
