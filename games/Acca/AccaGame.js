@@ -1,8 +1,13 @@
 // GameFramework/games/Acca/AccaGame.js
-// Main game logic for Acca — uses GameFramework, no asset paths.
-// Mirrors the structure of the Unity reference (GameManager, TurnManager,
-// Player, MovementController, DieController, Cell) but adapted for the
-// canvas-based GameFramework runtime.
+// Main game logic for Acca.
+// Implements the Planning bible (games/Acca/Planning/) plus 20_Changes:
+//   - HTML topbar + sidebar (DOM-driven), canvas only renders the map.
+//   - Camera zooms in on the active player (~6 cells around them in each dir);
+//     zooms out between turns to show the whole map.
+//   - Empty district squares are buildable: landing on one offers the full
+//     player-structure catalog (Planning §5.10).
+//   - Per-structure landing/pass-through handlers (shop, toll, teleporter,
+//     house, factory, police_station, vault).
 
 (function (GF) {
   'use strict';
@@ -17,13 +22,14 @@
   };
 
   const TURN_STAGE = {
-    TURN_START   : 'turnStart',     // Show roll/options menu
-    ROLL         : 'roll',          // Animating die
-    MOVE         : 'move',          // Player chooses path with arrow keys
-    CONFIRM_LAND : 'confirmLand',   // Pause before triggering cell event
-    LANDING      : 'landing',       // Cell event runs (property/market/chance)
-    LAND_PROMPT  : 'landPrompt',    // Sub-menu (e.g. buy property, chance result)
-    END_TURN     : 'endTurn',       // Advance to next player
+    TURN_START   : 'turnStart',
+    ROLL         : 'roll',
+    MOVE         : 'move',
+    CONFIRM_LAND : 'confirmLand',
+    LANDING      : 'landing',
+    LAND_PROMPT  : 'landPrompt',
+    BETWEEN      : 'between',     // zoomed-out hold between turns
+    END_TURN     : 'endTurn',
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -34,35 +40,44 @@
       this.id        = id;
       this.x         = x;
       this.y         = y;
-      this.type      = type;     // 'bank' | 'property' | 'chance' | 'empty'
-      this.district  = district; // district name or null
-      this.sprite    = sprite;   // sprite name registered with SpriteSystem
+      this.type      = type;     // 'bank' | 'buildable' | 'chance' | 'empty'
+      this.district  = district;
+      this.sprite    = sprite;
 
-      // Neighbors (linked by GameManager during setup)
       this.up    = null;
       this.down  = null;
       this.left  = null;
       this.right = null;
 
-      // Flexible neighbor list (populated from connections)
       this._neighbors = [];
 
-      // Property state (only meaningful for type === 'property')
-      this.ownerIndex = -1;      // player index, or -1 if unowned
-      this.purchasePrice = 0;    // base price; set during init
+      // Structure (only meaningful for type === 'buildable')
+      this.structure = null;     // PlayerStructure | null
 
-      // Animator (for cell visuals)
       this.animator = null;
     }
 
-    /** Return list of neighbors. */
-    neighbors() {
-      return this._neighbors;
+    neighbors() { return this._neighbors; }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  PlayerStructure (Planning §5.9)
+  // ──────────────────────────────────────────────────────────────────────────
+  class PlayerStructure {
+    constructor(type, ownerIndex, baseValue, animator) {
+      this.type        = type;
+      this.ownerIndex  = ownerIndex;
+      this.baseValue   = baseValue;
+      this.currentValue = baseValue;
+      this.cell        = null;
+      this.animator    = animator;
+      // Per-type state:
+      this.tollAccrued = 0;     // toll_gate
     }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  //  DieController — animated die that produces a value 1..6
+  //  DieController
   // ──────────────────────────────────────────────────────────────────────────
   class DieController {
     constructor(spriteSystem) {
@@ -74,7 +89,6 @@
       this._onDone   = null;
     }
 
-    /** Start a roll. Calls onDone(value) when finished. */
     roll(duration, onDone) {
       this.rolling = true;
       this.rolledValue = 0;
@@ -101,9 +115,7 @@
       this.animator.update(dt);
     }
 
-    draw(ctx, x, y) {
-      this.animator.draw(ctx, x, y);
-    }
+    draw(ctx, x, y) { this.animator.draw(ctx, x, y); }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -117,43 +129,40 @@
       this.spriteName = def.sprite;
       this.animator   = spriteSystem.createAnimator(def.sprite, 'idle');
 
-      // Stats
       this.money       = startingMoney;
-      this.totalValue  = startingMoney;
       this.level       = 1;
       this.isBankrupt  = false;
 
-      // Properties
-      this.ownedCells  = [];     // array of Cell
-      this.resources   = {};     // resource name → quantity
+      this.ownedStructures = []; // array of PlayerStructure
+      this.resources       = {}; // resourceName → quantity
       this.regionsMayoredOf = new Set();
+      this.company         = null; // Planning §7 — null until founded
 
-      // Position
       this.currentCell = startCell;
-      this.renderX     = 0;
-      this.renderY     = 0;     // updated each frame from cell coords
-      this.moveOffset  = { x: 0, y: 0 }; // small offset so multiple players on same cell don't fully overlap
+      this.moveOffset  = { x: 0, y: 0 };
     }
 
-    /** Recompute total value (cash + property values). */
-    recalcTotalValue() {
-      const propVal = this.ownedCells.reduce((sum, c) => sum + (c.purchasePrice || 0), 0);
-      this.totalValue = this.money + propVal;
+    /** structure footprint in a district (count of owned structures of any type). */
+    structuresInDistrict(district) {
+      return this.ownedStructures.filter(s => s.cell && s.cell.district === district).length;
+    }
+
+    /** count of owned house structures (drives factory bonus). */
+    get housesOwned() {
+      return this.ownedStructures.filter(s => s.type === 'house').length;
     }
 
     addMoney(amount) {
       this.money += amount;
       if (this.money < 0) {
-        // Simple bankruptcy rule — can refine later.
         this.isBankrupt = true;
         this.money = 0;
       }
-      this.recalcTotalValue();
     }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  //  MovementController — handles per-step arrow input during MOVE stage
+  //  MovementController — per-step arrow input during MOVE stage
   // ──────────────────────────────────────────────────────────────────────────
   class MovementController {
     constructor(input, controls, eventBus) {
@@ -171,7 +180,6 @@
       this.active    = true;
     }
 
-    /** Called every frame from the engine loop. */
     update() {
       if (!this.active || !this.player) return;
       const cur = this.player.currentCell;
@@ -183,9 +191,7 @@
       else if (this._pressed('left')  && cur.left)  target = cur.left;
       else if (this._pressed('right') && cur.right) target = cur.right;
 
-      if (target) {
-        this._stepTo(target);
-      }
+      if (target) this._stepTo(target);
     }
 
     _pressed(action) {
@@ -199,9 +205,10 @@
       this.events.emit('cell:leave', { player: p, cell: p.currentCell });
       p.currentCell = target;
       this.movesLeft--;
-      this.events.emit('cell:enter', { player: p, cell: target });
+      const final = this.movesLeft <= 0;
+      this.events.emit('cell:enter', { player: p, cell: target, final });
 
-      if (this.movesLeft <= 0) {
+      if (final) {
         this.active = false;
         this.events.emit('move:complete', { player: p });
       }
@@ -215,28 +222,31 @@
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  //  Menu — simple arrow-key-driven selection list
+  //  Menu — arrow-key list overlay rendered on the canvas (screen-space)
   // ──────────────────────────────────────────────────────────────────────────
   class Menu {
     constructor(input, controls) {
       this.input    = input;
       this.controls = controls;
-      this.options  = [];      // [{ label, action }]
+      this.options  = [];
       this.index    = 0;
       this.title    = '';
+      this.subtitle = '';
       this.visible  = false;
     }
 
-    show(title, options) {
-      this.title   = title;
-      this.options = options;
-      this.index   = 0;
-      this.visible = true;
+    show(title, options, subtitle) {
+      this.title    = title;
+      this.subtitle = subtitle || '';
+      this.options  = options;
+      this.index    = 0;
+      this.visible  = true;
     }
 
     hide() {
       this.visible = false;
       this.options = [];
+      this.subtitle = '';
     }
 
     update() {
@@ -260,6 +270,231 @@
   }
 
   // ──────────────────────────────────────────────────────────────────────────
+  //  StructureManager — creates structures, runs landing/pass effects
+  // ──────────────────────────────────────────────────────────────────────────
+  class StructureManager {
+    constructor(game) {
+      this.game = game;
+    }
+
+    /** Build a structure on a cell for an owner. Returns the new structure. */
+    build(cell, type, ownerIndex) {
+      const cfg = this.game.cfg.structures;
+      const entry = cfg.catalog.find(c => c.type === type);
+      if (!entry) return null;
+
+      const spriteName = cfg.sprites[type];
+      const animator = this.game.sprites.createAnimator(spriteName, 'idle');
+      const s = new PlayerStructure(type, ownerIndex, entry.cost, animator);
+      s.cell = cell;
+      cell.structure = s;
+      cell.sprite = spriteName;
+      cell.animator = animator;
+      this.game.players[ownerIndex].ownedStructures.push(s);
+      this.game.engine.events.emit('property:bought', { structure: s, ownerIndex });
+      if (this.game.regionSys) this.game.regionSys.recomputeMayor(cell.district);
+      return s;
+    }
+
+    /** Owner-on-land action menu options for this structure. */
+    ownerOptionsFor(structure, player, onDone) {
+      const game = this.game;
+      const cfg = game.cfg.structures;
+      const opts = [];
+
+      switch (structure.type) {
+        case 'shop': {
+          const cap = this._shopMaxCapital(structure, player);
+          const step = cfg.shopInvestStep;
+          const room = cap - structure.currentValue;
+          if (room >= step && player.money >= step) {
+            opts.push({ label: `Invest $${step}  (val→$${structure.currentValue + step}/${cap})`,
+              action: () => {
+                player.addMoney(-step);
+                structure.currentValue += step;
+                game.log(`${player.name} invested $${step} in their Shop.`);
+                onDone();
+              } });
+          }
+          opts.push({ label: `Cap: $${cap}  Current: $${structure.currentValue}`, action: onDone });
+          break;
+        }
+        case 'house': {
+          if (player.regionsMayoredOf.has(structure.cell.district)) {
+            const tax = cfg.houseTaxIfMayor;
+            opts.push({ label: `Collect taxes (+$${tax})`, action: () => {
+              player.addMoney(tax);
+              game.log(`${player.name} collected $${tax} in taxes from their House.`);
+              onDone();
+            } });
+          } else {
+            opts.push({ label: `Need mayor of ${structure.cell.district} to tax`, action: onDone });
+          }
+          break;
+        }
+        case 'factory': {
+          const out = this._factoryOutput(player);
+          const res = cfg.factoryResource;
+          opts.push({ label: `Collect ${out} ${res}`, action: () => {
+            player.resources[res] = (player.resources[res] || 0) + out;
+            game.log(`${player.name} collected ${out} ${res} from their Factory.`);
+            onDone();
+          } });
+          break;
+        }
+        case 'teleporter': {
+          const others = player.ownedStructures.filter(s =>
+            s.type === 'teleporter' && s !== structure);
+          if (others.length === 0) {
+            opts.push({ label: '(no other teleporter to use)', action: onDone });
+          } else {
+            others.forEach(t => {
+              opts.push({ label: `Teleport to ${t.cell.district || 'cell ' + t.cell.id}`,
+                action: () => {
+                  game.movePlayerTo(player, t.cell);
+                  game.log(`${player.name} teleported.`);
+                  onDone();
+                } });
+            });
+          }
+          break;
+        }
+        case 'vault': {
+          const interest = Math.round(player.money * cfg.vaultInterestRate);
+          opts.push({ label: `Collect interest (+$${interest})`, action: () => {
+            player.addMoney(interest);
+            game.log(`${player.name} earned $${interest} interest from their Vault.`);
+            onDone();
+          } });
+          break;
+        }
+        case 'toll_gate':
+        case 'police_station':
+          opts.push({ label: '(passive — owner takes no action)', action: onDone });
+          break;
+      }
+      opts.push({ label: 'Continue', action: onDone });
+      return opts;
+    }
+
+    /**
+     * Visitor-on-land effect for a non-owned structure.
+     * Returns a follow-up menu (array of opts) or null if effect was applied
+     * directly and the turn should advance.
+     */
+    visitorEffect(structure, player, onDone) {
+      const game = this.game;
+      const cfg = game.cfg.structures;
+      const owner = game.players[structure.ownerIndex];
+
+      switch (structure.type) {
+        case 'shop': {
+          const fee = Math.max(1, Math.round(structure.currentValue * cfg.shopVisitRate));
+          this._payRent(player, owner, fee, 'visit a Shop');
+          onDone();
+          return null;
+        }
+        case 'house': {
+          const fee = Math.max(1, Math.round(structure.baseValue * cfg.houseRentRate));
+          this._payRent(player, owner, fee, 'rent a House room');
+          onDone();
+          return null;
+        }
+        case 'factory': {
+          const fee = Math.max(1, Math.round(structure.baseValue * cfg.houseRentRate));
+          this._payRent(player, owner, fee, 'tour a Factory');
+          onDone();
+          return null;
+        }
+        case 'vault': {
+          const fee = Math.max(1, Math.round(structure.baseValue * cfg.houseRentRate));
+          this._payRent(player, owner, fee, 'inspect a Vault');
+          onDone();
+          return null;
+        }
+        case 'toll_gate': {
+          // Already paid on pass-through (cell:enter); landing is a no-op extra fee.
+          game.log(`${player.name} stops at the Toll Gate.`);
+          onDone();
+          return null;
+        }
+        case 'police_station': {
+          game.log(`${player.name} passes the Police Station.`);
+          onDone();
+          return null;
+        }
+        case 'teleporter': {
+          const targets = owner.ownedStructures.filter(s =>
+            s.type === 'teleporter' && s !== structure);
+          const opts = [];
+          if (targets.length > 0 && player.money >= cfg.teleportFee) {
+            targets.forEach(t => {
+              opts.push({ label: `Teleport to ${t.cell.district || 'cell ' + t.cell.id} ($${cfg.teleportFee})`,
+                action: () => {
+                  player.addMoney(-cfg.teleportFee);
+                  owner.addMoney(cfg.teleportFee);
+                  game.movePlayerTo(player, t.cell);
+                  game.log(`${player.name} paid $${cfg.teleportFee} to teleport.`);
+                  onDone();
+                } });
+            });
+          }
+          opts.push({ label: 'Pass', action: onDone });
+          return opts;
+        }
+      }
+      onDone();
+      return null;
+    }
+
+    /** Toll-gate pass-through effect — fires on every step into the cell. */
+    passThroughEffect(cell, player) {
+      if (!cell.structure || cell.structure.type !== 'toll_gate') return;
+      const s = cell.structure;
+      if (s.ownerIndex === player.index || s.ownerIndex < 0) return;
+      const game = this.game;
+      const owner = game.players[s.ownerIndex];
+      const due = s.tollAccrued;
+      if (due > 0) {
+        this._payRent(player, owner, due, 'pass a Toll Gate');
+      } else {
+        game.log(`${player.name} passes the Toll Gate (free this time).`);
+      }
+      s.tollAccrued += game.cfg.structures.tollIncrement;
+    }
+
+    /** End-of-turn upkeep & passive effects for the active player. */
+    endOfTurnFor(player) {
+      const cfg = this.game.cfg.structures;
+      player.ownedStructures.forEach(s => {
+        if (s.type === 'vault') {
+          player.addMoney(-cfg.vaultUpkeep);
+          this.game.log(`Vault upkeep: -$${cfg.vaultUpkeep}.`);
+        }
+      });
+    }
+
+    _shopMaxCapital(structure, player) {
+      const cfg = this.game.cfg.structures;
+      const sameDistrict = player.structuresInDistrict(structure.cell.district);
+      return cfg.shopBaseCap + sameDistrict * cfg.shopCapPerStructure;
+    }
+
+    _factoryOutput(player) {
+      const cfg = this.game.cfg.structures;
+      const base = cfg.factoryBaseRate;
+      const bonus = 1 + player.housesOwned * cfg.factoryHouseBonus;
+      return Math.max(1, Math.round(base * bonus));
+    }
+
+    _payRent(payer, owner, amount, reason) {
+      payer.addMoney(-amount);
+      owner.addMoney(amount);
+      this.game.log(`${payer.name} pays $${amount} to ${owner.name} (${reason}).`);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
   //  TurnManager — drives the per-turn sub-state machine
   // ──────────────────────────────────────────────────────────────────────────
   class TurnManager {
@@ -271,15 +506,14 @@
       this.movement = game.movement;
       this.menu     = game.menu;
       this.events   = game.engine.events;
-      this._waitTimer = 0;
 
-      // React to movement completion → confirm land
       this.events.on('move:complete', () => {
-        if (this.stage === TURN_STAGE.MOVE) this.enter(TURN_STAGE.CONFIRM_LAND);
+        if (this.stage === TURN_STAGE.MOVE) this.enter(TURN_STAGE.LANDING);
       });
 
-      this.events.on('cell:enter', ({ player, cell }) => {
-        this.game.log(`${player.name} stepped onto ${this.game.cellLabel(cell)}.`);
+      this.events.on('cell:enter', ({ player, cell, final }) => {
+        // Pass-through effects (toll gate)
+        if (!final) this.game.structures.passThroughEffect(cell, player);
       });
     }
 
@@ -293,27 +527,34 @@
       switch (stage) {
 
         case TURN_STAGE.TURN_START:
+          this.game._zoomInOnPlayer(this.player);
+          this.game.log(`— ${this.player.name}'s turn —`);
           this._showStartMenu();
           break;
 
-        case TURN_STAGE.ROLL:
-          this.game.log(`${this.player.name} rolls the die...`);
+        case TURN_STAGE.ROLL: {
+          // Honor any chance-event die override on this player.
+          let override = null;
+          if (this.game.chanceSys) {
+            override = this.game.chanceSys.consumeDieOverride(this.player.index);
+          }
           this.die.roll(this.game.cfg.turn.rollDuration, (value) => {
-            this.game.log(`Rolled a ${value}.`);
+            if (override) {
+              value = override.min + Math.floor(Math.random() * (override.max - override.min + 1));
+              this.die.rolledValue = value;
+              this.game.log(`Lucky die! Rolled a ${value} (range ${override.min}-${override.max}).`);
+            } else {
+              this.game.log(`Rolled a ${value}.`);
+            }
             this.game.lastRoll = value;
             this.enter(TURN_STAGE.MOVE);
           });
           break;
+        }
 
         case TURN_STAGE.MOVE:
           this.movement.begin(this.player, this.game.lastRoll);
           this.game.log(`Move ${this.game.lastRoll} step(s) — use arrow keys.`);
-          break;
-
-        case TURN_STAGE.CONFIRM_LAND:
-          this.menu.show('Land here?', [
-            { label: 'Confirm', action: () => this.enter(TURN_STAGE.LANDING) },
-          ]);
           break;
 
         case TURN_STAGE.LANDING:
@@ -321,30 +562,316 @@
           break;
 
         case TURN_STAGE.LAND_PROMPT:
-          // Menu is already visible from _handleLanding; just wait for a choice.
+          // Menu was shown by the handler; wait for its action.
           break;
 
         case TURN_STAGE.END_TURN:
-          this.game.log(`${this.player.name} ends their turn.`);
-          this.game.endPlayerTurn();
+          this.game._runEndOfTurn(this.player);
+          this.game._beginBetweenTurns();
+          this.stage = TURN_STAGE.BETWEEN;
+          break;
+
+        case TURN_STAGE.BETWEEN:
+          // Held by AccaGame._betweenTurnsTimer; nothing to do here.
           break;
       }
     }
 
     _showStartMenu() {
-      this.menu.show(`${this.player.name}'s turn`, [
-        { label: 'Roll',    action: () => this.enter(TURN_STAGE.ROLL) },
-        { label: 'Options', action: () => this._showOptionsMenu() },
-      ]);
+      const p = this.player;
+      const game = this.game;
+      const opts = [
+        { label: 'Roll', action: () => this.enter(TURN_STAGE.ROLL) },
+        { label: 'Manage', action: () => this._showManageMenu() },
+      ];
+      if (game.cfg.mode !== 'cooperative' && game.players.length > 1) {
+        opts.push({ label: 'Trade / Hostile actions', action: () => this._showTradeRootMenu() });
+      }
+      opts.push({ label: 'Market', action: () => this._showMarketMenu() });
+      opts.push({ label: 'Save game', action: () => {
+        if (GF.Acca && GF.Acca.Save) {
+          GF.Acca.Save.save(game);
+          game.log('Game saved.');
+        }
+        this._showStartMenu();
+      } });
+      opts.push({ label: 'Pass turn', action: () => this.enter(TURN_STAGE.END_TURN) });
+      this.menu.show(`${p.name}'s turn  ($${p.money})`, opts);
     }
 
-    _showOptionsMenu() {
-      const owned = this.player.ownedCells.length;
-      this.menu.show('Options', [
-        { label: `Properties: ${owned}`, action: () => this._showStartMenu() },
-        { label: `Money: $${this.player.money}`, action: () => this._showStartMenu() },
-        { label: 'Back', action: () => this._showStartMenu() },
-      ]);
+    // ── Manage submenu ────────────────────────────────────────────────────
+    _showManageMenu() {
+      const p = this.player;
+      const game = this.game;
+      const opts = [];
+      if (p.regionsMayoredOf.size > 0 && game.regionSys) {
+        opts.push({ label: `Mayor controls (${p.regionsMayoredOf.size} regions)`,
+          action: () => this._showMayorMenu() });
+      }
+      if (game.cfg.industries) {
+        opts.push({ label: p.company ? `Company: ${p.company.name} (${p.company.industry})`
+                                       : 'Create company',
+          action: () => this._showCompanyMenu() });
+      }
+      opts.push({ label: 'Properties: ' + p.ownedStructures.length, action: () => this._showPortfolioMenu() });
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      this.menu.show('Manage', opts, `Cash $${p.money}  ·  Net $${game.netWorth(p)}`);
+    }
+
+    _showMayorMenu() {
+      const p = this.player;
+      const game = this.game;
+      const regions = Array.from(p.regionsMayoredOf).map(id => game.regionSys.get(id)).filter(Boolean);
+      const opts = regions.map(r => ({
+        label: `${r.id}  pop ${r.population}  hap ${Math.round(r.happiness)}  tax ${Math.round(r.taxRate * 100)}%`,
+        action: () => this._showRegionMenu(r),
+      }));
+      opts.push({ label: 'Back', action: () => this._showManageMenu() });
+      this.menu.show('Mayor', opts);
+    }
+
+    _showRegionMenu(r) {
+      const p = this.player;
+      const game = this.game;
+      const cfg = game.cfg.region;
+      const opts = [
+        { label: `Tax rate: ${Math.round(r.taxRate * 100)}%  (use ←→ in next menu)`,
+          action: () => this._showTaxSlider(r) },
+        { label: `Festival ($${cfg.festivalCost})`, action: () => {
+          const res = game.regionSys.holdFestival(p, r.id, game.turnCounter);
+          game.log(res.ok ? `Festival held in ${r.id}.`
+                          : `Festival rejected: ${res.reason}.`);
+          this._showRegionMenu(r);
+        } },
+        { label: `Investment grant ($${cfg.grantCost} → +${cfg.grantPopulation} pop)`, action: () => {
+          const res = game.regionSys.investmentGrant(p, r.id, game.turnCounter);
+          game.log(res.ok ? `Grant applied in ${r.id}.`
+                          : `Grant rejected: ${res.reason}.`);
+          this._showRegionMenu(r);
+        } },
+        { label: 'Back', action: () => this._showMayorMenu() },
+      ];
+      this.menu.show(`Region: ${r.id}`, opts,
+        `Pop ${r.population}  Happiness ${Math.round(r.happiness)}  Specialty: ${r.specialty || 'none'}`);
+    }
+
+    _showTaxSlider(r) {
+      const game = this.game;
+      const p = this.player;
+      const cfg = game.cfg.region;
+      // Step the rate via menu options (5% increments)
+      const steps = [];
+      const max = cfg.maxTaxRate;
+      for (let v = 0; v <= max + 0.001; v += 0.05) steps.push(Math.round(v * 100) / 100);
+      const opts = steps.map(v => ({
+        label: `Set ${Math.round(v * 100)}%${v === r.taxRate ? '   ← current' : ''}`,
+        action: () => {
+          game.regionSys.setTaxRate(p, r.id, v);
+          game.log(`Tax for ${r.id} set to ${Math.round(v * 100)}%.`);
+          this._showRegionMenu(r);
+        },
+      }));
+      opts.push({ label: 'Back', action: () => this._showRegionMenu(r) });
+      this.menu.show(`Tax for ${r.id}`, opts,
+        `Comfort target ≤ ${Math.round(game.cfg.population.taxComfortRate * 100)}%`);
+    }
+
+    // ── Company submenu (Planning §7) ─────────────────────────────────────
+    _showCompanyMenu() {
+      const p = this.player;
+      const game = this.game;
+      const cfg = game.cfg.industries;
+      if (!p.company) {
+        const cost = cfg.newCompanyCost;
+        const opts = cfg.types.map(t => ({
+          label: `Found "${p.name} ${t.toUpperCase()}" — ${t}  ($${cost})`,
+          action: () => {
+            if (p.money < cost) { game.log('Cannot afford.'); this._showManageMenu(); return; }
+            p.money -= cost;
+            p.company = { id: 'co_' + p.index, name: `${p.name} ${t.toUpperCase()}`, industry: t };
+            game.log(`${p.name} founded ${p.company.name}.`);
+            this._showManageMenu();
+          },
+        }));
+        opts.push({ label: 'Back', action: () => this._showManageMenu() });
+        this.menu.show(`Found a company  ($${cost})`, opts);
+        return;
+      }
+      // Existing company — specialize / rename
+      const opts = cfg.types.map(t => ({
+        label: `Specialize: ${t}${t === p.company.industry ? '   ← current' : ''}  ($${cfg.changeCost})`,
+        action: () => {
+          if (t === p.company.industry) { this._showManageMenu(); return; }
+          if (p.money < cfg.changeCost) { game.log('Cannot afford.'); this._showManageMenu(); return; }
+          p.money -= cfg.changeCost;
+          p.company.industry = t;
+          game.log(`${p.company.name} now specializes in ${t}.`);
+          this._showManageMenu();
+        },
+      }));
+      opts.push({ label: 'Back', action: () => this._showManageMenu() });
+      this.menu.show(`${p.company.name}`, opts, `Industry: ${p.company.industry}`);
+    }
+
+    _showPortfolioMenu() {
+      const p = this.player;
+      const game = this.game;
+      const opts = p.ownedStructures.map(s => ({
+        label: `${s.cell.district} · ${this._typeLabel(s.type)} · $${s.currentValue}` +
+               (s.sabotagedUntilTurn > game.turnCounter ? ' (sabotaged)' : ''),
+        action: () => this._showStartMenu(),
+      }));
+      if (opts.length === 0) opts.push({ label: '(no structures)', action: () => this._showManageMenu() });
+      opts.push({ label: 'Back', action: () => this._showManageMenu() });
+      this.menu.show('Your structures', opts);
+    }
+
+    // ── Trade / Hostile actions root ──────────────────────────────────────
+    _showTradeRootMenu() {
+      const opts = [
+        { label: 'Trade with player',     action: () => this._showTradeTargetMenu() },
+        { label: 'Hostile takeover',      action: () => this._showTakeoverTargetMenu() },
+        { label: 'Sabotage a structure',  action: () => this._showSabotageTargetMenu() },
+        { label: 'Back',                  action: () => this._showStartMenu() },
+      ];
+      this.menu.show('Trade / Hostile', opts);
+    }
+
+    _otherPlayers() {
+      return this.game.players.filter(p => p !== this.player && !p.isBankrupt);
+    }
+
+    _showTradeTargetMenu() {
+      const opts = this._otherPlayers().map(p => ({
+        label: `${p.name}  ($${p.money}, ${p.ownedStructures.length} structures)`,
+        action: () => this._showTradeWith(p),
+      }));
+      opts.push({ label: 'Back', action: () => this._showTradeRootMenu() });
+      this.menu.show('Trade target', opts);
+    }
+
+    _showTradeWith(target) {
+      const p = this.player;
+      const game = this.game;
+      // Quick preset: offer cash, request resource (or vice versa). Two proposals
+      // surfaced as preset options to keep the UI manageable in a menu list.
+      const opts = [
+        { label: `Offer $100 → request 1 oil`, action: () => this._executePreset(target,
+          { money: 100 }, { resources: { oil: 1 } }) },
+        { label: `Offer $200 → request 1 steel`, action: () => this._executePreset(target,
+          { money: 200 }, { resources: { steel: 1 } }) },
+        { label: `Offer 5 wood → request $100`, action: () => this._executePreset(target,
+          { resources: { wood: 5 } }, { money: 100 }) },
+        { label: `Offer $250 → request 2 food`, action: () => this._executePreset(target,
+          { money: 250 }, { resources: { food: 2 } }) },
+        { label: 'Back', action: () => this._showTradeTargetMenu() },
+      ];
+      this.menu.show(`Propose to ${target.name}`, opts,
+        `Note: assets transfer immediately (hot-seat).`);
+    }
+
+    _executePreset(target, give, receive) {
+      const game = this.game;
+      const res = game.tradeSys.executeTrade(this.player, target, { give, receive });
+      if (res.ok) {
+        game.log(`Trade with ${target.name} completed.`);
+      } else {
+        game.log(`Trade refused: ${res.reason}.`);
+      }
+      this._showStartMenu();
+    }
+
+    _showTakeoverTargetMenu() {
+      const others = this._otherPlayers();
+      const candidates = [];
+      others.forEach(p => p.ownedStructures.forEach(s => candidates.push({ p, s })));
+      if (candidates.length === 0) {
+        this.menu.show('Hostile takeover', [{ label: '(no targets)', action: () => this._showTradeRootMenu() }]);
+        return;
+      }
+      const game = this.game;
+      const opts = candidates.map(({ p, s }) => {
+        const cost = Math.round(s.currentValue * game.cfg.property.takeoverMultiplier);
+        return {
+          label: `${s.cell.district}/${this._typeLabel(s.type)} · ${p.name} · $${cost}`,
+          action: () => {
+            const r = game.tradeSys.takeover(this.player, s, game.players, game.turnCounter);
+            game.log(r.ok ? `${this.player.name} took over ${this._typeLabel(s.type)} from ${p.name} for $${r.cost}.`
+                          : `Takeover refused: ${r.reason}.`);
+            this._showStartMenu();
+          },
+        };
+      });
+      opts.push({ label: 'Back', action: () => this._showTradeRootMenu() });
+      this.menu.show('Hostile takeover', opts);
+    }
+
+    _showSabotageTargetMenu() {
+      const game = this.game;
+      const cfg = game.cfg.sabotage;
+      const others = this._otherPlayers();
+      const candidates = [];
+      others.forEach(p => p.ownedStructures.forEach(s => candidates.push({ p, s })));
+      if (candidates.length === 0) {
+        this.menu.show('Sabotage', [{ label: '(no targets)', action: () => this._showTradeRootMenu() }]);
+        return;
+      }
+      const opts = candidates.map(({ p, s }) => ({
+        label: `${s.cell.district}/${this._typeLabel(s.type)} · ${p.name}`,
+        action: () => {
+          const r = game.tradeSys.sabotage(this.player, s, game.players, game.turnCounter);
+          game.log(r.ok ? `Sabotage placed for ${cfg.duration} turns.`
+                        : `Sabotage refused: ${r.reason}.`);
+          this._showStartMenu();
+        },
+      }));
+      opts.push({ label: 'Back', action: () => this._showTradeRootMenu() });
+      this.menu.show(`Sabotage  ($${cfg.cost} + ${cfg.oilCost} oil)`, opts);
+    }
+
+    // ── Market modal (Planning §6) ────────────────────────────────────────
+    _showMarketMenu() {
+      const game = this.game;
+      const p = this.player;
+      const M = game.marketSys;
+      if (!M) { this._showStartMenu(); return; }
+      const opts = game.cfg.market.resources.map(r => ({
+        label: `${r}  buy $${M.priceOf(r)}  sell $${M.sellPriceOf(r)}  (you: ${p.resources[r] || 0})`,
+        action: () => this._showMarketResource(r),
+      }));
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      this.menu.show('Market', opts, `Cash $${p.money}`);
+    }
+
+    _showMarketResource(resource) {
+      const game = this.game;
+      const p = this.player;
+      const M = game.marketSys;
+      const opts = [
+        { label: `Buy 1`, action: () => {
+          const r = M.buy(p, resource, 1);
+          game.log(r.ok ? `+1 ${resource} for $${r.totalCost}.` : `Buy refused: ${r.reason}.`);
+          this._showMarketResource(resource);
+        } },
+        { label: `Buy 5`, action: () => {
+          const r = M.buy(p, resource, 5);
+          game.log(r.ok ? `+5 ${resource} for $${r.totalCost}.` : `Buy refused: ${r.reason}.`);
+          this._showMarketResource(resource);
+        } },
+        { label: `Sell 1`, action: () => {
+          const r = M.sell(p, resource, 1);
+          game.log(r.ok ? `-1 ${resource} for $${r.totalProceeds}.` : `Sell refused: ${r.reason}.`);
+          this._showMarketResource(resource);
+        } },
+        { label: `Sell 5`, action: () => {
+          const r = M.sell(p, resource, 5);
+          game.log(r.ok ? `-5 ${resource} for $${r.totalProceeds}.` : `Sell refused: ${r.reason}.`);
+          this._showMarketResource(resource);
+        } },
+        { label: 'Back', action: () => this._showMarketMenu() },
+      ];
+      this.menu.show(`${resource}`, opts,
+        `Buy $${M.priceOf(resource)}  Sell $${M.sellPriceOf(resource)}  Have ${p.resources[resource] || 0}`);
     }
 
     _handleLanding() {
@@ -352,219 +879,231 @@
       switch (cell.type) {
         case 'bank':
           this.player.addMoney(200);
-          this.game.log(`${this.player.name} passed the Bank. +$200.`);
+          this.game.log(`${this.player.name} stops at the Bank. +$200.`);
           this.enter(TURN_STAGE.END_TURN);
           break;
-
-        case 'property':
-          this._handleProperty(cell);
-          break;
-
         case 'chance':
           this._handleChance();
           break;
-
-        default:  // empty or other
+        case 'buildable':
+          this._handleBuildable(cell);
+          break;
+        default:
           this.enter(TURN_STAGE.END_TURN);
           break;
       }
     }
 
-    // ── Property logic ─────────────────────────────────────────────────────
-    _handleProperty(cell) {
+    // ── Buildable cells (was: property) ──────────────────────────────────
+    _handleBuildable(cell) {
       const p = this.player;
+      const game = this.game;
 
-      if (cell.ownerIndex === -1) {
-        // Unowned — offer to buy
-        this.stage = TURN_STAGE.LAND_PROMPT;
-        const price = cell.purchasePrice;
-        const canAfford = p.money >= price;
+      if (!cell.structure) {
+        this._showBuildMenu(cell);
+        return;
+      }
 
-        const opts = [];
-        if (canAfford) {
-          opts.push({
-            label: `Buy ($${price})`,
-            action: () => {
-              p.addMoney(-price);
-              cell.ownerIndex = p.index;
-              p.ownedCells.push(cell);
-              this.game.checkMayor(p, cell.district);
-              this.game.log(`${p.name} bought a property in ${cell.district} for $${price}.`);
-              this.enter(TURN_STAGE.END_TURN);
-            },
-          });
-        } else {
-          opts.push({
-            label: `Cannot afford ($${price})`,
-            action: () => this.enter(TURN_STAGE.END_TURN),
-          });
+      const s = cell.structure;
+      this.stage = TURN_STAGE.LAND_PROMPT;
+
+      if (s.ownerIndex === p.index) {
+        const opts = game.structures.ownerOptionsFor(s, p,
+          () => this.enter(TURN_STAGE.END_TURN));
+        this.menu.show(`Your ${this._typeLabel(s.type)}`, opts);
+      } else {
+        const onDone = () => this.enter(TURN_STAGE.END_TURN);
+        const followUp = game.structures.visitorEffect(s, p, onDone);
+        if (followUp) {
+          this.menu.show(`${this._typeLabel(s.type)} (owner: ${game.players[s.ownerIndex].name})`,
+            followUp);
         }
-        opts.push({ label: 'Skip', action: () => this.enter(TURN_STAGE.END_TURN) });
-
-        this.menu.show(`Property in ${cell.district}`, opts);
-        return;
       }
-
-      if (cell.ownerIndex === p.index) {
-        this.game.log(`${p.name} is on their own property.`);
-        this.enter(TURN_STAGE.END_TURN);
-        return;
-      }
-
-      // Owned by another player → pay rent
-      const owner = this.game.players[cell.ownerIndex];
-      let rent    = this.game.cfg.property.baseRent;
-      if (owner.regionsMayoredOf.has(cell.district)) {
-        rent += this.game.cfg.property.mayorBonus;
-      }
-      p.addMoney(-rent);
-      owner.addMoney(rent);
-      this.game.log(`${p.name} pays $${rent} rent to ${owner.name}.`);
-      this.enter(TURN_STAGE.END_TURN);
     }
 
-    // ── Chance logic ───────────────────────────────────────────────────────
+    _showBuildMenu(cell) {
+      const p = this.player;
+      const game = this.game;
+      const cfg = game.cfg.structures;
+      this.stage = TURN_STAGE.LAND_PROMPT;
+
+      const opts = cfg.catalog
+        .filter(entry => p.money >= entry.cost)
+        .map(entry => ({
+          label: `Build ${entry.label} ($${entry.cost})`,
+          action: () => {
+            p.addMoney(-entry.cost);
+            game.structures.build(cell, entry.type, p.index);
+            game.log(`${p.name} built a ${entry.label} in ${cell.district}.`);
+            game.checkMayor(p, cell.district);
+            this.enter(TURN_STAGE.END_TURN);
+          },
+        }));
+      opts.push({ label: 'Skip', action: () => this.enter(TURN_STAGE.END_TURN) });
+
+      this.menu.show(`Empty plot in ${cell.district}`, opts,
+        `Cash: $${p.money}`);
+    }
+
+    _typeLabel(type) {
+      const cfg = this.game.cfg.structures;
+      const entry = cfg.catalog.find(c => c.type === type);
+      return entry ? entry.label : type;
+    }
+
     _handleChance() {
-      const pool   = this.game.cfg.chance;
-      const event  = pool[Math.floor(Math.random() * pool.length)];
-      const p      = this.player;
-      let appliedMsg = event.message;
-
-      switch (event.effect) {
-        case 'money':
-          p.addMoney(event.value);
-          break;
-        case 'money_pct': {
-          const delta = Math.round(p.money * event.value);
-          p.addMoney(delta);
-          appliedMsg += ` (${delta >= 0 ? '+' : ''}$${delta})`;
-          break;
-        }
+      const game = this.game;
+      const p = this.player;
+      let event;
+      if (game.chanceSys) {
+        event = game.chanceSys.draw(p, game.players);
+      } else {
+        const pool = (game.cfg.chance && game.cfg.chance.pool) || [];
+        event = pool[Math.floor(Math.random() * pool.length)] || { label: 'Nothing', message: 'A quiet day.' };
       }
-
-      this.game.log(`Chance — ${event.label}: ${appliedMsg}`);
-
+      game.log(`Chance — ${event.label}: ${event.message}`);
       this.stage = TURN_STAGE.LAND_PROMPT;
       this.menu.show(event.label, [
         { label: 'OK', action: () => this.enter(TURN_STAGE.END_TURN) },
-      ]);
-    }
-
-    // ── Market logic ───────────────────────────────────────────────────────
-    _handleMarket() {
-      const cfg = this.game.cfg.market;
-      const opts = cfg.resources.map(r => ({
-        label: `Buy ${r} ($${cfg.basePrices[r]})`,
-        action: () => {
-          const price = cfg.basePrices[r];
-          if (this.player.money >= price) {
-            this.player.addMoney(-price);
-            this.player.resources[r] = (this.player.resources[r] || 0) + 1;
-            this.game.log(`${this.player.name} bought 1 ${r} for $${price}.`);
-          } else {
-            this.game.log(`${this.player.name} cannot afford ${r}.`);
-          }
-          this.enter(TURN_STAGE.END_TURN);
-        },
-      }));
-      opts.push({ label: 'Leave Market', action: () => this.enter(TURN_STAGE.END_TURN) });
-
-      this.stage = TURN_STAGE.LAND_PROMPT;
-      this.menu.show('Market', opts);
+      ], event.category ? `[${event.category}]` : '');
     }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  //  AccaGame — top-level controller (analogous to GameManager)
+  //  AccaGame — top-level controller
   // ──────────────────────────────────────────────────────────────────────────
   class AccaGame {
     constructor() {
       const cfg = GF.GAME_CONFIG;
       this.cfg  = cfg;
 
-      // Engine + systems via framework
       const { engine, sprites, physics, ui } = GF.createGame(cfg.engine, cfg.physics);
       this.engine  = engine;
       this.sprites = sprites;
       this.physics = physics;
       this.ui      = ui;
 
-      // Register sprites populated by sprites/*.js files
       if (GF.sprites) sprites.registerSprites(GF.sprites);
 
-      // ── Input bindings ───────────────────────────────────────────────────
       const ctl = cfg.controls;
       Object.entries(ctl).forEach(([action, codes]) => engine.input.bind(action, ...codes));
 
-      // ── Game state ───────────────────────────────────────────────────────
       this.gameState = GAME_STATE.MENU;
       this.players   = [];
       this.currentPlayerIndex = 0;
-      this.cells     = [];     // flat array of all cells
-      this.grid      = [];     // 2D array [row][col]
-      this.eventLog  = [];     // recent messages
+      this.cells     = [];
+      this.eventLog  = [];
       this.lastRoll  = 0;
       this.winner    = null;
 
-      // Sub-systems built on framework primitives
-      this.die      = new DieController(sprites);
-      this.menu     = new Menu(engine.input, ctl);
-      this.movement = new MovementController(engine.input, ctl, engine.events);
-      this.turn     = new TurnManager(this);
+      this.die        = new DieController(sprites);
+      this.menu       = new Menu(engine.input, ctl);
+      this.movement   = new MovementController(engine.input, ctl, engine.events);
+      this.structures = new StructureManager(this);
 
-      // Number of players is configurable from the menu
+      // ── Planning §6–§11 systems ──
+      const A = (GF.Acca || {});
+      this.marketSys     = A.MarketSystem     ? new A.MarketSystem(cfg, engine.events) : null;
+      this.regionSys     = A.RegionSystem     ? new A.RegionSystem(cfg, engine.events) : null;
+      this.populationSys = (A.PopulationSystem && this.regionSys)
+        ? new A.PopulationSystem(cfg, engine.events, this.regionSys) : null;
+      this.tradeSys      = A.TradeSystem      ? new A.TradeSystem(cfg, engine.events, this.regionSys) : null;
+      this.chanceSys     = A.ChanceSystem     ? new A.ChanceSystem(cfg, engine.events, {
+        regionSystem: this.regionSys,
+        getLeader: () => this._getLeader(),
+        getLowestCash: () => this._getLowestCash(),
+        sabotageProperty: (s, dur) => {
+          s.sabotagedUntilTurn = (this.turnCounter || 0) + dur;
+        },
+        grantFreeStructure: (player) => this._grantRandomStructure(player),
+      }) : null;
+      this.turn       = new TurnManager(this);
+
+      // Cooperative threat track (Planning §15.3.2)
+      this.cooperativeThreat = 0;
+      this.turnCounter = 0;
+
+      // Mayor / region listeners — log + update population sources
+      engine.events.on('region:mayorChanged', ({ region, oldMayor, newMayor }) => {
+        const players = this.players;
+        if (oldMayor >= 0 && players[oldMayor]) {
+          players[oldMayor].regionsMayoredOf.delete(region.id);
+          this.log(`${players[oldMayor].name} lost mayorship of ${region.id}.`);
+        }
+        if (newMayor >= 0 && players[newMayor]) {
+          players[newMayor].regionsMayoredOf.add(region.id);
+          this.log(`${players[newMayor].name} is now Mayor of ${region.id}!`);
+        }
+      });
+      engine.events.on('region:taxesPaid', ({ region, mayor, amount }) =>
+        this.log(`${mayor.name} collected $${amount} taxes from ${region.id}.`));
+      engine.events.on('market:priceChanged', ({ resource, oldPrice, newPrice }) => {
+        const ratio = (newPrice - oldPrice) / Math.max(1, oldPrice);
+        if (Math.abs(ratio) >= 0.25) {
+          this.log(`Market: ${resource} ${oldPrice}→${newPrice}.`);
+        }
+      });
+      engine.events.on('business:sabotaged', ({ structure, attacker }) =>
+        this.log(`Sabotage on ${structure.type}${attacker ? ' by ' + attacker.name : ''}.`));
+
       this.menuPlayerCount = cfg.numberOfPlayers;
 
-      // Wire engine callbacks
+      // ── Camera state (zoom + pan) ─────────────────────────────────────
+      this._camera = {
+        scale: 1, cx: 0, cy: 0,
+        targetScale: 1, targetCx: 0, targetCy: 0,
+        boardCenter: { x: 0, y: 0 },
+        zoomedOutScale: 1,
+      };
+
+      this._betweenTurnsTimer = 0;
+
+      // ── DOM HUD references ────────────────────────────────────────────
+      this.dom = {
+        container   : document.getElementById('gameContainer'),
+        tbName      : document.getElementById('tb-name'),
+        tbMoney     : document.getElementById('tb-money'),
+        tbNetWorth  : document.getElementById('tb-networth'),
+        tbResources : document.getElementById('tb-resources'),
+        notifications: document.getElementById('notifications'),
+        playerList  : document.getElementById('playerList'),
+      };
+      this._lastDomState = null;
+
       engine.onUpdate((dt) => this._update(dt));
       engine.onRender((ctx) => this._render(ctx));
     }
 
-    start() {
-      this.engine.start();
-    }
+    start() { this.engine.start(); }
 
-    // ── Logging helpers ───────────────────────────────────────────────────
+    // ── Logging ───────────────────────────────────────────────────────────
     log(message) {
       this.eventLog.push(message);
-      if (this.eventLog.length > 6) this.eventLog.shift();
+      if (this.eventLog.length > 30) this.eventLog.shift();
     }
 
-    cellLabel(cell) {
-      switch (cell.type) {
-        case 'bank':
-          return 'the Bank';
-        case 'chance':
-          return 'a Chance tile';
-        case 'property':
-          return cell.ownerIndex === -1
-            ? `an unowned property in ${cell.district}`
-            : `${this.players[cell.ownerIndex].name}'s property in ${cell.district}`;
-        case 'empty':
-          return 'an open tile';
-        default:
-          return 'a tile';
-      }
+    get currentPlayer() { return this.players[this.currentPlayerIndex]; }
+
+    /** Net worth = cash + structure currentValues + resources at market price. */
+    netWorth(p) {
+      let nw = p.money;
+      p.ownedStructures.forEach(s => { nw += s.currentValue; });
+      const prices = this.cfg.market.basePrices;
+      Object.entries(p.resources).forEach(([res, qty]) => {
+        nw += (prices[res] || 0) * qty;
+      });
+      return Math.round(nw);
     }
 
-    get currentPlayer() {
-      return this.players[this.currentPlayerIndex];
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  Setup
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Setup ─────────────────────────────────────────────────────────────
     _initBoard() {
       const { cellSize, originX, originY } = this.cfg.board;
       const { cells, connections } = GF.mapData;
 
       this.cells = [];
-      this.grid  = [];
 
-      // Build cell map and create Cell objects
       const cellById = new Map();
       cells.forEach(c => {
-        // Determine sprite and gameType based on cell type
         let sprite, gameType;
         if (c.type === 'bank') {
           sprite = 'cell_start';
@@ -575,7 +1114,7 @@
         } else if (c.type === 'empty') {
           if (c.district !== null) {
             sprite = 'cell_property';
-            gameType = 'property';
+            gameType = 'buildable';
           } else {
             sprite = 'cell_normal';
             gameType = 'empty';
@@ -583,18 +1122,14 @@
         }
 
         const cell = new Cell(c.id, c.x, c.y, gameType, c.district, sprite);
-        cell.purchasePrice = this.cfg.property.basePrice;
         cell.animator = this.sprites.createAnimator(sprite, 'idle');
-
         this.cells.push(cell);
         cellById.set(c.id, cell);
       });
 
-      // Wire _neighbors from connections
       connections.forEach(conn => {
         const fromCell = cellById.get(conn.from);
-        const toCell = cellById.get(conn.to);
-
+        const toCell   = cellById.get(conn.to);
         if (!fromCell || !toCell) return;
 
         if (conn.direction === 'both') {
@@ -605,72 +1140,78 @@
         }
       });
 
-      // Assign directional slots (up/down/left/right) spatially
+      // Cardinal slot assignment from neighbor angles
       this.cells.forEach(cell => {
         const candidates = { up: [], down: [], left: [], right: [] };
-
         cell._neighbors.forEach(neighbor => {
           const dx = neighbor.x - cell.x;
           const dy = neighbor.y - cell.y;
           const angle = Math.atan2(dy, dx);
-
-          // Determine primary direction by dominant axis
           let direction;
-          if (Math.abs(dy) > Math.abs(dx)) {
-            // Vertical dominant
-            direction = dy > 0 ? 'down' : 'up';
-          } else {
-            // Horizontal dominant
-            direction = dx > 0 ? 'right' : 'left';
-          }
-
+          if (Math.abs(dy) > Math.abs(dx)) direction = dy > 0 ? 'down' : 'up';
+          else                              direction = dx > 0 ? 'right' : 'left';
           candidates[direction].push({ neighbor, angle });
         });
 
-        // For each direction, pick the best candidate (closest to cardinal angle)
-        const cardinalAngles = {
-          up: Math.PI / 2,
-          down: -Math.PI / 2,
-          left: Math.PI,
-          right: 0,
-        };
+        const cardinalAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
 
         Object.entries(candidates).forEach(([dir, cands]) => {
           if (cands.length > 0) {
             const cardinal = cardinalAngles[dir];
             let best = cands[0];
             let bestDev = Math.abs(((cands[0].angle - cardinal + Math.PI) % (2 * Math.PI)) - Math.PI);
-
             for (let i = 1; i < cands.length; i++) {
               const dev = Math.abs(((cands[i].angle - cardinal + Math.PI) % (2 * Math.PI)) - Math.PI);
-              if (dev < bestDev) {
-                best = cands[i];
-                bestDev = dev;
-              }
+              if (dev < bestDev) { best = cands[i]; bestDev = dev; }
             }
             cell[dir] = best.neighbor;
           }
         });
       });
 
-      // Cache board-pixel converter
-      this._toPixel = (cell) => ({
-        x: originX + cell.x,
-        y: originY + cell.y,
-      });
+      this._toPixel = (cell) => ({ x: originX + cell.x, y: originY + cell.y });
       this._cellSize = cellSize;
+
+      this._computeBoardBounds();
+    }
+
+    _computeBoardBounds() {
+      if (this.cells.length === 0) return;
+      const size = this._cellSize;
+      let minX = this.cells[0].x, maxX = this.cells[0].x;
+      let minY = this.cells[0].y, maxY = this.cells[0].y;
+      this.cells.forEach(c => {
+        if (c.x < minX) minX = c.x;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.y > maxY) maxY = c.y;
+      });
+      const ox = this.cfg.board.originX;
+      const oy = this.cfg.board.originY;
+      this._boardBounds = {
+        minX: ox + minX - size / 2, maxX: ox + maxX + size / 2,
+        minY: oy + minY - size / 2, maxY: oy + maxY + size / 2,
+      };
+      const W = this.cfg.engine.width, H = this.cfg.engine.height;
+      const pad = this.cfg.camera.zoomOutPadding;
+      const bw = this._boardBounds.maxX - this._boardBounds.minX + pad * 2;
+      const bh = this._boardBounds.maxY - this._boardBounds.minY + pad * 2;
+      this._camera.zoomedOutScale = Math.min(W / bw, H / bh);
+      this._camera.boardCenter = {
+        x: (this._boardBounds.minX + this._boardBounds.maxX) / 2,
+        y: (this._boardBounds.minY + this._boardBounds.maxY) / 2,
+      };
     }
 
     _initPlayers() {
       this.players = [];
-      // Find the start cell
       const startCell = this.cells.find(c => c.type === 'bank') || this.cells[0];
-
       const count = Math.min(this.menuPlayerCount, this.cfg.players.length);
+      const startRes = this.cfg.startingResources || {};
       for (let i = 0; i < count; i++) {
         const def = this.cfg.players[i];
         const p = new Player(i, def, startCell, this.cfg.startingMoney, this.sprites);
-        // Stagger overlap offsets so tokens don't fully cover each other.
+        Object.entries(startRes).forEach(([r, q]) => { p.resources[r] = q; });
         const offsets = [
           { x: -10, y: -6 }, { x:  10, y: -6 },
           { x: -10, y:  6 }, { x:  10, y:  6 },
@@ -681,20 +1222,44 @@
       this.currentPlayerIndex = 0;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Mayor / win condition
-    // ─────────────────────────────────────────────────────────────────────
+    movePlayerTo(player, cell) {
+      this.engine.events.emit('cell:leave', { player, cell: player.currentCell });
+      player.currentCell = cell;
+      this.engine.events.emit('cell:enter', { player, cell, final: true });
+    }
+
+    // ── Mayor / win condition ─────────────────────────────────────────────
     checkMayor(player, regionId) {
-      const regionCells = this.cells.filter(
-        c => c.district === regionId && c.type === 'property'
-      );
-      const allOwned = regionCells.every(c => c.ownerIndex === player.index);
-      if (allOwned) {
-        if (!player.regionsMayoredOf.has(regionId)) {
-          player.regionsMayoredOf.add(regionId);
-          this.log(`${player.name} is now Mayor of ${regionId}!`);
-        }
-      }
+      // Delegate to RegionSystem (Planning §9.1).
+      if (this.regionSys) this.regionSys.recomputeMayor(regionId);
+    }
+
+    _getLeader() {
+      let best = null;
+      this.players.forEach(p => {
+        if (p.isBankrupt) return;
+        const v = this.netWorth(p);
+        if (!best || v > best._v) { best = p; best._v = v; }
+      });
+      return best;
+    }
+    _getLowestCash() {
+      let lowest = null;
+      this.players.forEach(p => {
+        if (p.isBankrupt) return;
+        if (!lowest || p.money < lowest.money) lowest = p;
+      });
+      return lowest;
+    }
+    _grantRandomStructure(player) {
+      const empty = this.cells.filter(c => c.type === 'buildable' && !c.structure);
+      if (empty.length === 0) return;
+      const cell = empty[Math.floor(Math.random() * empty.length)];
+      const cat = this.cfg.structures.catalog;
+      const entry = cat[Math.floor(Math.random() * cat.length)];
+      this.structures.build(cell, entry.type, player.index);
+      if (this.regionSys) this.regionSys.recomputeMayor(cell.district);
+      this.log(`${player.name} won a free ${entry.label} in ${cell.district}!`);
     }
 
     _checkWinCondition() {
@@ -703,7 +1268,7 @@
         case 'MoneyOnHand':
           return this.players.find(p => p.money >= w.target) || null;
         case 'TotalValue':
-          return this.players.find(p => p.totalValue >= w.target) || null;
+          return this.players.find(p => this.netWorth(p) >= w.target) || null;
         case 'Level':
           return this.players.find(p => p.level >= w.target) || null;
         case 'LastManStanding': {
@@ -714,11 +1279,148 @@
       }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Turn flow (called by TurnManager)
-    // ─────────────────────────────────────────────────────────────────────
-    endPlayerTurn() {
-      // Advance to next non-bankrupt player
+    // ── Camera ────────────────────────────────────────────────────────────
+    _zoomInOnPlayer(player) {
+      const W = this.cfg.engine.width, H = this.cfg.engine.height;
+      const cells = this.cfg.camera.zoomedInCellsAcross;
+      const minDim = Math.min(W, H);
+      const scale = minDim / (cells * this._cellSize);
+      const px = this._toPixel(player.currentCell);
+      this._camera.targetScale = scale;
+      this._camera.targetCx    = px.x;
+      this._camera.targetCy    = px.y;
+    }
+
+    _zoomOutToBoard() {
+      this._camera.targetScale = this._camera.zoomedOutScale;
+      this._camera.targetCx    = this._camera.boardCenter.x;
+      this._camera.targetCy    = this._camera.boardCenter.y;
+    }
+
+    _snapCamera() {
+      this._camera.scale = this._camera.targetScale;
+      this._camera.cx    = this._camera.targetCx;
+      this._camera.cy    = this._camera.targetCy;
+    }
+
+    _updateCamera(dt) {
+      const cam = this._camera;
+      // During the active player's turn, follow them while zoomed in.
+      if (this.gameState === GAME_STATE.PLAYING &&
+          this.turn.stage !== TURN_STAGE.BETWEEN &&
+          this.turn.player) {
+        const px = this._toPixel(this.turn.player.currentCell);
+        cam.targetCx = px.x;
+        cam.targetCy = px.y;
+      }
+      const alpha = Math.min(1, this.cfg.camera.lerp * (dt * 60));
+      cam.scale += (cam.targetScale - cam.scale) * alpha;
+      cam.cx    += (cam.targetCx    - cam.cx)    * alpha;
+      cam.cy    += (cam.targetCy    - cam.cy)    * alpha;
+    }
+
+    // ── Turn flow ─────────────────────────────────────────────────────────
+    _beginBetweenTurns() {
+      this._zoomOutToBoard();
+      this._betweenTurnsTimer = this.cfg.camera.betweenTurnsHold;
+    }
+
+    /** End-of-turn pipeline (Planning §4.3 + §6 + §8 + §9). */
+    _runEndOfTurn(player) {
+      this.turnCounter = (this.turnCounter || 0) + 1;
+      this.log(`${player.name} ends their turn.`);
+
+      // 1. Structure upkeep + per-structure passive (vault upkeep, etc.)
+      this.structures.endOfTurnFor(player);
+
+      // 2. Production: structure-driven resources & population contributions.
+      this._runProduction(player);
+
+      // 3. Mayor tax collection (only for the player whose turn just ended).
+      if (this.regionSys) this.regionSys.collectTaxes(player);
+
+      // 4. Population/happiness/migration tick (every region, once per turn).
+      if (this.populationSys) this.populationSys.tick(this.turnCounter, this.players);
+
+      // 5. Market drift.
+      if (this.marketSys) this.marketSys.drift();
+
+      // 6. Trade per-turn counters (takeover limit reset).
+      if (this.tradeSys) this.tradeSys.resetTurnCounters(player);
+
+      // 7. Sabotage decay — clear sabotage flags whose duration expired.
+      this.cells.forEach(c => {
+        if (c.structure && c.structure.sabotagedUntilTurn > 0
+            && c.structure.sabotagedUntilTurn <= this.turnCounter) {
+          c.structure.sabotagedUntilTurn = -1;
+        }
+      });
+
+      // 8. Cooperative threat track.
+      if (this.cfg.mode === 'cooperative') {
+        const co = this.cfg.cooperative;
+        this.cooperativeThreat += co.threatPerTurn;
+        if (this.regionSys) {
+          this.regionSys.list().forEach(r => {
+            if (r.happiness < 20) this.cooperativeThreat += co.threatPerLowHappiness;
+          });
+        }
+        if (this.cooperativeThreat >= co.threatLimit) {
+          this.gameState = GAME_STATE.GAME_OVER;
+          this.winner = null; // cooperative loss
+          this.log('Cooperative loss — threat reached limit.');
+        }
+      }
+
+      // 9. Recompute mayor flags after possible bankruptcies / sabotage.
+      if (this.regionSys) this.regionSys.recomputeAll();
+    }
+
+    /** Per-turn structure production for the player whose turn ended. */
+    _runProduction(player) {
+      const cfg = this.cfg.structures;
+      const industryBonus = this._industryBonus(player);
+      player.ownedStructures.forEach(s => {
+        if (s.sabotagedUntilTurn > this.turnCounter) return; // idle
+        if (s.type === 'factory') {
+          const houseBonus = 1 + player.housesOwned * cfg.factoryHouseBonus;
+          let qty = Math.max(1, Math.round(cfg.factoryBaseRate * houseBonus * industryBonus.production));
+          // Region specialty bonus
+          if (this.regionSys && s.cell.district) {
+            const r = this.regionSys.get(s.cell.district);
+            if (r && r.specialty === cfg.factoryResource) qty += this.cfg.market.specialtyBonus;
+          }
+          player.resources[cfg.factoryResource] =
+            (player.resources[cfg.factoryResource] || 0) + qty;
+        }
+        if (s.type === 'house') {
+          // Houses passively contribute residents to their district population
+          if (this.regionSys && s.cell.district) {
+            const r = this.regionSys.get(s.cell.district);
+            if (r) r.population += cfg.housePopContribution;
+          }
+        }
+        if (s.type === 'shop') {
+          // Tiny passive owner income (modeled via industry incomeMul)
+          const inc = Math.round(20 * industryBonus.income);
+          player.money += inc;
+        }
+      });
+    }
+
+    _industryBonus(player) {
+      const def = { income: 1, production: 1 };
+      if (!player.company) return def;
+      const ind = this.cfg.industries;
+      const b = ind && ind.bonus[player.company.industry];
+      if (!b) return def;
+      return {
+        income: b.incomeMul || 1,
+        production: b.productionMul || 1,
+      };
+    }
+
+    _advanceToNextPlayer() {
       for (let i = 1; i <= this.players.length; i++) {
         const idx = (this.currentPlayerIndex + i) % this.players.length;
         if (!this.players[idx].isBankrupt) {
@@ -739,35 +1441,70 @@
     _beginGame() {
       this._initBoard();
       this._initPlayers();
+
+      // Build per-region state once we know cells.
+      if (this.regionSys) {
+        const districtsMeta = (GF.mapData && GF.mapData.districts) || [];
+        this.regionSys.init(this.cells, districtsMeta);
+        // Bias initial population by district size.
+        this.regionSys.list().forEach(r => {
+          r.population = Math.round((this.cfg.region.defaultPopulation || 30) * Math.max(1, r.cells.length / 3));
+        });
+      }
+
+      this.turnCounter = 0;
+      this.cooperativeThreat = 0;
       this.eventLog = [];
       this.log('Game started.');
       this.gameState = GAME_STATE.PLAYING;
+
+      // Snap to zoomed-out view first, then turn start zooms in.
+      this._zoomOutToBoard();
+      this._snapCamera();
       this.turn.startTurn(this.currentPlayer);
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Update
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Update ────────────────────────────────────────────────────────────
     _update(dt) {
-      // Always animate cell sprites and player tokens
       this.cells.forEach(c => c.animator && c.animator.update(dt));
       this.players.forEach(p => p.animator.update(dt));
       this.die.update(dt);
       this.menu.update();
+      this._updateCamera(dt);
 
       switch (this.gameState) {
         case GAME_STATE.MENU:
           this._updateMenu();
           break;
+
         case GAME_STATE.PLAYING:
-          // The MovementController self-guards via `active`, but only the
-          // MOVE stage activates it.
-          this.movement.update(dt);
+          // Quick save / load (Planning §16, §18 Phase 8)
+          if (this.engine.input.wasPressed('quickSave') && GF.Acca && GF.Acca.Save) {
+            GF.Acca.Save.save(this);
+            this.log('Quick-saved.');
+          }
+          if (this.engine.input.wasPressed('quickLoad') && GF.Acca && GF.Acca.Save) {
+            if (GF.Acca.Save.load(this)) this.log('Quick-loaded.');
+            else this.log('Nothing to load.');
+          }
+          if (this.turn.stage === TURN_STAGE.BETWEEN) {
+            this._betweenTurnsTimer -= dt;
+            if (this._betweenTurnsTimer <= 0) {
+              this._advanceToNextPlayer();
+            }
+          } else {
+            this.movement.update(dt);
+          }
+          this._renderHUD();
           break;
+
         case GAME_STATE.GAME_OVER:
           if (this.engine.input.wasPressed('confirm')) {
             this.gameState = GAME_STATE.MENU;
             this.menuPlayerCount = this.cfg.numberOfPlayers;
+            this._lastResSig = null;
+            this._lastLogSig = null;
+            this._lastPlSig = null;
           }
           break;
       }
@@ -775,21 +1512,12 @@
 
     _updateMenu() {
       const inp = this.engine.input;
-      // Adjust player count
-      if (inp.wasPressed('left')) {
-        this.menuPlayerCount = Math.max(2, this.menuPlayerCount - 1);
-      }
-      if (inp.wasPressed('right')) {
-        this.menuPlayerCount = Math.min(this.cfg.players.length, this.menuPlayerCount + 1);
-      }
-      if (inp.wasPressed('confirm')) {
-        this._beginGame();
-      }
+      if (inp.wasPressed('left'))  this.menuPlayerCount = Math.max(2, this.menuPlayerCount - 1);
+      if (inp.wasPressed('right')) this.menuPlayerCount = Math.min(this.cfg.players.length, this.menuPlayerCount + 1);
+      if (inp.wasPressed('confirm')) this._beginGame();
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Render
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Render ────────────────────────────────────────────────────────────
     _render(ctx) {
       const W = this.cfg.engine.width;
       const H = this.cfg.engine.height;
@@ -801,30 +1529,35 @@
           this._drawMenu(ctx, W, H);
           break;
         case GAME_STATE.PLAYING:
-          this._drawBoard(ctx);
-          this._drawTokens(ctx);
-          this._drawHUD(ctx, W, H);
+          this._drawWorld(ctx, W, H);
           this._drawDie(ctx, W, H);
           this._drawMenuOverlay(ctx, W, H);
           break;
         case GAME_STATE.GAME_OVER:
-          this._drawBoard(ctx);
-          this._drawTokens(ctx);
-          this._drawHUD(ctx, W, H);
+          this._drawWorld(ctx, W, H);
           this._drawGameOver(ctx, W, H);
           break;
       }
     }
 
+    _drawWorld(ctx, W, H) {
+      const cam = this._camera;
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.scale(cam.scale, cam.scale);
+      ctx.translate(-cam.cx, -cam.cy);
+      this._drawBoard(ctx);
+      this._drawTokens(ctx);
+      ctx.restore();
+    }
+
     _drawBackground(ctx, W, H) {
-      // Vertical gradient
       const g = ctx.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, '#1a2330');
       g.addColorStop(1, '#0a0d12');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
 
-      // Faint diagonal stripes for depth
       ctx.strokeStyle = 'rgba(80,120,160,0.06)';
       ctx.lineWidth = 1;
       for (let i = -H; i < W; i += 24) {
@@ -836,24 +1569,11 @@
     }
 
     _drawBoard(ctx) {
-      const { originX, originY } = this.cfg.board;
       const size = this._cellSize;
-
-      // Calculate bounding box from cell positions
-      if (this.cells.length > 0) {
-        let minX = this.cells[0].x, maxX = this.cells[0].x;
-        let minY = this.cells[0].y, maxY = this.cells[0].y;
-        this.cells.forEach(cell => {
-          minX = Math.min(minX, cell.x);
-          maxX = Math.max(maxX, cell.x);
-          minY = Math.min(minY, cell.y);
-          maxY = Math.max(maxY, cell.y);
-        });
-
-        // Board frame (with padding)
-        const boardW = maxX - minX + size;
-        const boardH = maxY - minY + size;
-        this.ui.drawPanel(ctx, originX + minX - size / 2 - 8, originY + minY - size / 2 - 8, boardW + 16, boardH + 16, {
+      // Board frame
+      const b = this._boardBounds;
+      if (b) {
+        this.ui.drawPanel(ctx, b.minX - 8, b.minY - 8, (b.maxX - b.minX) + 16, (b.maxY - b.minY) + 16, {
           bgColor: 'rgba(0,0,0,0.55)',
           borderColor: '#2a4060',
           borderWidth: 2,
@@ -861,22 +1581,47 @@
         });
       }
 
-      // Cells
+      // Region tinting (Planning §12.3)
+      if (this.regionSys) {
+        this.regionSys.list().forEach(r => {
+          if (!r.cells || r.cells.length === 0) return;
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          r.cells.forEach(c => {
+            const px = this._toPixel(c);
+            if (px.x < minX) minX = px.x;
+            if (px.x > maxX) maxX = px.x;
+            if (px.y < minY) minY = px.y;
+            if (px.y > maxY) maxY = px.y;
+          });
+          ctx.save();
+          ctx.fillStyle = r.color;
+          ctx.globalAlpha = 0.10;
+          ctx.fillRect(minX - size / 2 - 4, minY - size / 2 - 4,
+                       (maxX - minX) + size + 8, (maxY - minY) + size + 8);
+          ctx.restore();
+        });
+      }
+
       this.cells.forEach(cell => {
         const { x, y } = this._toPixel(cell);
-        // Cell sprite origin is centered on its 64×64 frame, so drawing
-        // at the cell's center coordinate aligns the tile perfectly.
         cell.animator.draw(ctx, x, y);
 
-        // Owner ring on properties
-        if (cell.type === 'property' && cell.ownerIndex >= 0) {
-          const owner = this.players[cell.ownerIndex];
+        // Owner ring on owned structures
+        if (cell.structure && cell.structure.ownerIndex >= 0) {
+          const owner = this.players[cell.structure.ownerIndex];
           ctx.strokeStyle = owner.color;
           ctx.lineWidth   = 3;
-          ctx.strokeRect(x - size / 2 + 5, y - size / 2 + 5, size - 10, size - 10);
+          ctx.strokeRect(x - size / 2 + 4, y - size / 2 + 4, size - 8, size - 8);
         }
 
-        // Highlight cells the current player can move to during MOVE stage
+        // Toll-gate accrued indicator
+        if (cell.structure && cell.structure.type === 'toll_gate' && cell.structure.tollAccrued > 0) {
+          this.ui.drawText(ctx, `$${cell.structure.tollAccrued}`, x, y + size / 2 - 4, {
+            font: 'bold 10px monospace', color: '#ffe7c0', align: 'center', shadow: true,
+          });
+        }
+
+        // Highlight movable cells during MOVE
         if (this.gameState === GAME_STATE.PLAYING &&
             this.turn.stage === TURN_STAGE.MOVE &&
             this.currentPlayer.currentCell.neighbors().includes(cell)) {
@@ -888,6 +1633,36 @@
           ctx.restore();
         }
       });
+
+      // Region badges — population/happiness/mayor at region centroid
+      if (this.regionSys) {
+        this.regionSys.list().forEach(r => {
+          if (!r.cells || r.cells.length === 0) return;
+          let cx = 0, cy = 0;
+          r.cells.forEach(c => { const px = this._toPixel(c); cx += px.x; cy += px.y; });
+          cx /= r.cells.length; cy /= r.cells.length;
+
+          const mood = r.happiness >= 70 ? 'happy'
+                     : r.happiness >= 40 ? 'neutral'
+                     : r.happiness >= 20 ? 'sad'
+                     : 'angry';
+          const faceSprite = 'pop_face_' + mood;
+          // Badge background
+          this.ui.drawPanel(ctx, cx - 28, cy - 18, 56, 36, {
+            bgColor: 'rgba(0,0,0,0.65)',
+            borderColor: r.mayorIndex >= 0 ? this.players[r.mayorIndex].color : '#666',
+            borderWidth: 1, radius: 4,
+          });
+          this.sprites.drawFrame(ctx, faceSprite, 'idle', 0, cx - 14, cy + 1, false);
+          this.ui.drawText(ctx, `${r.population}`, cx + 16, cy - 7,
+            { font: 'bold 11px monospace', color: '#fff', align: 'center' });
+          this.ui.drawText(ctx, `${Math.round(r.taxRate * 100)}%`, cx + 16, cy + 5,
+            { font: '9px monospace', color: '#9fc8ff', align: 'center' });
+          if (r.mayorIndex >= 0) {
+            this.sprites.drawFrame(ctx, 'ui_crown', 'idle', 0, cx - 22, cy - 18, false);
+          }
+        });
+      }
     }
 
     _drawTokens(ctx) {
@@ -898,95 +1673,11 @@
       });
     }
 
-    _drawHUD(ctx, W, H) {
-      const UI = this.ui;
-      const panelX = 560;
-      const panelY = 80;
-      const panelW = W - panelX - 16;
-
-      UI.drawPanel(ctx, panelX, panelY, panelW, 280, {
-        bgColor: 'rgba(0,0,0,0.65)',
-        borderColor: '#2a4060', borderWidth: 2, radius: 6,
-      });
-
-      UI.drawText(ctx, 'PLAYERS', panelX + 14, panelY + 10,
-        { font: 'bold 14px monospace', color: '#9fc8ff' });
-
-      const lineH = 56;
-      this.players.forEach((p, i) => {
-        const lineY = panelY + 36 + i * lineH;
-        const isCurrent = (i === this.currentPlayerIndex && this.gameState === GAME_STATE.PLAYING);
-
-        // Active row highlight
-        if (isCurrent) {
-          ctx.fillStyle = 'rgba(255,255,255,0.06)';
-          ctx.fillRect(panelX + 4, lineY - 4, panelW - 8, lineH - 6);
-          ctx.fillStyle = p.color;
-          ctx.fillRect(panelX + 4, lineY - 4, 4, lineH - 6);
-        }
-
-        // Token preview (mini sprite)
-        ctx.save();
-        ctx.translate(panelX + 28, lineY + 26);
-        ctx.scale(0.65, 0.65);
-        this.sprites.drawFrame(ctx, p.spriteName, 'idle', 0, 0, 0, false);
-        ctx.restore();
-
-        // Name + bankrupt marker
-        const nameLabel = `${p.name}${p.isBankrupt ? ' (bankrupt)' : ''}`;
-        UI.drawText(ctx, nameLabel, panelX + 60, lineY,
-          { font: 'bold 14px monospace', color: p.color, shadow: true });
-
-        UI.drawText(ctx, `Cash: $${p.money}`, panelX + 60, lineY + 16,
-          { font: '12px monospace', color: '#cdd6e0' });
-        UI.drawText(ctx, `Property: ${p.ownedCells.length}    Total: $${p.totalValue}`,
-          panelX + 60, lineY + 30,
-          { font: '12px monospace', color: '#9aa5b1' });
-      });
-
-      // ── Event log panel ──
-      const logY = panelY + 296;
-      UI.drawPanel(ctx, panelX, logY, panelW, H - logY - 16, {
-        bgColor: 'rgba(0,0,0,0.65)',
-        borderColor: '#2a4060', borderWidth: 2, radius: 6,
-      });
-      UI.drawText(ctx, 'LOG', panelX + 14, logY + 10,
-        { font: 'bold 14px monospace', color: '#9fc8ff' });
-
-      this.eventLog.forEach((msg, i) => {
-        UI.drawText(ctx, msg, panelX + 14, logY + 32 + i * 16,
-          { font: '11px monospace', color: i === this.eventLog.length - 1 ? '#ffffff' : '#9aa5b1' });
-      });
-
-      // ── Top bar — round / turn / win condition ──
-      UI.drawPanel(ctx, 16, 16, W - 32, 52, {
-        bgColor: 'rgba(0,0,0,0.6)',
-        borderColor: '#2a4060', borderWidth: 2, radius: 6,
-      });
-
-      const cur = this.currentPlayer;
-      if (cur) {
-        UI.drawText(ctx, `Turn: ${cur.name}`, 32, 30,
-          { font: 'bold 18px monospace', color: cur.color, shadow: true });
-      }
-      const w = this.cfg.win;
-      UI.drawText(ctx, `Win: ${w.type} ≥ ${w.target}`, W / 2, 30,
-        { font: '14px monospace', color: '#cdd6e0', align: 'center', shadow: true });
-
-      const stageStr = this.turn.stage ? this.turn.stage : '-';
-      UI.drawText(ctx, `Stage: ${stageStr}`, W - 32, 30,
-        { font: '14px monospace', color: '#9aa5b1', align: 'right', shadow: true });
-    }
-
     _drawDie(ctx, W, H) {
-      // Die is visible from ROLL through CONFIRM_LAND so the player can see
-      // the rolled value while choosing how to spend it.
       const stage = this.turn.stage;
-      const visibleStages = [
-        TURN_STAGE.ROLL, TURN_STAGE.MOVE, TURN_STAGE.CONFIRM_LAND,
-      ];
+      const visibleStages = [TURN_STAGE.ROLL, TURN_STAGE.MOVE];
       if (!visibleStages.includes(stage)) return;
-      const dieX = 280;
+      const dieX = W - 60;
       const dieY = H - 60;
       this.ui.drawPanel(ctx, dieX - 36, dieY - 36, 72, 72, {
         bgColor: 'rgba(0,0,0,0.55)',
@@ -999,29 +1690,36 @@
       if (!this.menu.visible) return;
       const UI = this.ui;
       const opts = this.menu.options;
-      const optH = 28;
+      const optH = 24;
       const w    = 320;
-      const h    = 56 + opts.length * optH;
+      const h    = 56 + (this.menu.subtitle ? 16 : 0) + opts.length * optH + 24;
       const x    = (W / 2) - w / 2;
       const y    = (H / 2) - h / 2;
 
       UI.drawPanel(ctx, x, y, w, h, {
-        bgColor: 'rgba(10,15,25,0.92)',
+        bgColor: 'rgba(10,15,25,0.94)',
         borderColor: '#7796c4', borderWidth: 2, radius: 8,
       });
 
       UI.drawText(ctx, this.menu.title, x + w / 2, y + 12,
-        { font: 'bold 18px monospace', color: '#ffffff', align: 'center', shadow: true });
+        { font: 'bold 16px monospace', color: '#ffffff', align: 'center', shadow: true });
+
+      let curY = y + 36;
+      if (this.menu.subtitle) {
+        UI.drawText(ctx, this.menu.subtitle, x + w / 2, curY,
+          { font: '11px monospace', color: '#9fc8ff', align: 'center' });
+        curY += 16;
+      }
 
       opts.forEach((opt, i) => {
-        const oy = y + 44 + i * optH;
+        const oy = curY + 8 + i * optH;
         if (i === this.menu.index) {
           ctx.fillStyle = 'rgba(120,160,220,0.25)';
           ctx.fillRect(x + 8, oy - 4, w - 16, optH - 4);
         }
         const prefix = i === this.menu.index ? '> ' : '  ';
         UI.drawText(ctx, prefix + opt.label, x + 24, oy,
-          { font: '14px monospace',
+          { font: '13px monospace',
             color: i === this.menu.index ? '#ffffff' : '#bcd0e8' });
       });
 
@@ -1031,82 +1729,141 @@
 
     _drawMenu(ctx, W, H) {
       const UI = this.ui;
-      // Title
       UI.drawText(ctx, 'A C C A', W / 2, H * 0.18,
-        { font: 'bold 64px monospace', color: '#ffffff',
+        { font: 'bold 56px monospace', color: '#ffffff',
           align: 'center', shadow: true,
           glow: '#5a8ed1', glowBlur: 22,
           stroke: '#2a4060', strokeWidth: 3 });
-      UI.drawText(ctx, 'a board game of property & power', W / 2, H * 0.18 + 56,
-        { font: '15px monospace', color: '#9fc8ff', align: 'center' });
+      UI.drawText(ctx, 'a board game of property & power', W / 2, H * 0.18 + 50,
+        { font: '13px monospace', color: '#9fc8ff', align: 'center' });
 
-      // Player count selector
       const cy = H * 0.5;
-      UI.drawPanel(ctx, W / 2 - 220, cy - 50, 440, 100, {
+      UI.drawPanel(ctx, W / 2 - 200, cy - 50, 400, 100, {
         bgColor: 'rgba(0,0,0,0.55)',
         borderColor: '#2a4060', borderWidth: 2, radius: 6,
       });
       UI.drawText(ctx, 'PLAYERS', W / 2, cy - 36,
-        { font: 'bold 14px monospace', color: '#9fc8ff', align: 'center' });
+        { font: 'bold 12px monospace', color: '#9fc8ff', align: 'center' });
       UI.drawText(ctx, `<  ${this.menuPlayerCount}  >`, W / 2, cy - 8,
-        { font: 'bold 36px monospace', color: '#ffffff', align: 'center', shadow: true });
+        { font: 'bold 32px monospace', color: '#ffffff', align: 'center', shadow: true });
       UI.drawText(ctx, '← → adjust', W / 2, cy + 30,
-        { font: '12px monospace', color: '#7793b8', align: 'center' });
+        { font: '11px monospace', color: '#7793b8', align: 'center' });
 
-      // Token preview row for selected count
-      const tokenY = H * 0.7;
-      const spacing = 60;
+      const tokenY = H * 0.72;
+      const spacing = 56;
       const startX = W / 2 - ((this.menuPlayerCount - 1) * spacing) / 2;
       for (let i = 0; i < this.menuPlayerCount; i++) {
         const def = this.cfg.players[i];
         ctx.save();
         ctx.translate(startX + i * spacing, tokenY);
-        ctx.scale(1.2, 1.2);
+        ctx.scale(1.1, 1.1);
         this.sprites.drawFrame(ctx, def.sprite, 'idle',
           Math.floor(performance.now() / 250) % 4, 0, 0, false);
         ctx.restore();
       }
 
-      // Start prompt
       const blink = Math.floor(performance.now() / 500) % 2;
       if (blink) {
-        UI.drawText(ctx, 'PRESS ENTER TO START', W / 2, H - 60,
-          { font: 'bold 18px monospace', color: '#ffffff',
+        UI.drawText(ctx, 'PRESS ENTER TO START', W / 2, H - 50,
+          { font: 'bold 16px monospace', color: '#ffffff',
             align: 'center', glow: '#aac8ff', glowBlur: 8 });
       }
-
-      // Controls hint
       UI.drawText(ctx, 'Arrow keys to move on the board · Enter to confirm',
-        W / 2, H - 30,
-        { font: '11px monospace', color: '#5e7898', align: 'center' });
+        W / 2, H - 22,
+        { font: '10px monospace', color: '#5e7898', align: 'center' });
     }
 
     _drawGameOver(ctx, W, H) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, W, H);
-
       const winner = this.winner;
       this.ui.drawText(ctx, `${winner.name.toUpperCase()} WINS!`, W / 2, H / 2 - 40,
-        { font: 'bold 44px monospace', color: winner.color,
+        { font: 'bold 40px monospace', color: winner.color,
           align: 'center', glow: winner.color, glowBlur: 20,
           stroke: '#000000', strokeWidth: 3, shadow: true });
-
-      this.ui.drawText(ctx, `Final cash: $${winner.money}     Total value: $${winner.totalValue}`,
+      this.ui.drawText(ctx, `Cash: $${winner.money}    Net Worth: $${this.netWorth(winner)}`,
         W / 2, H / 2 + 16,
-        { font: '16px monospace', color: '#cdd6e0', align: 'center' });
-
+        { font: '14px monospace', color: '#cdd6e0', align: 'center' });
       const blink = Math.floor(performance.now() / 600) % 2;
       if (blink) {
-        this.ui.drawText(ctx, 'Press Enter to return to menu', W / 2, H - 60,
-          { font: 'bold 16px monospace', color: '#ffffff', align: 'center', shadow: true });
+        this.ui.drawText(ctx, 'Press Enter to return to menu', W / 2, H - 50,
+          { font: 'bold 14px monospace', color: '#ffffff', align: 'center', shadow: true });
+      }
+    }
+
+    // ── DOM HUD (top bar + sidebar) ───────────────────────────────────────
+    _renderHUD() {
+      const cur = this.currentPlayer;
+      if (!cur) return;
+      const dom = this.dom;
+      const nw = this.netWorth(cur);
+
+      // Top bar (current player)
+      const nameStr = cur.name + (cur.isBankrupt ? ' (bankrupt)' : '');
+      if (dom.tbName.textContent !== nameStr) dom.tbName.textContent = nameStr;
+      dom.tbName.style.color = cur.color;
+      const moneyStr = '$' + cur.money;
+      if (dom.tbMoney.textContent !== moneyStr) dom.tbMoney.textContent = moneyStr;
+      const nwStr = '$' + nw;
+      if (dom.tbNetWorth.textContent !== nwStr) dom.tbNetWorth.textContent = nwStr;
+
+      // Resources pills
+      const resCfg = this.cfg.market.resources;
+      const sigParts = resCfg.map(r => (cur.resources[r] || 0));
+      const sig = sigParts.join(',');
+      if (this._lastResSig !== sig) {
+        this._lastResSig = sig;
+        dom.tbResources.innerHTML = '';
+        resCfg.forEach((r, i) => {
+          const qty = cur.resources[r] || 0;
+          const pill = document.createElement('span');
+          pill.className = 'res-pill';
+          pill.innerHTML = `<span class="res-name">${r.slice(0, 3)}</span><span class="res-val">${qty}</span>`;
+          dom.tbResources.appendChild(pill);
+        });
+      }
+
+      // Notifications
+      const logSig = this.eventLog.length + ':' + (this.eventLog[this.eventLog.length - 1] || '');
+      if (this._lastLogSig !== logSig) {
+        this._lastLogSig = logSig;
+        dom.notifications.innerHTML = '';
+        const recent = this.eventLog.slice(-12);
+        recent.forEach((msg, idx) => {
+          const div = document.createElement('div');
+          div.className = 'notif' + (idx === recent.length - 1 ? ' latest' : '');
+          div.textContent = msg;
+          dom.notifications.appendChild(div);
+        });
+        dom.notifications.scrollTop = dom.notifications.scrollHeight;
+      }
+
+      // Player list
+      const plSig = this.players.map(p =>
+        `${p.index}:${p.money}:${this.netWorth(p)}:${p.isBankrupt ? 1 : 0}:${p.index === this.currentPlayerIndex ? 1 : 0}`
+      ).join('|');
+      if (this._lastPlSig !== plSig) {
+        this._lastPlSig = plSig;
+        dom.playerList.innerHTML = '';
+        this.players.forEach((p, i) => {
+          const row = document.createElement('div');
+          row.className = 'pl-row' +
+            (i === this.currentPlayerIndex ? ' active' : '') +
+            (p.isBankrupt ? ' bankrupt' : '');
+          row.innerHTML =
+            `<div class="pl-color" style="background:${p.color}"></div>` +
+            `<div class="pl-info">` +
+              `<div class="pl-name" style="color:${p.color}">${p.name}</div>` +
+              `<div class="pl-stat">Net: $${this.netWorth(p)}</div>` +
+              `<div class="pl-stat">Cash: $${p.money} · Structures: ${p.ownedStructures.length}</div>` +
+            `</div>`;
+          dom.playerList.appendChild(row);
+        });
       }
     }
   }
 
   // -- Bootstrap --
-  // Fetch config.json to discover the map path, then fetch and store the map
-  // data on GF.mapData before the game object is created.
-
   async function init() {
     try {
       const mapPath = GF.GAME_CONFIG.board.map;
@@ -1118,7 +1875,7 @@
 
     const game = new AccaGame();
     game.start();
-    window._accaGame = game; // expose for debugging
+    window._accaGame = game; // debugging hook
   }
 
   if (document.readyState === 'loading') {

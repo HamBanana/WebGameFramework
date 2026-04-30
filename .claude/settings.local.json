@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check AccaGame.js)",
+      "Bash(node --check config.js)",
+      "Bash(node --check sprites/structures.js)",
+      "Bash(node launch.js 3045)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:3045/index.html)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:3045/AccaGame.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:3045/sprites/structures.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:3045/maps/default.json)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:3045/framework/GameFramework.bundle.js)",
+      "Bash(curl -s http://127.0.0.1:3045/index.html)",
+      "Bash(node launch.js 3046)"
+    ]
+  }
+}

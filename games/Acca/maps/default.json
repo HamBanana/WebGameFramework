@@ -85,13 +85,13 @@
     { "from":188, "to":175, "direction":"both" }
   ],
   "districts": [
-    { "id":0, "name":"District A", "color":"#e74c3c", "cellCount":3 },
-    { "id":1, "name":"District B", "color":"#e67e22", "cellCount":3 },
-    { "id":2, "name":"District C", "color":"#f1c40f", "cellCount":3 },
-    { "id":3, "name":"District D", "color":"#2ecc71", "cellCount":3 },
-    { "id":4, "name":"District E", "color":"#1abc9c", "cellCount":5 },
-    { "id":5, "name":"District F", "color":"#3498db", "cellCount":5 },
-    { "id":6, "name":"District G", "color":"#9b59b6", "cellCount":5 },
-    { "id":7, "name":"District H", "color":"#e91e63", "cellCount":5 }
+    { "id":0, "name":"District A", "color":"#e74c3c", "cellCount":3, "specialty":"wood" },
+    { "id":1, "name":"District B", "color":"#e67e22", "cellCount":3, "specialty":"food" },
+    { "id":2, "name":"District C", "color":"#f1c40f", "cellCount":3, "specialty":"electricity" },
+    { "id":3, "name":"District D", "color":"#2ecc71", "cellCount":3, "specialty":"water" },
+    { "id":4, "name":"District E", "color":"#1abc9c", "cellCount":5, "specialty":"steel" },
+    { "id":5, "name":"District F", "color":"#3498db", "cellCount":5, "specialty":"oil" },
+    { "id":6, "name":"District G", "color":"#9b59b6", "cellCount":5, "specialty":"coal" },
+    { "id":7, "name":"District H", "color":"#e91e63", "cellCount":5, "specialty":"food" }
   ]
 }

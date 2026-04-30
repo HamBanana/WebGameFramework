@@ -7,35 +7,258 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --topbar-h: 48px;
+      --sidebar-w: 256px;
+      --map-w: 768px;
+      --map-h: 528px;
+      --total-w: 1024px;
+      --total-h: 576px;
+      --bg-deep: #05080d;
+      --panel-bg: rgba(0, 0, 0, 0.65);
+      --panel-border: #2a4060;
+      --accent: #5a8ed1;
+      --accent-light: #9fc8ff;
+      --text: #e6edf5;
+      --text-dim: #9aa5b1;
+    }
+
     body {
-      background: #05080d;
+      background: var(--bg-deep);
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       overflow: hidden;
       font-family: monospace;
+      color: var(--text);
     }
 
     #gameContainer {
       position: relative;
-      width: 1024px;
-      height: 576px;
+      width: var(--total-w);
+      height: var(--total-h);
+      display: grid;
+      grid-template-rows: var(--topbar-h) 1fr;
+      grid-template-columns: var(--map-w) var(--sidebar-w);
+      grid-template-areas:
+        "topbar topbar"
+        "map sidebar";
+      background: linear-gradient(180deg, #1a2330 0%, #0a0d12 100%);
+      border: 2px solid rgba(80, 130, 200, 0.4);
+      box-shadow: 0 0 40px rgba(40, 90, 180, 0.5);
     }
 
+    /* ── Top bar ─────────────────────────────────────────────────────── */
+    #topbar {
+      grid-area: topbar;
+      display: grid;
+      grid-template-columns: 110px 130px 130px 1fr;
+      align-items: stretch;
+      background: linear-gradient(180deg, #1c92e8 0%, #1879c4 100%);
+      border-bottom: 2px solid #08436b;
+      color: #ffffff;
+      font-size: 11px;
+      overflow: hidden;
+    }
+
+    .tb-cell {
+      padding: 4px 10px;
+      border-right: 1px solid rgba(255, 255, 255, 0.18);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .tb-cell:last-child { border-right: none; }
+
+    .tb-label {
+      font-size: 9px;
+      letter-spacing: 1px;
+      opacity: 0.7;
+      text-transform: uppercase;
+    }
+    .tb-value {
+      font-size: 14px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    #tb-resources {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: 6px;
+      padding: 4px 10px;
+      align-items: center;
+      overflow: hidden;
+    }
+    .res-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      background: rgba(0, 0, 0, 0.22);
+      border-radius: 3px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+    .res-pill .res-name {
+      opacity: 0.78;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+    .res-pill .res-val { font-weight: bold; }
+
+    /* ── Map (canvas) ────────────────────────────────────────────────── */
+    #mapWrap {
+      grid-area: map;
+      position: relative;
+      width: var(--map-w);
+      height: var(--map-h);
+      overflow: hidden;
+      border-right: 2px solid var(--panel-border);
+    }
     #gameCanvas {
       display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      border: 2px solid rgba(80, 130, 200, 0.4);
-      box-shadow: 0 0 40px rgba(40, 90, 180, 0.5),
-                  inset 0 0 20px rgba(0, 0, 0, 0.7);
+      width: var(--map-w);
+      height: var(--map-h);
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────── */
+    #sidebar {
+      grid-area: sidebar;
+      display: grid;
+      grid-template-rows: 38% 62%;
+      gap: 6px;
+      padding: 6px;
+      background: rgba(8, 12, 18, 0.85);
+    }
+
+    .panel {
+      background: var(--panel-bg);
+      border: 2px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-title {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      color: var(--accent-light);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    /* Notifications */
+    #notifications {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 10px;
+      line-height: 1.35;
+      color: var(--text-dim);
+    }
+    #notifications .notif {
+      margin-bottom: 4px;
+      padding: 4px 6px;
+      border-left: 2px solid var(--accent);
+      background: rgba(90, 142, 209, 0.08);
+      animation: notif-in 0.3s ease-out;
+    }
+    #notifications .notif.latest {
+      color: var(--text);
+      border-left-color: #ffe978;
+      background: rgba(255, 233, 120, 0.08);
+    }
+    @keyframes notif-in {
+      from { opacity: 0; transform: translateX(8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Player list */
+    #playerList {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 11px;
+    }
+    .pl-row {
+      display: grid;
+      grid-template-columns: 6px 1fr;
+      gap: 6px;
+      padding: 5px 4px;
+      margin-bottom: 4px;
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 3px;
+    }
+    .pl-row.active {
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(159, 200, 255, 0.3);
+    }
+    .pl-color {
+      width: 4px;
+      border-radius: 2px;
+    }
+    .pl-info { display: flex; flex-direction: column; line-height: 1.25; }
+    .pl-name { font-weight: bold; font-size: 11px; }
+    .pl-stat { color: var(--text-dim); font-size: 10px; }
+    .pl-row.bankrupt .pl-name { text-decoration: line-through; opacity: 0.5; }
+
+    /* Scrollbar styling */
+    #notifications::-webkit-scrollbar,
+    #playerList::-webkit-scrollbar {
+      width: 6px;
+    }
+    #notifications::-webkit-scrollbar-thumb,
+    #playerList::-webkit-scrollbar-thumb {
+      background: rgba(120, 160, 220, 0.3);
+      border-radius: 3px;
     }
   </style>
 </head>
 <body>
   <div id="gameContainer">
-    <canvas id="gameCanvas" width="1024" height="576"></canvas>
+
+    <!-- Top bar: current player stats + resources -->
+    <div id="topbar">
+      <div class="tb-cell">
+        <div class="tb-label">Name</div>
+        <div class="tb-value" id="tb-name">—</div>
+      </div>
+      <div class="tb-cell">
+        <div class="tb-label">Money on hand</div>
+        <div class="tb-value" id="tb-money">$0</div>
+      </div>
+      <div class="tb-cell">
+        <div class="tb-label">Net worth</div>
+        <div class="tb-value" id="tb-networth">$0</div>
+      </div>
+      <div class="tb-cell" id="tb-resources" style="grid-column: 4;"></div>
+    </div>
+
+    <!-- Map (game canvas) -->
+    <div id="mapWrap">
+      <canvas id="gameCanvas" width="768" height="528"></canvas>
+    </div>
+
+    <!-- Sidebar: notifications + player list -->
+    <div id="sidebar">
+      <div class="panel">
+        <div class="panel-title">Notifications</div>
+        <div id="notifications"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Players</div>
+        <div id="playerList"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ── Game config ──────────────────────────────────────────────────── -->
@@ -44,10 +267,26 @@
   <!-- ── GameFramework ─────────────────────────────────────────────────── -->
   <script src="../../framework/GameFramework.bundle.js"></script>
 
+  <!-- ── Utils ──────────────────────────────────────────────────────── -->
+  <script src="utils/format.js"></script>
+  <script src="utils/validate.js"></script>
+
   <!-- ── Game sprites (register with GF.sprites) ──────────────────── -->
   <script src="sprites/tokens.js"></script>
   <script src="sprites/die.js"></script>
   <script src="sprites/cells.js"></script>
+  <script src="sprites/structures.js"></script>
+  <script src="sprites/resources.js"></script>
+  <script src="sprites/businesses.js"></script>
+  <script src="sprites/ui_icons.js"></script>
+
+  <!-- ── Systems (Planning §6–§11) ───────────────────────────────── -->
+  <script src="systems/MarketSystem.js"></script>
+  <script src="systems/RegionSystem.js"></script>
+  <script src="systems/PopulationSystem.js"></script>
+  <script src="systems/ChanceSystem.js"></script>
+  <script src="systems/TradeSystem.js"></script>
+  <script src="systems/AccaSave.js"></script>
 
   <!-- ── Game logic ──────────────────────────────────────────────── -->
   <script src="AccaGame.js"></script>
