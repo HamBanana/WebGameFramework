@@ -1,10 +1,2 @@
 Changes needed in Acca:
 
-1. The sidebar needs to be a lot narrower, and the viewport of the game needs to be contained to the MAP section, according to defaultinteerface.png
-
-2. The top bar should display data on the current player:
-Name, Money on hand, Net worth and the amount of each resource they own.
-
-3. When landing on an empty square, the player will have the option to build any of the available structures there, as outlined in 21_PlayerStructures.
-
-4. Between turns, the whole map should be visible, but the camera needs to zoom close to the current player, when the turn starts, approximately close enough that 6 squares around the player are visible, in each direction.

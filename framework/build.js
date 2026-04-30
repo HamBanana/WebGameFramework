@@ -25,6 +25,7 @@ var FILES = [
   'systems/SaveSystem.js',
   'systems/DebugOverlay.js',
   'systems/DialogueSystem.js',
+  'systems/ModelSystem.js',
   'GameFramework.js',
 ];
 

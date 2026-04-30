@@ -36,6 +36,7 @@
     var useTilemap   = opts.tilemap   !== false;
     var useDebug     = opts.debug     !== false;
     var useDialogue  = opts.dialogue  !== false;
+    var useModels    = !!opts.models;
 
     var engine  = new GF.Engine(engineConfig);
     var sprites = new GF.SpriteSystem();
@@ -50,14 +51,15 @@
     engine.addSystem(physics);
     engine.addSystem(save);
 
-    var audio     = useAudio     ? new GF.AudioSystem(opts.audioOpts || {})        : null;
-    var tweens    = useTweens    ? new GF.TweenSystem()                             : null;
-    var particles = useParticles ? new GF.ParticleSystem(opts.particleOpts || {})  : null;
-    var scenes    = useScenes    ? new GF.SceneManager()                            : null;
-    var tilemap   = useTilemap   ? new GF.TilemapSystem()                           : null;
-    var dialogue  = useDialogue  ? new GF.DialogueSystem(opts.dialogueOpts || {})  : null;
+    var audio     = useAudio     ? new GF.AudioSystem(opts.audioOpts || {})           : null;
+    var tweens    = useTweens    ? new GF.TweenSystem()                                : null;
+    var particles = useParticles ? new GF.ParticleSystem(opts.particleOpts || {})     : null;
+    var scenes    = useScenes    ? new GF.SceneManager()                               : null;
+    var tilemap   = useTilemap   ? new GF.TilemapSystem()                              : null;
+    var dialogue  = useDialogue  ? new GF.DialogueSystem(opts.dialogueOpts || {})     : null;
+    var models    = useModels    ? new GF.ModelSystem(opts.modelOpts || {})            : null;
     // DebugOverlay added last so it renders on top of everything.
-    var debug     = useDebug     ? new GF.DebugOverlay(opts.debugOpts || {})        : null;
+    var debug     = useDebug     ? new GF.DebugOverlay(opts.debugOpts || {})           : null;
 
     if (audio)    engine.addSystem(audio);
     if (tweens)   engine.addSystem(tweens);
@@ -65,12 +67,13 @@
     if (scenes)   engine.addSystem(scenes);
     if (tilemap)  engine.addSystem(tilemap);
     if (dialogue) engine.addSystem(dialogue);
+    if (models)   engine.addSystem(models);
     if (debug)    engine.addSystem(debug);
 
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
-      tilemap: tilemap, dialogue: dialogue, debug: debug,
+      tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
     };
   };
 
@@ -103,26 +106,6 @@
       var key = keys[i];
       var val = source[key];
       if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-        if (!target[key] || typeof target[key] !== 'object') target[key] = {};
-        _deepMerge(target[key], val);
-      } else {
-        target[key] = val;
-      }
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-      window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
-    });
-  } else {
-    window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
-  }
-
-  console.log('%cGameFramework v' + GF.VERSION + ' loaded', 'color:#00e5ff;font-weight:bold');
-
-})(window.GF = window.GF || {});
-rray.isArray(val)) {
         if (!target[key] || typeof target[key] !== 'object') target[key] = {};
         _deepMerge(target[key], val);
       } else {

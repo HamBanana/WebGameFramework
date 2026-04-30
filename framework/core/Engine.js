@@ -117,8 +117,12 @@
       if (this._onUpdate) this._onUpdate(dt, this);
 
       // --- Render ---
-      this.ctx.fillStyle = this.config.backgroundColor;
-      this.ctx.fillRect(0, 0, this.config.width, this.config.height);
+      if (this.config.backgroundColor === 'transparent') {
+        this.ctx.clearRect(0, 0, this.config.width, this.config.height);
+      } else {
+        this.ctx.fillStyle = this.config.backgroundColor;
+        this.ctx.fillRect(0, 0, this.config.width, this.config.height);
+      }
       this._systems.forEach(s => s.render && s.render(this.ctx, this));
       if (this._onRender) this._onRender(this.ctx, this);
 

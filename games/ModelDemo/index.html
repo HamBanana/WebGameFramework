@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Demo — GameFramework</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #16161e; }
+    #gf-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="gf-container">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+
+  <!-- Three.js r128 + extras -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- GameFramework -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- Game -->
+  <script src="config.js"></script>
+  <script src="ModelDemoGame.js"></script>
+</body>
+</html>
