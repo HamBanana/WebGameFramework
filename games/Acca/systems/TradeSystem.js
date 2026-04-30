@@ -7,10 +7,10 @@
   GF.Acca = GF.Acca || {};
 
   class TradeSystem {
-    constructor(cfg, eventBus, regionSystem) {
-      this.cfg     = cfg;
-      this.events  = eventBus;
-      this.regions = regionSystem;
+    constructor(cfg, eventBus, districtSystem) {
+      this.cfg       = cfg;
+      this.events    = eventBus;
+      this.districts = districtSystem;
       // per-player ephemeral counters: { takeoversThisTurn, sabotageCooldownUntil, takeoverShieldUntil }
       this.state = new Map();
     }
@@ -118,8 +118,8 @@
       to.ownedStructures.push(s);
       s.ownerIndex = to.index;
       this.events.emit('structure:transferred', { structure: s, from, to });
-      if (s.cell && s.cell.district && this.regions) {
-        this.regions.recomputeMayor(s.cell.district);
+      if (s.cell && s.cell.district && this.districts) {
+        this.districts.recomputeMayor(s.cell.district);
       }
     }
 

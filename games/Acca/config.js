@@ -64,7 +64,7 @@
       threatLimit     : 30,
       threatPerTurn   : 1,
       threatPerPlague : 4,
-      threatPerLowHappiness: 1, // each region with happiness < 20
+      threatPerLowHappiness: 1, // each district with happiness < 20
     },
 
     // ── Property pricing (legacy property cells) ────────────────────────────
@@ -167,8 +167,9 @@
       },
     },
 
-    // ── Region / Mayor (Planning §9) ────────────────────────────────────────
-    region: {
+    // ── District / Mayor (Planning §9) ──────────────────────────────────────
+    // A district is a named group of squares. Wholly owning one grants Mayorship.
+    district: {
       taxBase           : 0.5,
       maxTaxRate        : 0.5,
       defaultTaxRate    : 0.10,

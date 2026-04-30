@@ -1,13 +1,17 @@
 // GameFramework/games/Acca/AccaGame.js
 // Main game logic for Acca.
 // Implements the Planning bible (games/Acca/Planning/) plus 20_Changes:
-//   - HTML topbar + sidebar (DOM-driven), canvas only renders the map.
+//   - HTML topbar + left district sidebar + right sidebar (DOM-driven), canvas only renders the map.
 //   - Camera zooms in on the active player (~6 cells around them in each dir);
 //     zooms out between turns to show the whole map.
 //   - Empty district squares are buildable: landing on one offers the full
 //     player-structure catalog (Planning §5.10).
 //   - Per-structure landing/pass-through handlers (shop, toll, teleporter,
 //     house, factory, police_station, vault).
+//
+// Terminology used throughout this file:
+//   district = named group of squares (cell.district holds the district id)
+//   region   = higher-level grouping of districts (future feature, not yet used)
 
 (function (GF) {
   'use strict';
@@ -133,10 +137,10 @@
       this.level       = 1;
       this.isBankrupt  = false;
 
-      this.ownedStructures = []; // array of PlayerStructure
-      this.resources       = {}; // resourceName → quantity
-      this.regionsMayoredOf = new Set();
-      this.company         = null; // Planning §7 — null until founded
+      this.ownedStructures  = []; // array of PlayerStructure
+      this.resources        = {}; // resourceName → quantity
+      this.districtsMayoredOf = new Set(); // ids of districts this player is mayor of
+      this.company          = null; // Planning §7 — null until founded
 
       this.currentCell = startCell;
       this.moveOffset  = { x: 0, y: 0 };
@@ -292,7 +296,7 @@
       cell.animator = animator;
       this.game.players[ownerIndex].ownedStructures.push(s);
       this.game.engine.events.emit('property:bought', { structure: s, ownerIndex });
-      if (this.game.regionSys) this.game.regionSys.recomputeMayor(cell.district);
+      if (this.game.districtSys) this.game.districtSys.recomputeMayor(cell.district);
       return s;
     }
 
@@ -320,7 +324,7 @@
           break;
         }
         case 'house': {
-          if (player.regionsMayoredOf.has(structure.cell.district)) {
+          if (player.districtsMayoredOf.has(structure.cell.district)) {
             const tax = cfg.houseTaxIfMayor;
             opts.push({ label: `Collect taxes (+$${tax})`, action: () => {
               player.addMoney(tax);
@@ -604,8 +608,8 @@
       const p = this.player;
       const game = this.game;
       const opts = [];
-      if (p.regionsMayoredOf.size > 0 && game.regionSys) {
-        opts.push({ label: `Mayor controls (${p.regionsMayoredOf.size} regions)`,
+      if (p.districtsMayoredOf.size > 0 && game.districtSys) {
+        opts.push({ label: `Mayor controls (${p.districtsMayoredOf.size} district${p.districtsMayoredOf.size !== 1 ? 's' : ''})`,
           action: () => this._showMayorMenu() });
       }
       if (game.cfg.industries) {
@@ -621,58 +625,58 @@
     _showMayorMenu() {
       const p = this.player;
       const game = this.game;
-      const regions = Array.from(p.regionsMayoredOf).map(id => game.regionSys.get(id)).filter(Boolean);
-      const opts = regions.map(r => ({
-        label: `${r.id}  pop ${r.population}  hap ${Math.round(r.happiness)}  tax ${Math.round(r.taxRate * 100)}%`,
-        action: () => this._showRegionMenu(r),
+      const districts = Array.from(p.districtsMayoredOf).map(id => game.districtSys.get(id)).filter(Boolean);
+      const opts = districts.map(d => ({
+        label: `${d.id}  pop ${d.population}  hap ${Math.round(d.happiness)}  tax ${Math.round(d.taxRate * 100)}%`,
+        action: () => this._showDistrictMenu(d),
       }));
       opts.push({ label: 'Back', action: () => this._showManageMenu() });
       this.menu.show('Mayor', opts);
     }
 
-    _showRegionMenu(r) {
+    _showDistrictMenu(d) {
       const p = this.player;
       const game = this.game;
-      const cfg = game.cfg.region;
+      const cfg = game.cfg.district;
       const opts = [
-        { label: `Tax rate: ${Math.round(r.taxRate * 100)}%  (use ←→ in next menu)`,
-          action: () => this._showTaxSlider(r) },
+        { label: `Tax rate: ${Math.round(d.taxRate * 100)}%  (use ←→ in next menu)`,
+          action: () => this._showTaxSlider(d) },
         { label: `Festival ($${cfg.festivalCost})`, action: () => {
-          const res = game.regionSys.holdFestival(p, r.id, game.turnCounter);
-          game.log(res.ok ? `Festival held in ${r.id}.`
+          const res = game.districtSys.holdFestival(p, d.id, game.turnCounter);
+          game.log(res.ok ? `Festival held in ${d.id}.`
                           : `Festival rejected: ${res.reason}.`);
-          this._showRegionMenu(r);
+          this._showDistrictMenu(d);
         } },
         { label: `Investment grant ($${cfg.grantCost} → +${cfg.grantPopulation} pop)`, action: () => {
-          const res = game.regionSys.investmentGrant(p, r.id, game.turnCounter);
-          game.log(res.ok ? `Grant applied in ${r.id}.`
+          const res = game.districtSys.investmentGrant(p, d.id, game.turnCounter);
+          game.log(res.ok ? `Grant applied in ${d.id}.`
                           : `Grant rejected: ${res.reason}.`);
-          this._showRegionMenu(r);
+          this._showDistrictMenu(d);
         } },
         { label: 'Back', action: () => this._showMayorMenu() },
       ];
-      this.menu.show(`Region: ${r.id}`, opts,
-        `Pop ${r.population}  Happiness ${Math.round(r.happiness)}  Specialty: ${r.specialty || 'none'}`);
+      this.menu.show(`District: ${d.id}`, opts,
+        `Pop ${d.population}  Happiness ${Math.round(d.happiness)}  Specialty: ${d.specialty || 'none'}`);
     }
 
-    _showTaxSlider(r) {
+    _showTaxSlider(d) {
       const game = this.game;
       const p = this.player;
-      const cfg = game.cfg.region;
+      const cfg = game.cfg.district;
       // Step the rate via menu options (5% increments)
       const steps = [];
       const max = cfg.maxTaxRate;
       for (let v = 0; v <= max + 0.001; v += 0.05) steps.push(Math.round(v * 100) / 100);
       const opts = steps.map(v => ({
-        label: `Set ${Math.round(v * 100)}%${v === r.taxRate ? '   ← current' : ''}`,
+        label: `Set ${Math.round(v * 100)}%${v === d.taxRate ? '   ← current' : ''}`,
         action: () => {
-          game.regionSys.setTaxRate(p, r.id, v);
-          game.log(`Tax for ${r.id} set to ${Math.round(v * 100)}%.`);
-          this._showRegionMenu(r);
+          game.districtSys.setTaxRate(p, d.id, v);
+          game.log(`Tax for ${d.id} set to ${Math.round(v * 100)}%.`);
+          this._showDistrictMenu(d);
         },
       }));
-      opts.push({ label: 'Back', action: () => this._showRegionMenu(r) });
-      this.menu.show(`Tax for ${r.id}`, opts,
+      opts.push({ label: 'Back', action: () => this._showDistrictMenu(d) });
+      this.menu.show(`Tax for ${d.id}`, opts,
         `Comfort target ≤ ${Math.round(game.cfg.population.taxComfortRate * 100)}%`);
     }
 
@@ -1004,12 +1008,12 @@
       // ── Planning §6–§11 systems ──
       const A = (GF.Acca || {});
       this.marketSys     = A.MarketSystem     ? new A.MarketSystem(cfg, engine.events) : null;
-      this.regionSys     = A.RegionSystem     ? new A.RegionSystem(cfg, engine.events) : null;
-      this.populationSys = (A.PopulationSystem && this.regionSys)
-        ? new A.PopulationSystem(cfg, engine.events, this.regionSys) : null;
-      this.tradeSys      = A.TradeSystem      ? new A.TradeSystem(cfg, engine.events, this.regionSys) : null;
+      this.districtSys   = A.DistrictSystem   ? new A.DistrictSystem(cfg, engine.events) : null;
+      this.populationSys = (A.PopulationSystem && this.districtSys)
+        ? new A.PopulationSystem(cfg, engine.events, this.districtSys) : null;
+      this.tradeSys      = A.TradeSystem      ? new A.TradeSystem(cfg, engine.events, this.districtSys) : null;
       this.chanceSys     = A.ChanceSystem     ? new A.ChanceSystem(cfg, engine.events, {
-        regionSystem: this.regionSys,
+        districtSystem: this.districtSys,
         getLeader: () => this._getLeader(),
         getLowestCash: () => this._getLowestCash(),
         sabotageProperty: (s, dur) => {
@@ -1023,20 +1027,20 @@
       this.cooperativeThreat = 0;
       this.turnCounter = 0;
 
-      // Mayor / region listeners — log + update population sources
-      engine.events.on('region:mayorChanged', ({ region, oldMayor, newMayor }) => {
+      // District / mayor event listeners
+      engine.events.on('district:mayorChanged', ({ district, oldMayor, newMayor }) => {
         const players = this.players;
         if (oldMayor >= 0 && players[oldMayor]) {
-          players[oldMayor].regionsMayoredOf.delete(region.id);
-          this.log(`${players[oldMayor].name} lost mayorship of ${region.id}.`);
+          players[oldMayor].districtsMayoredOf.delete(district.id);
+          this.log(`${players[oldMayor].name} lost mayorship of ${district.id}.`);
         }
         if (newMayor >= 0 && players[newMayor]) {
-          players[newMayor].regionsMayoredOf.add(region.id);
-          this.log(`${players[newMayor].name} is now Mayor of ${region.id}!`);
+          players[newMayor].districtsMayoredOf.add(district.id);
+          this.log(`${players[newMayor].name} is now Mayor of ${district.id}!`);
         }
       });
-      engine.events.on('region:taxesPaid', ({ region, mayor, amount }) =>
-        this.log(`${mayor.name} collected $${amount} taxes from ${region.id}.`));
+      engine.events.on('district:taxesPaid', ({ district, mayor, amount }) =>
+        this.log(`${mayor.name} collected $${amount} taxes from ${district.id}.`));
       engine.events.on('market:priceChanged', ({ resource, oldPrice, newPrice }) => {
         const ratio = (newPrice - oldPrice) / Math.max(1, oldPrice);
         if (Math.abs(ratio) >= 0.25) {
@@ -1067,8 +1071,10 @@
         tbResources : document.getElementById('tb-resources'),
         notifications: document.getElementById('notifications'),
         playerList  : document.getElementById('playerList'),
+        districtList: document.getElementById('districtList'),
       };
-      this._lastDomState = null;
+      this._lastDomState    = null;
+      this._lastDistrictSig = null;
 
       engine.onUpdate((dt) => this._update(dt));
       engine.onRender((ctx) => this._render(ctx));
@@ -1229,9 +1235,8 @@
     }
 
     // ── Mayor / win condition ─────────────────────────────────────────────
-    checkMayor(player, regionId) {
-      // Delegate to RegionSystem (Planning §9.1).
-      if (this.regionSys) this.regionSys.recomputeMayor(regionId);
+    checkMayor(player, districtId) {
+      if (this.districtSys) this.districtSys.recomputeMayor(districtId);
     }
 
     _getLeader() {
@@ -1258,7 +1263,7 @@
       const cat = this.cfg.structures.catalog;
       const entry = cat[Math.floor(Math.random() * cat.length)];
       this.structures.build(cell, entry.type, player.index);
-      if (this.regionSys) this.regionSys.recomputeMayor(cell.district);
+      if (this.districtSys) this.districtSys.recomputeMayor(cell.district);
       this.log(`${player.name} won a free ${entry.label} in ${cell.district}!`);
     }
 
@@ -1337,9 +1342,9 @@
       this._runProduction(player);
 
       // 3. Mayor tax collection (only for the player whose turn just ended).
-      if (this.regionSys) this.regionSys.collectTaxes(player);
+      if (this.districtSys) this.districtSys.collectTaxes(player);
 
-      // 4. Population/happiness/migration tick (every region, once per turn).
+      // 4. Population/happiness/migration tick (every district, once per turn).
       if (this.populationSys) this.populationSys.tick(this.turnCounter, this.players);
 
       // 5. Market drift.
@@ -1360,9 +1365,9 @@
       if (this.cfg.mode === 'cooperative') {
         const co = this.cfg.cooperative;
         this.cooperativeThreat += co.threatPerTurn;
-        if (this.regionSys) {
-          this.regionSys.list().forEach(r => {
-            if (r.happiness < 20) this.cooperativeThreat += co.threatPerLowHappiness;
+        if (this.districtSys) {
+          this.districtSys.list().forEach(d => {
+            if (d.happiness < 20) this.cooperativeThreat += co.threatPerLowHappiness;
           });
         }
         if (this.cooperativeThreat >= co.threatLimit) {
@@ -1373,7 +1378,7 @@
       }
 
       // 9. Recompute mayor flags after possible bankruptcies / sabotage.
-      if (this.regionSys) this.regionSys.recomputeAll();
+      if (this.districtSys) this.districtSys.recomputeAll();
     }
 
     /** Per-turn structure production for the player whose turn ended. */
@@ -1385,19 +1390,19 @@
         if (s.type === 'factory') {
           const houseBonus = 1 + player.housesOwned * cfg.factoryHouseBonus;
           let qty = Math.max(1, Math.round(cfg.factoryBaseRate * houseBonus * industryBonus.production));
-          // Region specialty bonus
-          if (this.regionSys && s.cell.district) {
-            const r = this.regionSys.get(s.cell.district);
-            if (r && r.specialty === cfg.factoryResource) qty += this.cfg.market.specialtyBonus;
+          // District specialty bonus
+          if (this.districtSys && s.cell.district) {
+            const d = this.districtSys.get(s.cell.district);
+            if (d && d.specialty === cfg.factoryResource) qty += this.cfg.market.specialtyBonus;
           }
           player.resources[cfg.factoryResource] =
             (player.resources[cfg.factoryResource] || 0) + qty;
         }
         if (s.type === 'house') {
           // Houses passively contribute residents to their district population
-          if (this.regionSys && s.cell.district) {
-            const r = this.regionSys.get(s.cell.district);
-            if (r) r.population += cfg.housePopContribution;
+          if (this.districtSys && s.cell.district) {
+            const d = this.districtSys.get(s.cell.district);
+            if (d) d.population += cfg.housePopContribution;
           }
         }
         if (s.type === 'shop') {
@@ -1442,19 +1447,20 @@
       this._initBoard();
       this._initPlayers();
 
-      // Build per-region state once we know cells.
-      if (this.regionSys) {
+      // Build per-district state once we know cells.
+      if (this.districtSys) {
         const districtsMeta = (GF.mapData && GF.mapData.districts) || [];
-        this.regionSys.init(this.cells, districtsMeta);
+        this.districtSys.init(this.cells, districtsMeta);
         // Bias initial population by district size.
-        this.regionSys.list().forEach(r => {
-          r.population = Math.round((this.cfg.region.defaultPopulation || 30) * Math.max(1, r.cells.length / 3));
+        this.districtSys.list().forEach(d => {
+          d.population = Math.round((this.cfg.district.defaultPopulation || 30) * Math.max(1, d.cells.length / 3));
         });
       }
 
       this.turnCounter = 0;
       this.cooperativeThreat = 0;
       this.eventLog = [];
+      this._lastDistrictSig = null;
       this.log('Game started.');
       this.gameState = GAME_STATE.PLAYING;
 
@@ -1505,6 +1511,7 @@
             this._lastResSig = null;
             this._lastLogSig = null;
             this._lastPlSig = null;
+            this._lastDistrictSig = null;
           }
           break;
       }
@@ -1581,12 +1588,12 @@
         });
       }
 
-      // Region tinting (Planning §12.3)
-      if (this.regionSys) {
-        this.regionSys.list().forEach(r => {
-          if (!r.cells || r.cells.length === 0) return;
+      // District tinting — semi-transparent colour wash behind each district's cells
+      if (this.districtSys) {
+        this.districtSys.list().forEach(d => {
+          if (!d.cells || d.cells.length === 0) return;
           let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-          r.cells.forEach(c => {
+          d.cells.forEach(c => {
             const px = this._toPixel(c);
             if (px.x < minX) minX = px.x;
             if (px.x > maxX) maxX = px.x;
@@ -1594,7 +1601,7 @@
             if (px.y > maxY) maxY = px.y;
           });
           ctx.save();
-          ctx.fillStyle = r.color;
+          ctx.fillStyle = d.color;
           ctx.globalAlpha = 0.10;
           ctx.fillRect(minX - size / 2 - 4, minY - size / 2 - 4,
                        (maxX - minX) + size + 8, (maxY - minY) + size + 8);
@@ -1633,36 +1640,6 @@
           ctx.restore();
         }
       });
-
-      // Region badges — population/happiness/mayor at region centroid
-      if (this.regionSys) {
-        this.regionSys.list().forEach(r => {
-          if (!r.cells || r.cells.length === 0) return;
-          let cx = 0, cy = 0;
-          r.cells.forEach(c => { const px = this._toPixel(c); cx += px.x; cy += px.y; });
-          cx /= r.cells.length; cy /= r.cells.length;
-
-          const mood = r.happiness >= 70 ? 'happy'
-                     : r.happiness >= 40 ? 'neutral'
-                     : r.happiness >= 20 ? 'sad'
-                     : 'angry';
-          const faceSprite = 'pop_face_' + mood;
-          // Badge background
-          this.ui.drawPanel(ctx, cx - 28, cy - 18, 56, 36, {
-            bgColor: 'rgba(0,0,0,0.65)',
-            borderColor: r.mayorIndex >= 0 ? this.players[r.mayorIndex].color : '#666',
-            borderWidth: 1, radius: 4,
-          });
-          this.sprites.drawFrame(ctx, faceSprite, 'idle', 0, cx - 14, cy + 1, false);
-          this.ui.drawText(ctx, `${r.population}`, cx + 16, cy - 7,
-            { font: 'bold 11px monospace', color: '#fff', align: 'center' });
-          this.ui.drawText(ctx, `${Math.round(r.taxRate * 100)}%`, cx + 16, cy + 5,
-            { font: '9px monospace', color: '#9fc8ff', align: 'center' });
-          if (r.mayorIndex >= 0) {
-            this.sprites.drawFrame(ctx, 'ui_crown', 'idle', 0, cx - 22, cy - 18, false);
-          }
-        });
-      }
     }
 
     _drawTokens(ctx) {
@@ -1791,7 +1768,7 @@
       }
     }
 
-    // ── DOM HUD (top bar + sidebar) ───────────────────────────────────────
+    // ── DOM HUD (top bar + sidebars) ──────────────────────────────────────
     _renderHUD() {
       const cur = this.currentPlayer;
       if (!cur) return;
@@ -1814,7 +1791,7 @@
       if (this._lastResSig !== sig) {
         this._lastResSig = sig;
         dom.tbResources.innerHTML = '';
-        resCfg.forEach((r, i) => {
+        resCfg.forEach((r) => {
           const qty = cur.resources[r] || 0;
           const pill = document.createElement('span');
           pill.className = 'res-pill';
@@ -1860,6 +1837,54 @@
           dom.playerList.appendChild(row);
         });
       }
+
+      // Left sidebar: district info
+      this._renderDistrictSidebar();
+    }
+
+    /** Populate the left sidebar with per-district stats. */
+    _renderDistrictSidebar() {
+      const list = this.dom.districtList;
+      if (!list) return;
+
+      if (!this.districtSys) {
+        list.innerHTML = '';
+        return;
+      }
+
+      const districts = this.districtSys.list().sort((a, b) => a.id.localeCompare(b.id));
+      const sig = districts.map(d =>
+        `${d.id}:${d.population}:${Math.round(d.happiness)}:${d.mayorIndex}:${Math.round(d.taxRate * 100)}`
+      ).join('|');
+      if (this._lastDistrictSig === sig) return;
+      this._lastDistrictSig = sig;
+
+      list.innerHTML = '';
+      districts.forEach(d => {
+        const mayor = d.mayorIndex >= 0 ? this.players[d.mayorIndex] : null;
+        const moodLabel = d.happiness >= 70 ? 'happy'
+                        : d.happiness >= 40 ? 'ok'
+                        : d.happiness >= 20 ? 'sad'
+                        : 'angry';
+        const owned = d.cells.filter(c => c.structure).length;
+        const total = d.cells.filter(c => c.type === 'buildable').length;
+
+        const row = document.createElement('div');
+        row.className = 'dist-row';
+        row.innerHTML =
+          `<div class="dist-header">` +
+            `<span class="dist-name" style="border-left-color:${d.color}">${d.id}</span>` +
+            (d.specialty ? `<span class="dist-tag">${d.specialty}</span>` : '') +
+          `</div>` +
+          `<div class="dist-body">` +
+            `<div class="dist-line">Pop <strong>${d.population}</strong>&ensp;Hap <span class="dist-mood dist-mood-${moodLabel}">${Math.round(d.happiness)}</span></div>` +
+            `<div class="dist-line">Tax <strong>${Math.round(d.taxRate * 100)}%</strong>&ensp;Bldg ${owned}/${total}</div>` +
+            `<div class="dist-line dist-mayor-line">${mayor
+              ? `<span class="dist-mayor-dot" style="background:${mayor.color}"></span><span style="color:${mayor.color}">${mayor.name}</span>`
+              : '<span class="dim">No mayor</span>'}</div>` +
+          `</div>`;
+        list.appendChild(row);
+      });
     }
   }
 

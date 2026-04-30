@@ -46,25 +46,25 @@ class Cell {
 }
 ```
 
-## 3.3 Region (district) schema
+## 3.3 District schema
 
-A region is a logical grouping of cells (typically contiguous, but contiguity is not enforced — designers can group thematically). Regions are addressable by string id from cell.district.
+A district is a named group of squares (typically contiguous, but contiguity is not enforced). Districts are identified by the string value of `cell.district` and managed by `games/Acca/systems/DistrictSystem.js`.
 
 ```js
-// games/Acca/entities/Region.js
-class Region {
-  id;          // string, e.g. 'downtown'
-  name;        // human-readable, e.g. 'Downtown'
-  bonus;       // optional industry bonus key when this region is mayor-controlled
-  basePopulation;
-  population;        // current count
-  happiness;         // 0..100
-  employed;          // total employed across businesses in region
-  mayorIndex;        // -1 if no current mayor
-  taxRate;           // 0..0.5; mayor-adjustable
-  cellIds;           // ids of cells belonging to the region
+// games/Acca/systems/DistrictSystem.js — District class
+class District {
+  id;          // string, e.g. 'District A'
+  color;       // hex string for map tinting and sidebar
+  cells;       // Cell references belonging to this district
+  mayorIndex;  // -1 if no current mayor
+  taxRate;     // 0..cfg.district.maxTaxRate; mayor-adjustable
+  population;
+  happiness;   // 0..100
+  specialty;   // resource id or null (from map JSON)
 }
 ```
+
+**Region** (future feature): a higher-level grouping of districts, not yet implemented.
 
 ## 3.4 Map JSON spec
 
@@ -75,13 +75,11 @@ class Region {
   "version": 2,
   "name": "Default Map",
   "size": { "rows": 8, "cols": 12, "cellSize": 64 },
-  "regions": [
+  "districts": [
     {
-      "id": "downtown",
       "name": "Downtown",
       "color": "#5e8edd",
-      "basePopulation": 50,
-      "bonus": "service"
+      "specialty": "service"
     }
   ],
   "cells": [
@@ -90,7 +88,7 @@ class Region {
       "x": 0, "y": 0,
       "type": "property",
       "subType": null,
-      "district": "downtown",
+      "district": "Downtown",   // must match a name in the districts array
       "purchasePrice": 200
     }
   ],
@@ -111,7 +109,7 @@ Notes:
 
 `games/Acca/systems/MapLoader.js` must validate:
 
-- Every `cell.district` references a `regions[].id` (or is null).
+- Every `cell.district` references a `districts[].name` (or is null).
 - Every `connection.from` / `to` references a real cell.
 - The connection graph is connected (BFS from `spawnCellId` reaches every cell that's marked reachable).
 - Every region has at least one purchasable cell (otherwise mayoring it is impossible).

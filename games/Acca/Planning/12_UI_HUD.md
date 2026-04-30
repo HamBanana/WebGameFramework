@@ -7,19 +7,15 @@ The reference for the default layout is `Planning/defaultinterface.png`. This do
 Canvas size: 1024 × 576 (from `cfg.engine`).
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│ TOP BAR  — name | money | net worth | resources strip             │  ~64px
-├───────────────────────────────────────────────────────────────────┤
-│                                              ┌──────────────────┐ │
-│                                              │   PLAYERS PANEL  │ │
-│              MAP VIEW (centered)             │  (per-player     │ │
-│                                              │   summary)       │ │
-│                                              ├──────────────────┤ │
-│                                              │   LOG / EVENTS   │ │
-│                                              └──────────────────┘ │
-├───────────────────────────────────────────────────────────────────┤
-│ BOTTOM STRIP — die preview · stage label · contextual hints       │  ~48px
-└───────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TOP BAR  — name | money | net worth | resources strip                        │  ~48px
+├──────────────────┬───────────────────────────────┬──────────────────────────┤
+│  DISTRICTS       │                               │  PLAYERS PANEL           │
+│  SIDEBAR (left)  │       MAP VIEW (canvas)        │  (per-player summary)    │
+│  · district name │                               ├──────────────────────────┤
+│  · pop / hap     │                               │  LOG / EVENTS            │
+│  · tax / mayor   │                               │                          │
+└──────────────────┴───────────────────────────────┴──────────────────────────┘
 ```
 
 The current `_drawHUD` already implements a similar structure; this plan formalises it and adds the top-bar resource strip.
@@ -39,22 +35,31 @@ The strip width must scale to canvas width without overlapping the right-side pa
 
 Center-of-screen rectangle bounded by board extents + 16px padding. Renders:
 
-- Region tinting (semi-transparent rect under cells using `region.color`).
+- District tinting (semi-transparent rect behind each district's cells using `district.color`).
 - Cells (sprite-driven).
 - Owner ring (3px, `player.color`).
 - Business stack — small icons at top-right of each owned cell, max 5.
-- Population badge — anchored to a region's centroid, shows population/happiness/tax.
 - Movement highlights — pulsing yellow border on neighbors of `currentCell` during MOVE.
 - Player tokens — staggered.
 
-## 12.4 Players panel (right side)
+## 12.4 Left sidebar — Districts
+
+A DOM panel (`#districtSidebar`) showing a scrollable list of all districts, updated each frame via `AccaGame._renderDistrictSidebar()`. Per district:
+
+- District name (colored border strip matching `district.color`).
+- Specialty resource tag.
+- Population and happiness (color-coded: green ≥ 70, yellow ≥ 40, orange ≥ 20, red below).
+- Tax rate and buildings owned/total.
+- Mayor name (colored dot + name, or "No mayor" in muted text).
+
+## 12.5 Players panel (right side)
 
 For each player (active player highlighted):
 
 - Color bar accent.
 - Token preview sprite.
 - Name + bankrupt badge.
-- Cash, total value, property count, regions mayored, level.
+- Cash, total value, property count, districts mayored, level.
 
 For 4 players, panel rows scale to 56px each. Selecting a player (gamepad LB/RB) opens a read-only **Player Details** modal — useful for quickly evaluating opponents before a trade.
 
@@ -83,7 +88,7 @@ Each modal advertises its keys at the bottom: `↑↓ select   Enter confirm   E
 - Priority levels: `info`, `success`, `warning`, `danger`.
 - Default duration: 3.5s.
 - Pause on hover (mouse) or when modal is open.
-- Subscribes to events for: `chance:drawn`, `region:mayorChanged`, `business:sabotaged`, `population:migrated` (only big migrations), `market:priceChanged` (only when ≥ 25% delta).
+- Subscribes to events for: `chance:drawn`, `district:mayorChanged`, `business:sabotaged`, `population:migrated` (only big migrations), `market:priceChanged` (only when ≥ 25% delta).
 
 ## 12.8 Title screen
 

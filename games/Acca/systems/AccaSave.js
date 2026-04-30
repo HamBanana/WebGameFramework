@@ -20,7 +20,7 @@
       isBankrupt: p.isBankrupt,
       resources: Object.assign({}, p.resources),
       currentCellId: p.currentCell && p.currentCell.id,
-      regionsMayoredOf: Array.from(p.regionsMayoredOf || []),
+      districtsMayoredOf: Array.from(p.districtsMayoredOf || []),
       ownedStructureCellIds: p.ownedStructures.map(s => s.cell && s.cell.id),
       companyId: p.company && p.company.id,
       companyName: p.company && p.company.name,
@@ -46,7 +46,7 @@
       currentPlayerIndex: game.currentPlayerIndex,
       players,
       cells,
-      regions:  game.regionSys  && game.regionSys.serialize(),
+      districts: game.districtSys && game.districtSys.serialize(),
       market:   game.marketSys  && game.marketSys.serialize(),
       chance:   game.chanceSys  && game.chanceSys.serialize(),
       trade:    game.tradeSys   && game.tradeSys.serialize(),
@@ -97,7 +97,7 @@
       p.resources   = Object.assign({}, snap.resources);
       const cell    = cellById.get(snap.currentCellId);
       if (cell) p.currentCell = cell;
-      (snap.regionsMayoredOf || []).forEach(r => p.regionsMayoredOf.add(r));
+      (snap.districtsMayoredOf || []).forEach(r => p.districtsMayoredOf.add(r));
       if (snap.companyId) {
         p.company = { id: snap.companyId, name: snap.companyName, industry: snap.companyIndustry };
       }
@@ -108,11 +108,11 @@
     game.eventLog = (data.log || []).slice();
     game.cooperativeThreat = data.cooperativeThreat || 0;
 
-    if (game.regionSys) game.regionSys.deserialize(data.regions);
-    if (game.marketSys) game.marketSys.deserialize(data.market);
-    if (game.chanceSys) game.chanceSys.deserialize(data.chance);
-    if (game.tradeSys)  game.tradeSys.deserialize(data.trade);
-    if (game.regionSys) game.regionSys.recomputeAll();
+    if (game.districtSys) game.districtSys.deserialize(data.districts);
+    if (game.marketSys)   game.marketSys.deserialize(data.market);
+    if (game.chanceSys)   game.chanceSys.deserialize(data.chance);
+    if (game.tradeSys)    game.tradeSys.deserialize(data.trade);
+    if (game.districtSys) game.districtSys.recomputeAll();
     return true;
   }
 

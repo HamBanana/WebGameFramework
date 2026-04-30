@@ -6,15 +6,15 @@
   GF.Acca = GF.Acca || {};
 
   class PopulationSystem {
-    constructor(cfg, eventBus, regionSystem) {
-      this.cfg     = cfg;
-      this.events  = eventBus;
-      this.regions = regionSystem;
+    constructor(cfg, eventBus, districtSystem) {
+      this.cfg       = cfg;
+      this.events    = eventBus;
+      this.districts = districtSystem;
     }
 
-    /** End-of-turn tick — applies to every region. */
+    /** End-of-turn tick — applies to every district. */
     tick(turn, players) {
-      const list = this.regions.list();
+      const list = this.districts.list();
       // 1. Happiness drift
       list.forEach(r => this._stepHappiness(r, turn, players));
       // 2. Growth/decline
@@ -71,7 +71,7 @@
       r.happiness = old + (target - old) * c.happinessLerp;
       if (Math.abs(r.happiness - old) >= 1) {
         this.events.emit('population:happinessChanged', {
-          region: r, oldH: old, newH: r.happiness, target,
+          district: r, oldH: old, newH: r.happiness, target,
         });
       }
     }
@@ -134,7 +134,7 @@
       });
     }
 
-    /** Sum of jobs offered by structures in region. */
+    /** Sum of jobs offered by structures in district. */
     _jobsInRegion(r) {
       const sCfg = this.cfg.structures;
       let jobs = 0;

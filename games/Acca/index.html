@@ -8,19 +8,20 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --topbar-h: 48px;
-      --sidebar-w: 256px;
-      --map-w: 768px;
-      --map-h: 528px;
-      --total-w: 1024px;
-      --total-h: 576px;
-      --bg-deep: #05080d;
-      --panel-bg: rgba(0, 0, 0, 0.65);
-      --panel-border: #2a4060;
-      --accent: #5a8ed1;
-      --accent-light: #9fc8ff;
-      --text: #e6edf5;
-      --text-dim: #9aa5b1;
+      --topbar-h      : 48px;
+      --left-sidebar-w: 220px;
+      --map-w         : 768px;
+      --map-h         : 528px;
+      --right-sidebar-w: 256px;
+      --total-w       : 1244px;   /* left-sidebar + map + right-sidebar */
+      --total-h       : 576px;
+      --bg-deep       : #05080d;
+      --panel-bg      : rgba(0, 0, 0, 0.65);
+      --panel-border  : #2a4060;
+      --accent        : #5a8ed1;
+      --accent-light  : #9fc8ff;
+      --text          : #e6edf5;
+      --text-dim      : #9aa5b1;
     }
 
     body {
@@ -40,10 +41,10 @@
       height: var(--total-h);
       display: grid;
       grid-template-rows: var(--topbar-h) 1fr;
-      grid-template-columns: var(--map-w) var(--sidebar-w);
+      grid-template-columns: var(--left-sidebar-w) var(--map-w) var(--right-sidebar-w);
       grid-template-areas:
-        "topbar topbar"
-        "map sidebar";
+        "topbar  topbar topbar"
+        "districts map   sidebar";
       background: linear-gradient(180deg, #1a2330 0%, #0a0d12 100%);
       border: 2px solid rgba(80, 130, 200, 0.4);
       box-shadow: 0 0 40px rgba(40, 90, 180, 0.5);
@@ -119,6 +120,7 @@
       width: var(--map-w);
       height: var(--map-h);
       overflow: hidden;
+      border-left: 2px solid var(--panel-border);
       border-right: 2px solid var(--panel-border);
     }
     #gameCanvas {
@@ -129,7 +131,103 @@
       height: var(--map-h);
     }
 
-    /* ── Sidebar ─────────────────────────────────────────────────────── */
+    /* ── Left sidebar — Districts ────────────────────────────────────── */
+    #districtSidebar {
+      grid-area: districts;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 6px;
+      background: rgba(8, 12, 18, 0.85);
+      border-right: 1px solid var(--panel-border);
+    }
+
+    #districtSidebar .panel {
+      flex: 1;
+      background: var(--panel-bg);
+      border: 2px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #districtList {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 10px;
+    }
+
+    .dist-row {
+      padding: 5px 4px;
+      margin-bottom: 5px;
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 3px;
+    }
+
+    .dist-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 3px;
+    }
+
+    .dist-name {
+      font-weight: bold;
+      font-size: 10px;
+      color: var(--text);
+      border-left: 3px solid #666;
+      padding-left: 5px;
+    }
+
+    .dist-tag {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      padding: 1px 4px;
+    }
+
+    .dist-body { padding-left: 8px; }
+
+    .dist-line {
+      color: var(--text-dim);
+      font-size: 10px;
+      line-height: 1.5;
+    }
+    .dist-line strong { color: var(--text); }
+
+    .dist-mood        { font-weight: bold; }
+    .dist-mood-happy  { color: #7be07f; }
+    .dist-mood-ok     { color: #ffe57a; }
+    .dist-mood-sad    { color: #ff9f6b; }
+    .dist-mood-angry  { color: #ff6b6b; }
+
+    .dist-mayor-line {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 1px;
+    }
+    .dist-mayor-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dim { color: #4a5568; }
+
+    #districtList::-webkit-scrollbar { width: 4px; }
+    #districtList::-webkit-scrollbar-thumb {
+      background: rgba(120, 160, 220, 0.3);
+      border-radius: 2px;
+    }
+
+    /* ── Right sidebar ───────────────────────────────────────────────── */
     #sidebar {
       grid-area: sidebar;
       display: grid;
@@ -243,12 +341,20 @@
       <div class="tb-cell" id="tb-resources" style="grid-column: 4;"></div>
     </div>
 
+    <!-- Left sidebar: district information -->
+    <div id="districtSidebar">
+      <div class="panel">
+        <div class="panel-title">Districts</div>
+        <div id="districtList"></div>
+      </div>
+    </div>
+
     <!-- Map (game canvas) -->
     <div id="mapWrap">
       <canvas id="gameCanvas" width="768" height="528"></canvas>
     </div>
 
-    <!-- Sidebar: notifications + player list -->
+    <!-- Right sidebar: notifications + player list -->
     <div id="sidebar">
       <div class="panel">
         <div class="panel-title">Notifications</div>
@@ -282,7 +388,7 @@
 
   <!-- ── Systems (Planning §6–§11) ───────────────────────────────── -->
   <script src="systems/MarketSystem.js"></script>
-  <script src="systems/RegionSystem.js"></script>
+  <script src="systems/DistrictSystem.js"></script>
   <script src="systems/PopulationSystem.js"></script>
   <script src="systems/ChanceSystem.js"></script>
   <script src="systems/TradeSystem.js"></script>

@@ -61,13 +61,19 @@ This doc is the canonical schema reference. When code and this doc disagree, the
     oilPerMigrationUnit,
   },
 
-  region: {
+  district: {
+    // A district is a named group of squares. Wholly owning one grants Mayorship.
     taxBase,
     maxTaxRate,
+    defaultTaxRate,
+    defaultPopulation,
     festivalCost,
     festivalDuration,
+    festivalHappiness,
     grantPopulation,
     grantCost,
+    grantCooldown,
+    festivalCooldown,
   },
 
   industries: { types: [...], bonus: { … }, changeCost, newCompanyCost },
@@ -135,7 +141,7 @@ See `03_BoardAndCells.md §3.4`. Schema version is `2`. `MapLoader.js` rejects o
       "companies": [
         { "id":"coA","name":"Hamco","industry":"general","propertyIds":["c4","c5"] }
       ],
-      "regionsMayoredOf": []
+      "districtsMayoredOf": []
     }
   ],
   "cells": [
@@ -149,9 +155,9 @@ See `03_BoardAndCells.md §3.4`. Schema version is `2`. `MapLoader.js` rejects o
       ]
     }
   ],
-  "regions": [
-    { "id":"downtown","population":48,"happiness":52,"taxRate":0.10,"mayorIndex":-1,
-      "festivalUntil":-1,"grantCooldownUntil":-1 }
+  "districts": [
+    { "id":"District A","population":48,"happiness":52,"taxRate":0.10,"mayorIndex":-1,
+      "festivalUntilTurn":-1,"grantCooldownUntil":-1,"festivalCooldownUntil":-1 }
   ],
   "market": {
     "prices": { "wood":24, "steel":52, "electricity":35, "water":21, "food":29, "coal":40, "oil":81 },

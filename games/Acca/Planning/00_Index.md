@@ -19,7 +19,7 @@ The planning set is split into self-contained documents. Read them in order for 
 | 06 | `06_ResourcesAndMarket.md` | The 7 resources, production, market dynamics, pricing. |
 | 07 | `07_Companies.md` | Company creation, industry bonuses, multiple companies. |
 | 08 | `08_Population.md` | Population dynamics, happiness, employment, migration. |
-| 09 | `09_RegionsAndMayors.md` | Regional control, Mayor role, taxes, mayor loss. |
+| 09 | `09_DistrictsAndMayors.md` | District control, Mayor role, taxes, mayor loss. |
 | 10 | `10_ChanceEvents.md` | Chance pool, event categories, weighting. |
 | 11 | `11_TradingAndSabotage.md` | Trades, hostile takeovers, sabotage. |
 | 12 | `12_UI_HUD.md` | HUD layout, menus, dialog/notification design. |
@@ -45,8 +45,9 @@ The planning set is split into self-contained documents. Read them in order for 
 - **Property** — a buyable cell that hosts a player's businesses.
 - **Business** — an income/resource-producing structure built inside a property.
 - **Player structure** — a standalone buyable cell with its own built-in mechanic (shop, toll gate, teleporter, house, factory, police station, vault). Coexists with properties on the board; see `05_PropertiesAndBusinesses.md` §5.9.
-- **Region (district)** — a named group of cells. Wholly owning it grants Mayorship.
-- **Mayor** — the player who owns every property in a region; collects taxes.
+- **District** — a named group of squares. `cell.district` holds the district id. Wholly owning all buildable squares grants Mayorship. Managed by `DistrictSystem`.
+- **Region** — a higher-level grouping of districts (future feature, not yet implemented).
+- **Mayor** — the player who owns every buildable square in a district; collects taxes.
 - **Company** — a player-owned grouping of properties. Players may run multiple companies.
 - **Turn stage** — a phase inside a player's turn (TurnStart → Roll → Move → ConfirmLand → Landing → LandPrompt → EndTurn).
 - **GF** — the framework namespace exposed on `window.GF` by `framework/GameFramework.bundle.js`.

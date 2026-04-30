@@ -10,7 +10,7 @@
       this.cfg     = cfg.chance;
       this.fullCfg = cfg;
       this.events  = eventBus;
-      this.hooks   = hooks || {};   // { regionSystem, players, getCurrentPlayer, getLeader, getLowestCash, sabotageProperty, modifyDie }
+      this.hooks   = hooks || {};   // { districtSystem, players, getCurrentPlayer, getLeader, getLowestCash, sabotageProperty, modifyDie }
       this.recentlyDrawn = [];
       this.dieOverride   = null;    // { min, max, forIndex }
     }
@@ -81,7 +81,7 @@
         }
 
         case 'migration_in': {
-          const regionSys = this.hooks.regionSystem;
+          const regionSys = this.hooks.districtSystem;
           if (!regionSys) break;
           let target = null;
           if (event.scope === 'self') {
@@ -160,7 +160,7 @@
     }
 
     _regionScopeApply(scope, active, fn) {
-      const regionSys = this.hooks.regionSystem;
+      const regionSys = this.hooks.districtSystem;
       if (!regionSys) return;
       switch (scope) {
         case 'mayor':
