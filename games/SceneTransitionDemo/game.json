@@ -1,0 +1,32 @@
+{
+  "id": "SceneTransitionDemo",
+  "title": "Orb Catcher",
+  "icon": "🔮",
+  "color": "#6c5ce7",
+  "tags": ["DEMO", "ARCADE", "CLICK"],
+  "desc": "Click bouncing orbs to score before time runs out. Showcases all four built-in scene transitions: iris, fade, wipe, and flash.",
+  "config": [
+    {
+      "key": "Round Duration",
+      "help": "How many seconds each round lasts.",
+      "opts": ["15s", "30s", "60s"],
+      "def": "30s",
+      "apply": {
+        "15s": { "game": { "duration": 15 } },
+        "30s": { "game": { "duration": 30 } },
+        "60s": { "game": { "duration": 60 } }
+      }
+    },
+    {
+      "key": "Orb Speed",
+      "help": "How fast the orbs bounce around.",
+      "opts": ["Slow", "Normal", "Fast"],
+      "def": "Normal",
+      "apply": {
+        "Slow":   { "game": { "orbSpeed": { "min": 30,  "max": 70  } } },
+        "Normal": { "game": { "orbSpeed": { "min": 55,  "max": 120 } } },
+        "Fast":   { "game": { "orbSpeed": { "min": 100, "max": 200 } } }
+      }
+    }
+  ]
+}
