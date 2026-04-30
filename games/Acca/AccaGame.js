@@ -1103,7 +1103,7 @@
     }
   }
 
-  // ── Bootstrap ────────────────────────────────────────────────────────────
+  // -- Bootstrap --
   // Fetch config.json to discover the map path, then fetch and store the map
   // data on GF.mapData before the game object is created.
 

@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-04-30T12:33:23.334Z
+// Built: 2026-04-30T17:18:28.683Z
 // Source: framework/build.js
 // Include as: <script src="../../framework/GameFramework.bundle.js"></script>
 
@@ -3877,6 +3877,8 @@
   GF._frameworkBase = (function () {
     var s = document.currentScript;
     if (!s) {
+      // Fallback for browsers that don't support currentScript (e.g. old IE):
+      // walk the script list backwards and pick the first GameFramework entry.
       var all = document.querySelectorAll('script[src]');
       for (var i = all.length - 1; i >= 0; i--) {
         if (all[i].src.indexOf('GameFramework') !== -1) { s = all[i]; break; }

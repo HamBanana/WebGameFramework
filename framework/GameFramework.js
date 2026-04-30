@@ -122,3 +122,23 @@
   console.log('%cGameFramework v' + GF.VERSION + ' loaded', 'color:#00e5ff;font-weight:bold');
 
 })(window.GF = window.GF || {});
+rray.isArray(val)) {
+        if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+        _deepMerge(target[key], val);
+      } else {
+        target[key] = val;
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
+    });
+  } else {
+    window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
+  }
+
+  console.log('%cGameFramework v' + GF.VERSION + ' loaded', 'color:#00e5ff;font-weight:bold');
+
+})(window.GF = window.GF || {});
