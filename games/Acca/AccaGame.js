@@ -30,11 +30,12 @@
   //  Cell
   // ──────────────────────────────────────────────────────────────────────────
   class Cell {
-    constructor(row, col, type, regionId, sprite) {
-      this.row       = row;
-      this.col       = col;
-      this.type      = type;     // 'S' | 'P' | 'C' | 'M' | '.'
-      this.regionId  = regionId;
+    constructor(id, x, y, type, district, sprite) {
+      this.id        = id;
+      this.x         = x;
+      this.y         = y;
+      this.type      = type;     // 'bank' | 'property' | 'chance' | 'empty'
+      this.district  = district; // district name or null
       this.sprite    = sprite;   // sprite name registered with SpriteSystem
 
       // Neighbors (linked by GameManager during setup)
@@ -43,7 +44,10 @@
       this.left  = null;
       this.right = null;
 
-      // Property state (only meaningful for type === 'P')
+      // Flexible neighbor list (populated from connections)
+      this._neighbors = [];
+
+      // Property state (only meaningful for type === 'property')
       this.ownerIndex = -1;      // player index, or -1 if unowned
       this.purchasePrice = 0;    // base price; set during init
 
@@ -51,9 +55,9 @@
       this.animator = null;
     }
 
-    /** Return list of non-null neighbors. */
+    /** Return list of neighbors. */
     neighbors() {
-      return [this.up, this.down, this.left, this.right].filter(c => c);
+      return this._neighbors;
     }
   }
 
@@ -346,25 +350,21 @@
     _handleLanding() {
       const cell = this.player.currentCell;
       switch (cell.type) {
-        case 'S': // start
+        case 'bank':
           this.player.addMoney(200);
-          this.game.log(`${this.player.name} passed Start. +$200.`);
+          this.game.log(`${this.player.name} passed the Bank. +$200.`);
           this.enter(TURN_STAGE.END_TURN);
           break;
 
-        case 'P': // property
+        case 'property':
           this._handleProperty(cell);
           break;
 
-        case 'C': // chance
+        case 'chance':
           this._handleChance();
           break;
 
-        case 'M': // market
-          this._handleMarket();
-          break;
-
-        default:  // normal
+        default:  // empty or other
           this.enter(TURN_STAGE.END_TURN);
           break;
       }
@@ -388,8 +388,8 @@
               p.addMoney(-price);
               cell.ownerIndex = p.index;
               p.ownedCells.push(cell);
-              this.game.checkMayor(p, cell.regionId);
-              this.game.log(`${p.name} bought a property in ${cell.regionId} for $${price}.`);
+              this.game.checkMayor(p, cell.district);
+              this.game.log(`${p.name} bought a property in ${cell.district} for $${price}.`);
               this.enter(TURN_STAGE.END_TURN);
             },
           });
@@ -401,7 +401,7 @@
         }
         opts.push({ label: 'Skip', action: () => this.enter(TURN_STAGE.END_TURN) });
 
-        this.menu.show(`Property in ${cell.regionId}`, opts);
+        this.menu.show(`Property in ${cell.district}`, opts);
         return;
       }
 
@@ -414,7 +414,7 @@
       // Owned by another player → pay rent
       const owner = this.game.players[cell.ownerIndex];
       let rent    = this.game.cfg.property.baseRent;
-      if (owner.regionsMayoredOf.has(cell.regionId)) {
+      if (owner.regionsMayoredOf.has(cell.district)) {
         rent += this.game.cfg.property.mayorBonus;
       }
       p.addMoney(-rent);
@@ -531,16 +531,20 @@
     }
 
     cellLabel(cell) {
-      const labels = {
-        'S': 'the Start tile',
-        'P': cell.ownerIndex === -1
-              ? `an unowned property in ${cell.regionId}`
-              : `${this.players[cell.ownerIndex].name}'s property in ${cell.regionId}`,
-        'C': 'a Chance tile',
-        'M': 'a Market tile',
-        '.': 'an open tile',
-      };
-      return labels[cell.type] || 'a tile';
+      switch (cell.type) {
+        case 'bank':
+          return 'the Bank';
+        case 'chance':
+          return 'a Chance tile';
+        case 'property':
+          return cell.ownerIndex === -1
+            ? `an unowned property in ${cell.district}`
+            : `${this.players[cell.ownerIndex].name}'s property in ${cell.district}`;
+        case 'empty':
+          return 'an open tile';
+        default:
+          return 'a tile';
+      }
     }
 
     get currentPlayer() {
@@ -551,43 +555,108 @@
     //  Setup
     // ─────────────────────────────────────────────────────────────────────
     _initBoard() {
-      const { cellSize, originX, originY, layout, regions, cellSprite } = this.cfg.board;
+      const { cellSize, originX, originY } = this.cfg.board;
+      const { cells, connections } = GF.mapData;
 
       this.cells = [];
       this.grid  = [];
 
-      for (let r = 0; r < layout.length; r++) {
-        const rowArr = [];
-        for (let c = 0; c < layout[r].length; c++) {
-          const code = layout[r][c];
-          const sprite = cellSprite[code] || 'cell_normal';
-          const region = (regions && regions[r] && regions[r][c]) || 'X';
-          const cell = new Cell(r, c, code, region, sprite);
-
-          cell.purchasePrice = this.cfg.property.basePrice;
-          cell.animator = this.sprites.createAnimator(sprite, 'idle');
-
-          rowArr.push(cell);
-          this.cells.push(cell);
+      // Build cell map and create Cell objects
+      const cellById = new Map();
+      cells.forEach(c => {
+        // Determine sprite and gameType based on cell type
+        let sprite, gameType;
+        if (c.type === 'bank') {
+          sprite = 'cell_start';
+          gameType = 'bank';
+        } else if (c.type === 'chance') {
+          sprite = 'cell_chance';
+          gameType = 'chance';
+        } else if (c.type === 'empty') {
+          if (c.district !== null) {
+            sprite = 'cell_property';
+            gameType = 'property';
+          } else {
+            sprite = 'cell_normal';
+            gameType = 'empty';
+          }
         }
-        this.grid.push(rowArr);
-      }
 
-      // Link neighbors
-      for (let r = 0; r < this.grid.length; r++) {
-        for (let c = 0; c < this.grid[r].length; c++) {
-          const cell = this.grid[r][c];
-          cell.up    = (r > 0)                       ? this.grid[r - 1][c] : null;
-          cell.down  = (r < this.grid.length - 1)    ? this.grid[r + 1][c] : null;
-          cell.left  = (c > 0)                       ? this.grid[r][c - 1] : null;
-          cell.right = (c < this.grid[r].length - 1) ? this.grid[r][c + 1] : null;
+        const cell = new Cell(c.id, c.x, c.y, gameType, c.district, sprite);
+        cell.purchasePrice = this.cfg.property.basePrice;
+        cell.animator = this.sprites.createAnimator(sprite, 'idle');
+
+        this.cells.push(cell);
+        cellById.set(c.id, cell);
+      });
+
+      // Wire _neighbors from connections
+      connections.forEach(conn => {
+        const fromCell = cellById.get(conn.from);
+        const toCell = cellById.get(conn.to);
+
+        if (!fromCell || !toCell) return;
+
+        if (conn.direction === 'both') {
+          if (!fromCell._neighbors.includes(toCell)) fromCell._neighbors.push(toCell);
+          if (!toCell._neighbors.includes(fromCell)) toCell._neighbors.push(fromCell);
+        } else if (conn.direction === 'forward') {
+          if (!fromCell._neighbors.includes(toCell)) fromCell._neighbors.push(toCell);
         }
-      }
+      });
+
+      // Assign directional slots (up/down/left/right) spatially
+      this.cells.forEach(cell => {
+        const candidates = { up: [], down: [], left: [], right: [] };
+
+        cell._neighbors.forEach(neighbor => {
+          const dx = neighbor.x - cell.x;
+          const dy = neighbor.y - cell.y;
+          const angle = Math.atan2(dy, dx);
+
+          // Determine primary direction by dominant axis
+          let direction;
+          if (Math.abs(dy) > Math.abs(dx)) {
+            // Vertical dominant
+            direction = dy > 0 ? 'down' : 'up';
+          } else {
+            // Horizontal dominant
+            direction = dx > 0 ? 'right' : 'left';
+          }
+
+          candidates[direction].push({ neighbor, angle });
+        });
+
+        // For each direction, pick the best candidate (closest to cardinal angle)
+        const cardinalAngles = {
+          up: Math.PI / 2,
+          down: -Math.PI / 2,
+          left: Math.PI,
+          right: 0,
+        };
+
+        Object.entries(candidates).forEach(([dir, cands]) => {
+          if (cands.length > 0) {
+            const cardinal = cardinalAngles[dir];
+            let best = cands[0];
+            let bestDev = Math.abs(((cands[0].angle - cardinal + Math.PI) % (2 * Math.PI)) - Math.PI);
+
+            for (let i = 1; i < cands.length; i++) {
+              const dev = Math.abs(((cands[i].angle - cardinal + Math.PI) % (2 * Math.PI)) - Math.PI);
+              if (dev < bestDev) {
+                best = cands[i];
+                bestDev = dev;
+              }
+            }
+            cell[dir] = best.neighbor;
+          }
+        });
+      });
 
       // Cache board-pixel converter
-      this._toPixel = (row, col) => ({
-        x: originX + col * cellSize + cellSize / 2,
-        y: originY + row * cellSize + cellSize / 2,
+      this._toPixel = (cell) => ({
+        x: originX + cell.x,
+        y: originY + cell.y,
       });
       this._cellSize = cellSize;
     }
@@ -595,7 +664,7 @@
     _initPlayers() {
       this.players = [];
       // Find the start cell
-      const startCell = this.cells.find(c => c.type === 'S') || this.cells[0];
+      const startCell = this.cells.find(c => c.type === 'bank') || this.cells[0];
 
       const count = Math.min(this.menuPlayerCount, this.cfg.players.length);
       for (let i = 0; i < count; i++) {
@@ -617,7 +686,7 @@
     // ─────────────────────────────────────────────────────────────────────
     checkMayor(player, regionId) {
       const regionCells = this.cells.filter(
-        c => c.regionId === regionId && c.type === 'P'
+        c => c.district === regionId && c.type === 'property'
       );
       const allOwned = regionCells.every(c => c.ownerIndex === player.index);
       if (allOwned) {
@@ -770,25 +839,37 @@
       const { originX, originY } = this.cfg.board;
       const size = this._cellSize;
 
-      // Board frame
-      const boardW = this.grid[0].length * size;
-      const boardH = this.grid.length    * size;
-      this.ui.drawPanel(ctx, originX - 8, originY - 8, boardW + 16, boardH + 16, {
-        bgColor: 'rgba(0,0,0,0.55)',
-        borderColor: '#2a4060',
-        borderWidth: 2,
-        radius: 6,
-      });
+      // Calculate bounding box from cell positions
+      if (this.cells.length > 0) {
+        let minX = this.cells[0].x, maxX = this.cells[0].x;
+        let minY = this.cells[0].y, maxY = this.cells[0].y;
+        this.cells.forEach(cell => {
+          minX = Math.min(minX, cell.x);
+          maxX = Math.max(maxX, cell.x);
+          minY = Math.min(minY, cell.y);
+          maxY = Math.max(maxY, cell.y);
+        });
+
+        // Board frame (with padding)
+        const boardW = maxX - minX + size;
+        const boardH = maxY - minY + size;
+        this.ui.drawPanel(ctx, originX + minX - size / 2 - 8, originY + minY - size / 2 - 8, boardW + 16, boardH + 16, {
+          bgColor: 'rgba(0,0,0,0.55)',
+          borderColor: '#2a4060',
+          borderWidth: 2,
+          radius: 6,
+        });
+      }
 
       // Cells
       this.cells.forEach(cell => {
-        const { x, y } = this._toPixel(cell.row, cell.col);
+        const { x, y } = this._toPixel(cell);
         // Cell sprite origin is centered on its 64×64 frame, so drawing
         // at the cell's center coordinate aligns the tile perfectly.
         cell.animator.draw(ctx, x, y);
 
         // Owner ring on properties
-        if (cell.type === 'P' && cell.ownerIndex >= 0) {
+        if (cell.type === 'property' && cell.ownerIndex >= 0) {
           const owner = this.players[cell.ownerIndex];
           ctx.strokeStyle = owner.color;
           ctx.lineWidth   = 3;
@@ -812,7 +893,7 @@
     _drawTokens(ctx) {
       this.players.forEach(p => {
         if (!p.currentCell) return;
-        const { x, y } = this._toPixel(p.currentCell.row, p.currentCell.col);
+        const { x, y } = this._toPixel(p.currentCell);
         p.animator.draw(ctx, x + p.moveOffset.x, y + p.moveOffset.y + 8);
       });
     }
@@ -1023,8 +1104,18 @@
   }
 
   // ── Bootstrap ────────────────────────────────────────────────────────────
+  // Fetch config.json to discover the map path, then fetch and store the map
+  // data on GF.mapData before the game object is created.
 
-  function init() {
+  async function init() {
+    try {
+      const mapPath = GF.GAME_CONFIG.board.map;
+      const mapRes  = await fetch(mapPath);
+      GF.mapData    = await mapRes.json();
+    } catch (e) {
+      console.error('[Acca] Failed to load map data:', e);
+    }
+
     const game = new AccaGame();
     game.start();
     window._accaGame = game; // expose for debugging

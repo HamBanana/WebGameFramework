@@ -1,44 +1,11 @@
 // GameFramework/games/Acca/config.js
 // Game-specific configuration for Acca.
 // Sprite NAMES only — no asset paths.
+// Map layout, regions, and cell-type sprites are defined in the map file
+// referenced by GAME_CONFIG.board.map below.
 
 (function (GF) {
   'use strict';
-
-  // Cell type code map for the board layout below.
-  //   S = start
-  //   P = property
-  //   C = chance
-  //   M = market
-  //   . = normal (empty walkway)
-  const BOARD_LAYOUT = [
-    ['S', 'P', 'P', 'C', 'P', 'P', 'P', 'P'],
-    ['P', '.', '.', '.', '.', '.', '.', 'P'],
-    ['P', '.', 'M', '.', '.', 'C', '.', 'P'],
-    ['P', 'C', '.', '.', 'M', '.', '.', 'P'],
-    ['P', '.', '.', 'C', '.', '.', '.', 'P'],
-    ['P', 'P', 'P', 'P', 'M', 'P', 'P', 'P'],
-  ];
-
-  // Region map: same shape as BOARD_LAYOUT — labels each cell with a region id.
-  // Mayor of a region is the player who owns every property in it.
-  const REGION_MAP = [
-    ['NW','NW','NW','NW','NE','NE','NE','NE'],
-    ['NW','NW','NW','NW','NE','NE','NE','NE'],
-    ['NW','NW','NW','NW','NE','NE','NE','NE'],
-    ['SW','SW','SW','SW','SE','SE','SE','SE'],
-    ['SW','SW','SW','SW','SE','SE','SE','SE'],
-    ['SW','SW','SW','SW','SE','SE','SE','SE'],
-  ];
-
-  // Map sprite names to cell type codes used above.
-  const CELL_TYPE_SPRITE = {
-    'S': 'cell_start',
-    'P': 'cell_property',
-    'C': 'cell_chance',
-    'M': 'cell_market',
-    '.': 'cell_normal',
-  };
 
   GF.GAME_CONFIG = {
 
@@ -60,13 +27,13 @@
     },
 
     // ── Board ───────────────────────────────────────────────────────────────
+    // map: path to the JSON map file (layout, regions, cellSprite, graph data).
+    // Only rendering constants live here alongside it.
     board: {
-      cellSize  : 64,
-      originX   : 32,
-      originY   : 80,
-      layout    : BOARD_LAYOUT,
-      regions   : REGION_MAP,
-      cellSprite: CELL_TYPE_SPRITE,
+      map     : 'maps/default.json',
+      cellSize: 64,
+      originX : 32,
+      originY : 80,
     },
 
     // ── Players ─────────────────────────────────────────────────────────────
