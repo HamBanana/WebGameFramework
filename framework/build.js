@@ -26,6 +26,9 @@ var FILES = [
   'systems/DebugOverlay.js',
   'systems/DialogueSystem.js',
   'systems/ModelSystem.js',
+  'systems/GridSystem.js',
+  'systems/TurnBasedBattleSystem.js',
+  'systems/MenuSystem.js',
   'GameFramework.js',
 ];
 

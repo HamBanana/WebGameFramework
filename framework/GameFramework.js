@@ -2,16 +2,13 @@
 (function (GF) {
   'use strict';
 
-  GF.VERSION = '2.1.0';
+  GF.VERSION = '2.2.0';
 
   // Auto-detect the directory this bundle was loaded from so that
   // GF.resolvePath() works regardless of where the game lives on disk.
-  // Games no longer need to declare frameworkPath in GAME_CONFIG.
   GF._frameworkBase = (function () {
     var s = document.currentScript;
     if (!s) {
-      // Fallback for browsers that don't support currentScript (e.g. old IE):
-      // walk the script list backwards and pick the first GameFramework entry.
       var all = document.querySelectorAll('script[src]');
       for (var i = all.length - 1; i >= 0; i--) {
         if (all[i].src.indexOf('GameFramework') !== -1) { s = all[i]; break; }
@@ -21,7 +18,6 @@
     return '/framework';
   }());
 
-  // Resolve a path relative to the framework folder.
   GF.resolvePath = function (relativePath) {
     var base = GF._frameworkBase.replace(/\/$/, '');
     return base + '/' + relativePath.replace(/^\//, '');
@@ -37,13 +33,14 @@
     var useDebug     = opts.debug     !== false;
     var useDialogue  = opts.dialogue  !== false;
     var useModels    = !!opts.models;
+    var useGrids     = opts.grids     !== false;
+    var useBattle    = opts.battle    !== false;
 
     var engine  = new GF.Engine(engineConfig);
     var sprites = new GF.SpriteSystem();
     var physics = new GF.PhysicsSystem(physicsConfig);
     var ui      = GF.UISystem;
 
-    // SaveSystem is always created; namespace defaults to opts.gameName or 'GF'.
     var saveOpts = Object.assign({ namespace: opts.gameName || 'GF' }, opts.saveOpts || {});
     var save = new GF.SaveSystem(saveOpts);
 
@@ -58,7 +55,8 @@
     var tilemap   = useTilemap   ? new GF.TilemapSystem()                              : null;
     var dialogue  = useDialogue  ? new GF.DialogueSystem(opts.dialogueOpts || {})     : null;
     var models    = useModels    ? new GF.ModelSystem(opts.modelOpts || {})            : null;
-    // DebugOverlay added last so it renders on top of everything.
+    var grids     = useGrids     ? new GF.GridSystem()                                  : null;
+    var battle    = useBattle    ? new GF.TurnBasedBattleSystem()                       : null;
     var debug     = useDebug     ? new GF.DebugOverlay(opts.debugOpts || {})           : null;
 
     if (audio)    engine.addSystem(audio);
@@ -68,12 +66,15 @@
     if (tilemap)  engine.addSystem(tilemap);
     if (dialogue) engine.addSystem(dialogue);
     if (models)   engine.addSystem(models);
+    if (grids)    engine.addSystem(grids);
+    if (battle)   engine.addSystem(battle);
     if (debug)    engine.addSystem(debug);
 
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
+      grids: grids, battle: battle,
     };
   };
 

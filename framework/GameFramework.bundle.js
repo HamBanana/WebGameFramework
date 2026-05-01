@@ -1,7 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-04-30T21:19:58.331Z
-// Source: framework/build.js
-// Include as: <script src="../../framework/GameFramework.bundle.js"></script>
+// Built: 2026-05-01T00:08:14.517Z
 
 // -- utils/MathUtils.js ------------------------------------------
 
@@ -4290,22 +4288,843 @@
 })(window.GF = window.GF || {});
 
 
+// -- systems/GridSystem.js ---------------------------------------
+
+// GameFramework/framework/systems/GridSystem.js
+// Logical grid for tactical games — passability, occupants, A* pathfinding,
+// BFS range/area queries, and grid<->world coordinate conversion.
+//
+// GridSystem is intentionally orthogonal to TilemapSystem. TilemapSystem
+// renders tile graphics; GridSystem owns the logical playfield (who is on
+// which cell, which cells are blocked, where can a unit reach this turn).
+//
+// Quick start:
+//   const grid = game.grids.create({ cols: 12, rows: 10, cellSize: 32, x: 0, y: 0 });
+//   grid.setBlocked(3, 4, true);
+//   grid.placeOccupant(unit, 5, 5);
+//   const reachable = grid.tilesInRange(unit, 4); // [{col,row,cost}]
+//   const path      = grid.findPath({col: 5, row: 5}, {col: 8, row: 7});
+//   const { x, y }  = grid.toWorldCenter(8, 7);
+//
+// Each occupant is an arbitrary object identified by reference. Optionally
+// it may expose a `team` (string) — used by tilesInRange to treat enemy
+// occupants as blockers and ally occupants as walk-through-only.
+
+(function (GF) {
+  'use strict';
+
+  // ─── Min-heap priority queue (for A*) ───────────────────────────────────────
+  class _PQ {
+    constructor() { this._a = []; }
+    get size() { return this._a.length; }
+    push(item, prio) {
+      this._a.push({ item, prio });
+      let i = this._a.length - 1;
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (this._a[p].prio <= this._a[i].prio) break;
+        [this._a[p], this._a[i]] = [this._a[i], this._a[p]];
+        i = p;
+      }
+    }
+    pop() {
+      const top = this._a[0];
+      const last = this._a.pop();
+      if (this._a.length) {
+        this._a[0] = last;
+        let i = 0;
+        const n = this._a.length;
+        for (;;) {
+          const l = i * 2 + 1, r = l + 1;
+          let m = i;
+          if (l < n && this._a[l].prio < this._a[m].prio) m = l;
+          if (r < n && this._a[r].prio < this._a[m].prio) m = r;
+          if (m === i) break;
+          [this._a[m], this._a[i]] = [this._a[i], this._a[m]];
+          i = m;
+        }
+      }
+      return top.item;
+    }
+  }
+
+  // ─── Grid ───────────────────────────────────────────────────────────────────
+
+  class Grid {
+    /**
+     * @param {Object} cfg
+     * @param {number} cfg.cols       - number of columns
+     * @param {number} cfg.rows       - number of rows
+     * @param {number} cfg.cellSize   - pixel size of one cell (square)
+     * @param {number} [cfg.x=0]      - world X of grid's top-left corner
+     * @param {number} [cfg.y=0]      - world Y of grid's top-left corner
+     * @param {number[]} [cfg.terrainCost] - per-cell move-cost grid (row-major), defaults 1
+     * @param {boolean[]} [cfg.blocked]    - per-cell blocked grid (row-major), defaults false
+     */
+    constructor(cfg = {}) {
+      this.cols     = cfg.cols     || 1;
+      this.rows     = cfg.rows     || 1;
+      this.cellSize = cfg.cellSize || 32;
+      this.x        = cfg.x        || 0;
+      this.y        = cfg.y        || 0;
+
+      const n = this.cols * this.rows;
+
+      // Terrain cost (1 = normal, higher = harder to traverse)
+      this._cost    = new Array(n);
+      // Static blockers (walls etc.)
+      this._blocked = new Array(n);
+      // Occupant references — only one occupant per cell
+      this._occupants = new Array(n);
+
+      for (let i = 0; i < n; i++) {
+        this._cost[i]      = cfg.terrainCost ? (cfg.terrainCost[i] || 1) : 1;
+        this._blocked[i]   = cfg.blocked     ? !!cfg.blocked[i]          : false;
+        this._occupants[i] = null;
+      }
+    }
+
+    // ── Coordinate conversion ─────────────────────────────────────────────────
+
+    /** Convert grid (col,row) → world top-left pixel of that cell. */
+    toWorld(col, row) {
+      return { x: this.x + col * this.cellSize, y: this.y + row * this.cellSize };
+    }
+
+    /** Convert grid (col,row) → world centre pixel of that cell. */
+    toWorldCenter(col, row) {
+      const half = this.cellSize / 2;
+      return { x: this.x + col * this.cellSize + half, y: this.y + row * this.cellSize + half };
+    }
+
+    /** Convert world pixel → grid (col,row). Returns {col,row} possibly out of bounds. */
+    toGrid(worldX, worldY) {
+      return {
+        col: Math.floor((worldX - this.x) / this.cellSize),
+        row: Math.floor((worldY - this.y) / this.cellSize),
+      };
+    }
+
+    /** Returns true if (col,row) lies on the board. */
+    inBounds(col, row) {
+      return col >= 0 && col < this.cols && row >= 0 && row < this.rows;
+    }
+
+    // ── Cell state ────────────────────────────────────────────────────────────
+
+    _idx(col, row) { return row * this.cols + col; }
+
+    setBlocked(col, row, blocked) {
+      if (!this.inBounds(col, row)) return;
+      this._blocked[this._idx(col, row)] = !!blocked;
+    }
+    isBlocked(col, row) {
+      if (!this.inBounds(col, row)) return true;
+      return this._blocked[this._idx(col, row)];
+    }
+
+    setCost(col, row, cost) {
+      if (!this.inBounds(col, row)) return;
+      this._cost[this._idx(col, row)] = Math.max(0.1, cost);
+    }
+    getCost(col, row) {
+      if (!this.inBounds(col, row)) return Infinity;
+      return this._cost[this._idx(col, row)];
+    }
+
+    // ── Occupancy ─────────────────────────────────────────────────────────────
+
+    occupantAt(col, row) {
+      if (!this.inBounds(col, row)) return null;
+      return this._occupants[this._idx(col, row)];
+    }
+
+    /** Place occupant at (col,row). Removes it from any prior cell. */
+    placeOccupant(occ, col, row) {
+      if (!occ) return;
+      this.removeOccupant(occ);
+      if (!this.inBounds(col, row)) return;
+      this._occupants[this._idx(col, row)] = occ;
+      occ.col = col;
+      occ.row = row;
+    }
+
+    /** Remove occupant from its current cell (looks up by reference). */
+    removeOccupant(occ) {
+      if (!occ) return;
+      // Fast path if occupant tracks its position
+      if (Number.isInteger(occ.col) && Number.isInteger(occ.row) && this.inBounds(occ.col, occ.row)) {
+        const i = this._idx(occ.col, occ.row);
+        if (this._occupants[i] === occ) this._occupants[i] = null;
+      }
+      // Fallback scan
+      for (let i = 0; i < this._occupants.length; i++) {
+        if (this._occupants[i] === occ) this._occupants[i] = null;
+      }
+    }
+
+    /** Iterate all occupants. Callback receives (occ, col, row). */
+    forEachOccupant(cb) {
+      for (let r = 0; r < this.rows; r++) {
+        for (let c = 0; c < this.cols; c++) {
+          const o = this._occupants[this._idx(c, r)];
+          if (o) cb(o, c, r);
+        }
+      }
+    }
+
+    // ── Pathing primitives ────────────────────────────────────────────────────
+
+    /**
+     * Returns true if a unit can ENTER (col,row). Walls and enemy occupants
+     * block; allied occupants are passable but not stoppable (handled in tilesInRange).
+     */
+    isPassable(col, row, opts = {}) {
+      if (!this.inBounds(col, row)) return false;
+      if (this.isBlocked(col, row)) return false;
+      const occ = this.occupantAt(col, row);
+      if (!occ) return true;
+      if (opts.ignore && opts.ignore === occ) return true;
+      if (opts.team && occ.team && occ.team === opts.team) return true; // walk through allies
+      return false;
+    }
+
+    /** Returns true if a unit can STOP on (col,row). Any occupant other than `ignore` blocks. */
+    isStoppable(col, row, opts = {}) {
+      if (!this.inBounds(col, row)) return false;
+      if (this.isBlocked(col, row)) return false;
+      const occ = this.occupantAt(col, row);
+      if (!occ) return true;
+      if (opts.ignore && opts.ignore === occ) return true;
+      return false;
+    }
+
+    /**
+     * Manhattan-distance neighbours of (c,r). Returns an array of {col,row}.
+     */
+    neighbours4(col, row) {
+      const out = [];
+      if (col > 0)              out.push({ col: col - 1, row });
+      if (col < this.cols - 1)  out.push({ col: col + 1, row });
+      if (row > 0)              out.push({ col, row: row - 1 });
+      if (row < this.rows - 1)  out.push({ col, row: row + 1 });
+      return out;
+    }
+
+    /**
+     * BFS from origin yielding every cell reachable within `maxCost` total
+     * movement cost. Cells occupied by an ally are traversable but not stoppable.
+     * Returned cells are stoppable (passable AND empty/the unit itself).
+     *
+     * @param {Object} origin    - { col, row } or a unit with col/row/team
+     * @param {number} maxCost   - movement budget
+     * @param {Object} [opts]
+     * @param {string} [opts.team] - allies of this team are walk-through
+     * @param {Object} [opts.ignore] - occupant to ignore (typically the moving unit)
+     * @returns {Array<{col,row,cost,parent}>}
+     */
+    tilesInRange(origin, maxCost, opts = {}) {
+      const team   = opts.team   || (origin && origin.team)   || null;
+      const ignore = opts.ignore || origin || null;
+      const startC = origin.col, startR = origin.row;
+      if (!this.inBounds(startC, startR)) return [];
+
+      const dist  = new Map();
+      const parent= new Map();
+      const key   = (c, r) => r * this.cols + c;
+
+      dist.set(key(startC, startR), 0);
+      const pq = new _PQ();
+      pq.push({ col: startC, row: startR }, 0);
+
+      const out = [];
+
+      while (pq.size) {
+        const cur = pq.pop();
+        const k   = key(cur.col, cur.row);
+        const cost = dist.get(k);
+
+        // Origin is always reachable (cost 0)
+        if (this.isStoppable(cur.col, cur.row, { ignore })) {
+          out.push({ col: cur.col, row: cur.row, cost, parent: parent.get(k) || null });
+        }
+
+        const nb = this.neighbours4(cur.col, cur.row);
+        for (let i = 0; i < nb.length; i++) {
+          const n = nb[i];
+          // Must be passable (walls / enemies block; allies are walk-through)
+          if (!this.isPassable(n.col, n.row, { team, ignore })) continue;
+          const stepCost = this.getCost(n.col, n.row);
+          const newCost  = cost + stepCost;
+          if (newCost > maxCost) continue;
+          const nk = key(n.col, n.row);
+          if (newCost < (dist.has(nk) ? dist.get(nk) : Infinity)) {
+            dist.set(nk, newCost);
+            parent.set(nk, { col: cur.col, row: cur.row });
+            pq.push(n, newCost);
+          }
+        }
+      }
+      return out;
+    }
+
+    /**
+     * A* path from {col,row} → {col,row}.
+     * @returns {Array<{col,row}>|null} including both endpoints, or null if unreachable
+     */
+    findPath(from, to, opts = {}) {
+      if (!this.inBounds(from.col, from.row) || !this.inBounds(to.col, to.row)) return null;
+      const team   = opts.team   || null;
+      const ignore = opts.ignore || null;
+      const key    = (c, r) => r * this.cols + c;
+      const heur   = (c, r) => Math.abs(c - to.col) + Math.abs(r - to.row);
+
+      const gScore = new Map();
+      const came   = new Map();
+      gScore.set(key(from.col, from.row), 0);
+
+      const pq = new _PQ();
+      pq.push({ col: from.col, row: from.row }, heur(from.col, from.row));
+
+      while (pq.size) {
+        const cur = pq.pop();
+        if (cur.col === to.col && cur.row === to.row) {
+          // Reconstruct
+          const path = [{ col: cur.col, row: cur.row }];
+          let k = key(cur.col, cur.row);
+          while (came.has(k)) {
+            const p = came.get(k);
+            path.unshift(p);
+            k = key(p.col, p.row);
+          }
+          return path;
+        }
+        const nb = this.neighbours4(cur.col, cur.row);
+        for (let i = 0; i < nb.length; i++) {
+          const n = nb[i];
+          // Allow stepping into the goal even if it's occupied by an enemy
+          // (caller decides what to do — used for "attack target" pathing).
+          const isGoal = (n.col === to.col && n.row === to.row);
+          if (!isGoal && !this.isPassable(n.col, n.row, { team, ignore })) continue;
+          if (!isGoal && !this.inBounds(n.col, n.row)) continue;
+          if (isGoal && this.isBlocked(n.col, n.row)) continue;
+
+          const stepCost = this.getCost(n.col, n.row);
+          const tentative = (gScore.get(key(cur.col, cur.row)) || 0) + stepCost;
+          const nk = key(n.col, n.row);
+          if (tentative < (gScore.has(nk) ? gScore.get(nk) : Infinity)) {
+            came.set(nk, { col: cur.col, row: cur.row });
+            gScore.set(nk, tentative);
+            pq.push(n, tentative + heur(n.col, n.row));
+          }
+        }
+      }
+      return null;
+    }
+
+    /**
+     * Cells within a chebyshev/manhattan range — used for attack reach.
+     * @param {Object} origin    - { col, row }
+     * @param {number} minRange
+     * @param {number} maxRange
+     * @param {string} [shape='diamond'] - 'diamond' (manhattan) | 'square' (chebyshev)
+     */
+    cellsInRing(origin, minRange, maxRange, shape) {
+      shape = shape || 'diamond';
+      const out = [];
+      for (let r = origin.row - maxRange; r <= origin.row + maxRange; r++) {
+        for (let c = origin.col - maxRange; c <= origin.col + maxRange; c++) {
+          if (!this.inBounds(c, r)) continue;
+          const dx = Math.abs(c - origin.col), dy = Math.abs(r - origin.row);
+          const d  = (shape === 'square') ? Math.max(dx, dy) : (dx + dy);
+          if (d >= minRange && d <= maxRange) out.push({ col: c, row: r, dist: d });
+        }
+      }
+      return out;
+    }
+
+    /** Manhattan distance between two cells. */
+    static manhattan(a, b) {
+      return Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+    }
+  }
+
+  // ─── GridSystem ─────────────────────────────────────────────────────────────
+
+  class GridSystem {
+    constructor() {
+      this.name   = 'GridSystem';
+      this._grids = [];
+    }
+    init() {}
+
+    /** Create and register a grid. */
+    create(cfg) {
+      const g = new Grid(cfg);
+      this._grids.push(g);
+      return g;
+    }
+
+    /** Remove a grid. */
+    remove(grid) {
+      const i = this._grids.indexOf(grid);
+      if (i >= 0) this._grids.splice(i, 1);
+    }
+
+    /** Remove all grids. */
+    clear() { this._grids = []; }
+
+    update() {}
+    render() {} // games render their own grids; this system is purely logical
+  }
+
+  GF.Grid       = Grid;
+  GF.GridSystem = GridSystem;
+
+})(window.GF = window.GF || {});
+
+
+// -- systems/TurnBasedBattleSystem.js ----------------------------
+
+// GameFramework/framework/systems/TurnBasedBattleSystem.js
+// Generic turn-based battle controller — manages turn order, rounds, and
+// the current actor. Renders nothing; the game decides how to draw and
+// what menu options to expose for the active unit.
+//
+// Unit shape (the only fields the system reads):
+//   {
+//     id      : string,            // optional, for debugging
+//     team    : 'player' | 'enemy' | string,
+//     name    : string,
+//     hp      : number,
+//     maxHp   : number,
+//     agility : number,            // higher = acts earlier in the round
+//     dead    : boolean,           // set true when hp reaches 0
+//   }
+// The system mutates `dead` and `hp` only via dealDamage()/heal() helpers.
+// The game is free to read or set any other unit fields.
+//
+// Lifecycle (driven by the game):
+//   battle.start({ units, victory, defeat })
+//   while (!battle.finished) {
+//      const unit = battle.currentUnit();
+//      // game shows menus, animations, attacks etc. for `unit`
+//      battle.endTurn();          // advances to next unit
+//   }
+//
+// Events fired on engine.events:
+//   'battle:start'         { units }
+//   'battle:round'         { round, order }
+//   'battle:turn_start'    { unit }
+//   'battle:turn_end'      { unit }
+//   'battle:unit_damaged'  { unit, source, amount }
+//   'battle:unit_healed'   { unit, source, amount }
+//   'battle:unit_died'     { unit, source }
+//   'battle:complete'      { result: 'victory' | 'defeat' | 'draw' }
+
+(function (GF) {
+  'use strict';
+
+  class TurnBasedBattleSystem {
+    constructor() {
+      this.name     = 'TurnBasedBattleSystem';
+      this._engine  = null;
+      this._reset();
+    }
+
+    init(engine) { this._engine = engine; }
+
+    _reset() {
+      this._units    = [];
+      this._order    = [];
+      this._idx      = -1;
+      this._round    = 0;
+      this._victory  = null; // (units) => boolean
+      this._defeat   = null;
+      this.finished  = false;
+      this.result    = null;
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    /**
+     * Start a new battle.
+     * @param {Object}   cfg
+     * @param {Array}    cfg.units    - all combatants (will mutate)
+     * @param {Function} [cfg.victory]- (units) => boolean (default: no enemy alive)
+     * @param {Function} [cfg.defeat] - (units) => boolean (default: no player alive)
+     */
+    start(cfg = {}) {
+      this._reset();
+      this._units   = cfg.units || [];
+      this._victory = cfg.victory || (units => !units.some(u => u.team === 'enemy'  && !u.dead));
+      this._defeat  = cfg.defeat  || (units => !units.some(u => u.team === 'player' && !u.dead));
+      this._emit('battle:start', { units: this._units });
+      this._beginRound();
+      return this;
+    }
+
+    /** True once an outcome has been decided. */
+    get isFinished() { return this.finished; }
+
+    /** Returns the unit currently taking its turn, or null. */
+    currentUnit() {
+      if (this.finished || this._idx < 0 || this._idx >= this._order.length) return null;
+      return this._order[this._idx];
+    }
+
+    /** End the current unit's turn and advance to the next living unit. */
+    endTurn() {
+      const cur = this.currentUnit();
+      if (cur) this._emit('battle:turn_end', { unit: cur });
+
+      // Check end conditions after every turn
+      if (this._checkEnd()) return;
+
+      // Advance to next living unit in the round
+      while (true) {
+        this._idx++;
+        if (this._idx >= this._order.length) {
+          // Round complete — start next
+          this._beginRound();
+          // _beginRound may itself end the battle
+          if (this.finished) return;
+          break;
+        }
+        const next = this._order[this._idx];
+        if (next && !next.dead) {
+          this._emit('battle:turn_start', { unit: next });
+          break;
+        }
+      }
+    }
+
+    /** All living units (or filtered by team). */
+    livingUnits(team) {
+      return this._units.filter(u => !u.dead && (!team || u.team === team));
+    }
+
+    /** All units (filtered by team). */
+    allUnits(team) {
+      return team ? this._units.filter(u => u.team === team) : this._units.slice();
+    }
+
+    // ── Damage / heal helpers ────────────────────────────────────────────────
+
+    /**
+     * Deal damage to a unit. Emits 'battle:unit_damaged' and 'battle:unit_died'.
+     * @returns {number} the amount actually dealt
+     */
+    dealDamage(target, amount, source) {
+      if (!target || target.dead) return 0;
+      const before = target.hp;
+      target.hp = Math.max(0, target.hp - Math.max(0, Math.round(amount)));
+      const dealt = before - target.hp;
+      this._emit('battle:unit_damaged', { unit: target, source, amount: dealt });
+      if (target.hp <= 0 && !target.dead) {
+        target.dead = true;
+        this._emit('battle:unit_died', { unit: target, source });
+      }
+      return dealt;
+    }
+
+    /**
+     * Heal a unit. Emits 'battle:unit_healed'.
+     * @returns {number} the amount actually healed
+     */
+    heal(target, amount, source) {
+      if (!target || target.dead) return 0;
+      const before = target.hp;
+      target.hp = Math.min(target.maxHp || target.hp + amount, target.hp + Math.max(0, Math.round(amount)));
+      const healed = target.hp - before;
+      this._emit('battle:unit_healed', { unit: target, source, amount: healed });
+      return healed;
+    }
+
+    /** Force-end the battle with a result. */
+    forceEnd(result) {
+      this.finished = true;
+      this.result   = result;
+      this._emit('battle:complete', { result });
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    _beginRound() {
+      // Order living units by agility desc, ties broken by current order
+      this._round++;
+      const living = this._units.filter(u => !u.dead);
+      // Stable sort: tag with index, sort, strip
+      this._order = living
+        .map((u, i) => ({ u, i, ag: u.agility || 0 }))
+        .sort((a, b) => (b.ag - a.ag) || (a.i - b.i))
+        .map(o => o.u);
+      this._idx = -1;
+
+      this._emit('battle:round', { round: this._round, order: this._order.slice() });
+
+      if (this._checkEnd()) return;
+
+      // Move to first unit
+      while (++this._idx < this._order.length) {
+        const u = this._order[this._idx];
+        if (!u.dead) {
+          this._emit('battle:turn_start', { unit: u });
+          return;
+        }
+      }
+      // Empty round — call _beginRound again (shouldn't normally happen)
+      if (this._order.length === 0) this.forceEnd('draw');
+    }
+
+    _checkEnd() {
+      if (this.finished) return true;
+      if (this._victory && this._victory(this._units)) {
+        this.forceEnd('victory');
+        return true;
+      }
+      if (this._defeat && this._defeat(this._units)) {
+        this.forceEnd('defeat');
+        return true;
+      }
+      return false;
+    }
+
+    _emit(name, detail) {
+      if (this._engine && this._engine.events) this._engine.events.emit(name, detail);
+    }
+
+    update() {}
+    render() {}
+  }
+
+  GF.TurnBasedBattleSystem = TurnBasedBattleSystem;
+
+})(window.GF = window.GF || {});
+
+
+// -- systems/MenuSystem.js ---------------------------------------
+
+// GameFramework/framework/systems/MenuSystem.js
+// Cursor-driven vertical menu — common to RPGs, strategy games, and any
+// menu-heavy interface. Pure logic + draw helper; the game decides where
+// it lives in the scene graph and which actions trigger which menus.
+//
+// Quick start:
+//   const menu = new GF.CursorMenu({
+//     items: [
+//       { label: 'Attack',  value: 'attack',  enabled: true },
+//       { label: 'Magic',   value: 'magic',   enabled: false },
+//       { label: 'Item',    value: 'item' },
+//       { label: 'Wait',    value: 'wait' },
+//     ],
+//     onSelect: (item) => console.log('chose', item.value),
+//     onCancel: () => console.log('cancelled'),
+//   });
+//
+//   // Each frame:
+//   menu.update(engine.input);
+//   menu.draw(ctx, x, y);
+//
+// Default key bindings:
+//   ArrowUp / ArrowDown   move cursor
+//   Enter / Space / KeyZ  select
+//   Escape / Backspace / KeyX  cancel
+//
+// You can rebind via cfg.keys = { up:[...], down:[...], select:[...], cancel:[...] }
+// or supply a custom action-based input layer (cfg.actions = { up, down, ... }).
+
+(function (GF) {
+  'use strict';
+
+  const DEFAULT_KEYS = {
+    up    : ['ArrowUp',   'KeyW'],
+    down  : ['ArrowDown', 'KeyS'],
+    left  : ['ArrowLeft', 'KeyA'],
+    right : ['ArrowRight','KeyD'],
+    select: ['Enter', 'Space', 'KeyZ'],
+    cancel: ['Escape','Backspace','KeyX'],
+  };
+
+  const DEFAULT_STYLE = {
+    width        : 160,
+    rowHeight    : 22,
+    padding      : 10,
+    bgColor      : 'rgba(0,0,40,0.92)',
+    borderColor  : '#88aaff',
+    borderWidth  : 2,
+    radius       : 4,
+    font         : '14px monospace',
+    textColor    : '#ffffff',
+    disabledColor: '#666688',
+    cursorColor  : '#ffdd44',
+    selectedBg   : 'rgba(80,80,160,0.5)',
+  };
+
+  class CursorMenu {
+    /**
+     * @param {Object} cfg
+     * @param {Array}  cfg.items     - [{label, value, enabled?, hint?}]
+     * @param {Function} [cfg.onSelect] - (item) => void
+     * @param {Function} [cfg.onCancel] - () => void
+     * @param {Object} [cfg.keys]    - keymap overrides (see DEFAULT_KEYS)
+     * @param {Object} [cfg.actions] - action-name overrides (see DEFAULT_KEYS)
+     * @param {Object} [cfg.style]   - draw style overrides
+     * @param {boolean}[cfg.wrap=true] - cursor wraps top/bottom
+     * @param {number} [cfg.cursor=0]  - initial cursor index
+     */
+    constructor(cfg = {}) {
+      this.items    = cfg.items || [];
+      this.onSelect = cfg.onSelect || (() => {});
+      this.onCancel = cfg.onCancel || (() => {});
+      this.keys     = Object.assign({}, DEFAULT_KEYS, cfg.keys || {});
+      this.actions  = cfg.actions || null;
+      this.style    = Object.assign({}, DEFAULT_STYLE, cfg.style || {});
+      this.wrap     = cfg.wrap !== false;
+      this.cursor   = Math.max(0, Math.min(this.items.length - 1, cfg.cursor || 0));
+      this.active   = true;
+      this._lastInputT = 0;
+    }
+
+    setItems(items, keepCursor) {
+      this.items = items || [];
+      if (!keepCursor || this.cursor >= this.items.length) this.cursor = 0;
+    }
+
+    /** Move cursor to next enabled item (delta = +/-1). */
+    move(delta) {
+      if (!this.items.length) return;
+      let i = this.cursor;
+      for (let n = 0; n < this.items.length; n++) {
+        i += delta;
+        if (this.wrap) {
+          if (i < 0) i = this.items.length - 1;
+          if (i >= this.items.length) i = 0;
+        } else {
+          if (i < 0 || i >= this.items.length) return;
+        }
+        if (this.items[i].enabled !== false) {
+          this.cursor = i;
+          return;
+        }
+      }
+    }
+
+    /** Returns the currently highlighted item. */
+    currentItem() { return this.items[this.cursor] || null; }
+
+    /** Programmatic select — invokes onSelect without input. */
+    select() {
+      const item = this.currentItem();
+      if (!item || item.enabled === false) return;
+      this.onSelect(item);
+    }
+
+    /** Programmatic cancel. */
+    cancel() { this.onCancel(); }
+
+    // ── Per-frame input ───────────────────────────────────────────────────────
+
+    /** Call once per frame. `input` is GF.InputManager. */
+    update(input) {
+      if (!this.active || !input) return;
+
+      const pressed = (action) => {
+        const codes = (this.actions && this.actions[action]) || this.keys[action] || [];
+        for (let i = 0; i < codes.length; i++) {
+          if (input.wasPressed(codes[i])) return true;
+        }
+        return false;
+      };
+
+      if (pressed('up'))     this.move(-1);
+      if (pressed('down'))   this.move(+1);
+      if (pressed('select')) this.select();
+      if (pressed('cancel')) this.cancel();
+    }
+
+    // ── Drawing ───────────────────────────────────────────────────────────────
+
+    /**
+     * Compute total pixel size — useful for layout / centring.
+     * @returns {{ width: number, height: number }}
+     */
+    measure() {
+      const s = this.style;
+      return {
+        width : s.width,
+        height: s.padding * 2 + this.items.length * s.rowHeight,
+      };
+    }
+
+    /**
+     * Draw the menu at top-left (x, y).
+     */
+    draw(ctx, x, y) {
+      const s   = this.style;
+      const m   = this.measure();
+      const ui  = GF.UISystem;
+
+      ui.drawPanel(ctx, x, y, m.width, m.height, {
+        bgColor: s.bgColor, borderColor: s.borderColor,
+        borderWidth: s.borderWidth, radius: s.radius,
+      });
+
+      ctx.save();
+      ctx.font = s.font;
+      ctx.textBaseline = 'middle';
+
+      for (let i = 0; i < this.items.length; i++) {
+        const it = this.items[i];
+        const ry = y + s.padding + i * s.rowHeight + s.rowHeight / 2;
+
+        if (i === this.cursor) {
+          // Selection band
+          ctx.fillStyle = s.selectedBg;
+          ctx.fillRect(x + 4, ry - s.rowHeight / 2 + 2,
+                       m.width - 8, s.rowHeight - 4);
+          // Cursor arrow
+          ctx.fillStyle = s.cursorColor;
+          ctx.beginPath();
+          ctx.moveTo(x + 8,  ry - 5);
+          ctx.lineTo(x + 14, ry);
+          ctx.lineTo(x + 8,  ry + 5);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        ctx.fillStyle = (it.enabled === false) ? s.disabledColor : s.textColor;
+        ctx.fillText(it.label, x + 22, ry);
+
+        if (it.hint) {
+          ctx.fillStyle = s.disabledColor;
+          ctx.textAlign = 'right';
+          ctx.fillText(it.hint, x + m.width - s.padding, ry);
+          ctx.textAlign = 'left';
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  GF.CursorMenu = CursorMenu;
+
+})(window.GF = window.GF || {});
+
+
 // -- GameFramework.js --------------------------------------------
 
 // GameFramework/framework/GameFramework.js
 (function (GF) {
   'use strict';
 
-  GF.VERSION = '2.1.0';
+  GF.VERSION = '2.2.0';
 
   // Auto-detect the directory this bundle was loaded from so that
   // GF.resolvePath() works regardless of where the game lives on disk.
-  // Games no longer need to declare frameworkPath in GAME_CONFIG.
   GF._frameworkBase = (function () {
     var s = document.currentScript;
     if (!s) {
-      // Fallback for browsers that don't support currentScript (e.g. old IE):
-      // walk the script list backwards and pick the first GameFramework entry.
       var all = document.querySelectorAll('script[src]');
       for (var i = all.length - 1; i >= 0; i--) {
         if (all[i].src.indexOf('GameFramework') !== -1) { s = all[i]; break; }
@@ -4315,7 +5134,6 @@
     return '/framework';
   }());
 
-  // Resolve a path relative to the framework folder.
   GF.resolvePath = function (relativePath) {
     var base = GF._frameworkBase.replace(/\/$/, '');
     return base + '/' + relativePath.replace(/^\//, '');
@@ -4331,13 +5149,14 @@
     var useDebug     = opts.debug     !== false;
     var useDialogue  = opts.dialogue  !== false;
     var useModels    = !!opts.models;
+    var useGrids     = opts.grids     !== false;
+    var useBattle    = opts.battle    !== false;
 
     var engine  = new GF.Engine(engineConfig);
     var sprites = new GF.SpriteSystem();
     var physics = new GF.PhysicsSystem(physicsConfig);
     var ui      = GF.UISystem;
 
-    // SaveSystem is always created; namespace defaults to opts.gameName or 'GF'.
     var saveOpts = Object.assign({ namespace: opts.gameName || 'GF' }, opts.saveOpts || {});
     var save = new GF.SaveSystem(saveOpts);
 
@@ -4352,7 +5171,8 @@
     var tilemap   = useTilemap   ? new GF.TilemapSystem()                              : null;
     var dialogue  = useDialogue  ? new GF.DialogueSystem(opts.dialogueOpts || {})     : null;
     var models    = useModels    ? new GF.ModelSystem(opts.modelOpts || {})            : null;
-    // DebugOverlay added last so it renders on top of everything.
+    var grids     = useGrids     ? new GF.GridSystem()                                  : null;
+    var battle    = useBattle    ? new GF.TurnBasedBattleSystem()                       : null;
     var debug     = useDebug     ? new GF.DebugOverlay(opts.debugOpts || {})           : null;
 
     if (audio)    engine.addSystem(audio);
@@ -4362,12 +5182,15 @@
     if (tilemap)  engine.addSystem(tilemap);
     if (dialogue) engine.addSystem(dialogue);
     if (models)   engine.addSystem(models);
+    if (grids)    engine.addSystem(grids);
+    if (battle)   engine.addSystem(battle);
     if (debug)    engine.addSystem(debug);
 
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
+      grids: grids, battle: battle,
     };
   };
 
