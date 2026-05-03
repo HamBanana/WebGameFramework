@@ -174,21 +174,17 @@
   // ──────────────────────────────────────────────────────────────────────────
   //  MovementController — drives stepping during MOVE stage.
   //
-  //  Two distinct movement modes coexist (Acca playtest fix #1):
+  //  Movement uses the cardinal slots (up/down/left/right) that the loader
+  //  pre-resolves on every Cell from neighbour angles: each connected
+  //  neighbour is bucketed into the direction whose axis it sits closest to,
+  //  and the most-cardinal candidate in each bucket wins the slot. The
+  //  player then steps to those slots with ↑/↓/←/→ — no road selection,
+  //  no pixel-exact alignment requirement, no Enter-to-confirm step.
   //
-  //    1. ADJACENT MOVEMENT — when a neighbour sits exactly one cellSize away
-  //       on a single axis (orthogonally adjacent), it lives in the cardinal
-  //       slot for that direction. The matching arrow key (↑/↓/←/→) steps to
-  //       it directly, no selection needed.
-  //
-  //    2. ROAD SELECTION    — when neighbours are NOT orthogonally adjacent
-  //       (e.g. diagonal links to chance cells, long-range jumps), they are
-  //       "roads". Roads are highlighted on the board with one currently
-  //       selected; ←/→ cycle the selection (only when the corresponding
-  //       cardinal arrow has no adjacent step), and ENTER steps to the
-  //       selected road.
-  //
-  //  Cells whose neighbours are all adjacent never enter selection mode.
+  //  This means real-world maps (e.g. Denmark) where city links aren't on
+  //  a strict 64-pixel grid are still navigable with arrow keys alone.
+  //  The trade-off: if a cell has multiple neighbours that resolve into
+  //  the same cardinal bucket, only the most-aligned one is reachable.
   // ──────────────────────────────────────────────────────────────────────────
   class MovementController {
     constructor(input, controls, eventBus, game) {
@@ -214,34 +210,25 @@
       this._refreshCandidates();
     }
 
-    /** Bucket the current cell's neighbours into "adjacent (cardinal)" and
-     *  "road (non-adjacent)" sets. Adjacency means dy=0 ∧ |dx|=cellSize OR
-     *  dx=0 ∧ |dy|=cellSize — i.e. the neighbour is one square away in a
-     *  cardinal direction. */
+    /** Pull the current cell's pre-resolved cardinal slots (up/down/left/
+     *  right) into the active direction map. The slots are computed once at
+     *  map load (see Acca map loader: angle-bucketed by dominant axis, then
+     *  the most-cardinal candidate wins the slot), so MOVE just reads them
+     *  here — no pixel-exact match required, no roads list. */
     _refreshCandidates() {
       const cur = this.player && this.player.currentCell;
       this.adjacent = { up: null, down: null, left: null, right: null };
       this.roads    = [];
       this.roadIdx  = 0;
       if (!cur) return;
-      const cellSize = (this.game && this.game._cellSize) || 64;
-      cur.neighbors().forEach(n => {
-        const dx = n.x - cur.x;
-        const dy = n.y - cur.y;
-        if (dx === 0 && Math.abs(dy) === cellSize) {
-          if (dy < 0) this.adjacent.up   = this.adjacent.up   || n;
-          else        this.adjacent.down = this.adjacent.down || n;
-        } else if (dy === 0 && Math.abs(dx) === cellSize) {
-          if (dx < 0) this.adjacent.left  = this.adjacent.left  || n;
-          else        this.adjacent.right = this.adjacent.right || n;
-        } else {
-          this.roads.push(n);
-        }
-      });
-      // Dead-end (no adjacent neighbours and no roads) — forfeit movement.
+      this.adjacent.up    = cur.up    || null;
+      this.adjacent.down  = cur.down  || null;
+      this.adjacent.left  = cur.left  || null;
+      this.adjacent.right = cur.right || null;
+      // Dead-end (no cardinal slots filled) — forfeit movement.
       const anyAdj = !!(this.adjacent.up || this.adjacent.down ||
                         this.adjacent.left || this.adjacent.right);
-      if (!anyAdj && this.roads.length === 0) {
+      if (!anyAdj) {
         this.active = false;
         this.events.emit('move:complete', { player: this.player });
       }
@@ -260,28 +247,13 @@
       // property → buy/continue prompt).
       if (this.game && this.game.menu && this.game.menu.visible) return;
 
-      // 1. Adjacent stepping — pressing an arrow key with a cardinal-adjacent
-      //    neighbour in that direction steps immediately.
+      // Cardinal stepping — pressing an arrow key with a slot filled in that
+      // direction steps immediately. Road selection is no longer used; every
+      // reachable neighbour lives in one of the four cardinal slots.
       if (this._pressed('up')    && this.adjacent.up)    { this.stepTo(this.adjacent.up);    return; }
       if (this._pressed('down')  && this.adjacent.down)  { this.stepTo(this.adjacent.down);  return; }
       if (this._pressed('left')  && this.adjacent.left)  { this.stepTo(this.adjacent.left);  return; }
       if (this._pressed('right') && this.adjacent.right) { this.stepTo(this.adjacent.right); return; }
-
-      // 2. Road selection — only meaningful when non-adjacent roads exist.
-      if (this.roads.length === 0) return;
-      // Cycle with ←/→, but only if those keys aren't already used for
-      // adjacent stepping in this cell.
-      if (this._pressed('left')  && !this.adjacent.left) {
-        this.roadIdx = (this.roadIdx - 1 + this.roads.length) % this.roads.length;
-      }
-      if (this._pressed('right') && !this.adjacent.right) {
-        this.roadIdx = (this.roadIdx + 1) % this.roads.length;
-      }
-      // Confirm steps onto the selected road.
-      if (this._pressed('confirm')) {
-        const target = this.roads[this.roadIdx];
-        if (target) this.stepTo(target);
-      }
     }
 
     /** Public so a future hook (e.g. teleporter) can drive movement. */
@@ -701,7 +673,7 @@
 
         case TURN_STAGE.MOVE:
           this.movement.begin(this.player, this.game.lastRoll);
-          this.game.log(`Move ${this.game.lastRoll} step(s) — arrows for adjacent, ←/→ + Enter for roads.`);
+          this.game.log(`Move ${this.game.lastRoll} step(s) — use the arrow keys.`);
           break;
 
         case TURN_STAGE.LANDING:
@@ -1895,40 +1867,9 @@
           });
         }
 
-        // Highlight road choices during MOVE. Only non-adjacent neighbours
-        // ("roads") need on-board indication — adjacent neighbours are
-        // reached just by pressing the matching arrow key. The currently
-        // selected road gets a brighter, pulsing ring; the others get a
-        // dim dashed ring.
-        if (this.gameState === GAME_STATE.PLAYING &&
-            this.turn.stage === TURN_STAGE.MOVE) {
-          const roads = this.movement.roads || [];
-          if (roads.includes(cell)) {
-            const selected = this.movement.selectedRoad
-                             ? this.movement.selectedRoad() : null;
-            const isSelected = cell === selected;
-            ctx.save();
-            if (isSelected) {
-              const pulse = 0.6 + 0.4 * Math.abs(Math.sin(performance.now() / 200));
-              ctx.globalAlpha = pulse;
-              ctx.strokeStyle = '#fff58a';
-              ctx.lineWidth   = 4;
-              ctx.strokeRect(x - size / 2 + 2, y - size / 2 + 2, size - 4, size - 4);
-              ctx.globalAlpha = 0.35 * pulse;
-              ctx.strokeStyle = '#fff58a';
-              ctx.lineWidth   = 8;
-              ctx.strokeRect(x - size / 2 - 2, y - size / 2 - 2, size + 4, size + 4);
-            } else {
-              ctx.globalAlpha = 0.4 + 0.2 * Math.abs(Math.sin(performance.now() / 350));
-              ctx.strokeStyle = '#7fb0ff';
-              ctx.lineWidth   = 2;
-              ctx.setLineDash([4, 3]);
-              ctx.strokeRect(x - size / 2 + 2, y - size / 2 + 2, size - 4, size - 4);
-              ctx.setLineDash([]);
-            }
-            ctx.restore();
-          }
-        }
+        // (Road-selection highlight removed: every reachable neighbour now
+        // lives in a cardinal slot, so MOVE is driven purely by arrow keys
+        // and there are no on-board road choices to indicate.)
       });
     }
 
