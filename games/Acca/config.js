@@ -19,7 +19,7 @@
     "rightWall": 768
   },
   "board": {
-    "map": "maps/default.json",
+    "map": "maps/denmark.json",
     "cellSize": 64,
     "originX": 32,
     "originY": 32
@@ -52,7 +52,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 2,
+  "numberOfPlayers": 3,
   "startingMoney": 1500,
   "startingResources": {
     "wood": 0,

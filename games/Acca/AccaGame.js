@@ -1316,6 +1316,8 @@
         cellById.set(c.id, cell);
       });
 
+      // Preserve connections (with resolved Cell refs) for road rendering.
+      this._connections = [];
       connections.forEach(conn => {
         const fromCell = cellById.get(conn.from);
         const toCell   = cellById.get(conn.to);
@@ -1327,6 +1329,12 @@
         } else if (conn.direction === 'forward') {
           if (!fromCell._neighbors.includes(toCell)) fromCell._neighbors.push(toCell);
         }
+
+        this._connections.push({
+          from: fromCell,
+          to: toCell,
+          direction: conn.direction,
+        });
       });
 
       // Cardinal slot assignment from neighbor angles
@@ -1848,6 +1856,12 @@
         });
       }
 
+      // Roads — draw the connections between cells underneath the cell sprites
+      // so each cell square sits on top of its roads. Bidirectional pairs are
+      // drawn once; forward-only connections are rendered with an arrowhead
+      // halfway along to indicate one-way travel.
+      this._drawRoads(ctx);
+
       this.cells.forEach(cell => {
         const { x, y } = this._toPixel(cell);
         cell.animator.draw(ctx, x, y);
@@ -1871,6 +1885,100 @@
         // lives in a cardinal slot, so MOVE is driven purely by arrow keys
         // and there are no on-board road choices to indicate.)
       });
+    }
+
+    /** Draw road segments between connected cells. Roads are rendered before
+     *  cells so the cell sprites sit on top, and so roads visibly bridge the
+     *  empty space between non-adjacent cells. */
+    _drawRoads(ctx) {
+      if (!this._connections || this._connections.length === 0) return;
+      const size = this._cellSize;
+
+      // De-dupe bidirectional pairs (a-b same as b-a).
+      const drawnPairs = new Set();
+      const pairKey = (a, b) => (a.id < b.id) ? `${a.id}:${b.id}` : `${b.id}:${a.id}`;
+
+      ctx.save();
+
+      // Two-pass draw: outer dark stroke (asphalt edge), inner lighter stroke.
+      const segments = [];
+      this._connections.forEach(conn => {
+        const a = this._toPixel(conn.from);
+        const b = this._toPixel(conn.to);
+        const isBoth = conn.direction === 'both';
+        if (isBoth) {
+          const k = pairKey(conn.from, conn.to);
+          if (drawnPairs.has(k)) return;
+          drawnPairs.add(k);
+        }
+        segments.push({ a, b, oneWay: !isBoth });
+      });
+
+      // Outer asphalt-edge pass
+      ctx.strokeStyle = '#1a1f28';
+      ctx.lineWidth   = Math.max(6, size * 0.18);
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      segments.forEach(s => {
+        ctx.moveTo(s.a.x, s.a.y);
+        ctx.lineTo(s.b.x, s.b.y);
+      });
+      ctx.stroke();
+
+      // Inner road surface pass
+      ctx.strokeStyle = '#5b6573';
+      ctx.lineWidth   = Math.max(3, size * 0.10);
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      segments.forEach(s => {
+        ctx.moveTo(s.a.x, s.a.y);
+        ctx.lineTo(s.b.x, s.b.y);
+      });
+      ctx.stroke();
+
+      // Center dashed lane markings — only on long-enough segments so cells
+      // sitting close together don't get cluttered.
+      ctx.strokeStyle = 'rgba(240, 220, 130, 0.55)';
+      ctx.lineWidth   = Math.max(1, size * 0.025);
+      ctx.setLineDash([Math.max(4, size * 0.10), Math.max(4, size * 0.10)]);
+      ctx.beginPath();
+      segments.forEach(s => {
+        const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < size * 1.2) return;
+        ctx.moveTo(s.a.x, s.a.y);
+        ctx.lineTo(s.b.x, s.b.y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // One-way arrow markers (mid-segment) for forward-only roads.
+      ctx.fillStyle = 'rgba(255, 200, 90, 0.95)';
+      segments.forEach(s => {
+        if (!s.oneWay) return;
+        const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 1) return;
+        const ux = dx / len, uy = dy / len;
+        const mx = (s.a.x + s.b.x) / 2;
+        const my = (s.a.y + s.b.y) / 2;
+        const h  = Math.max(7, size * 0.18);
+        const w  = h * 0.7;
+        // Triangle pointing along the direction A→B.
+        const tipX = mx + ux * h * 0.5;
+        const tipY = my + uy * h * 0.5;
+        const baseX = mx - ux * h * 0.5;
+        const baseY = my - uy * h * 0.5;
+        const px = -uy, py = ux;
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(baseX + px * w * 0.5, baseY + py * w * 0.5);
+        ctx.lineTo(baseX - px * w * 0.5, baseY - py * w * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      });
+
+      ctx.restore();
     }
 
     _drawTokens(ctx) {
