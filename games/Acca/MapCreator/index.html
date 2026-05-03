@@ -870,11 +870,16 @@ function handleRoadClick(id) {
       setStatus(`Added ↔ road between #${a} and #${b}.`);
     }
   } else {
-    if (S.connections.has(fwd)) {
+    // One-way mode: a→b
+    // If it's already purely one-way a→b (no reverse), toggle it off.
+    // Otherwise, enforce one-way a→b by adding fwd and removing any reverse.
+    const hasRev = S.connections.has(rev);
+    if (S.connections.has(fwd) && !hasRev) {
       S.connections.delete(fwd);
       setStatus(`Removed → road #${a} → #${b}.`);
     } else {
       S.connections.add(fwd);
+      if (hasRev) S.connections.delete(rev);
       setStatus(`Added → road #${a} → #${b}.`);
     }
   }
@@ -900,8 +905,8 @@ function render() {
   ctx.save();
   ctx.setTransform(S.zoom, 0, 0, S.zoom, S.panX, S.panY);
   renderDistrictOverlays(wxMin, wyMin, wxMax, wyMax);
-  renderConnections(wxMin, wyMin, wxMax, wyMax);
   S._lastCellsDrawn = renderCells(wxMin, wyMin, wxMax, wyMax);
+  renderConnections(wxMin, wyMin, wxMax, wyMax);
   renderOverlays(wxMin, wyMin, wxMax, wyMax);
   ctx.restore();
 
@@ -963,6 +968,10 @@ function renderConnections(wxMin, wyMin, wxMax, wyMax) {
   // At extreme zoom-out, connections become noise — skip them.
   if (S.zoom < 0.12) return;
 
+  // Arrowhead: at least 18 screen-px at zoom 1, scaling up as you zoom out,
+  // capped at 30% of cell size in world space.
+  const arrowHead = Math.min(cs * 0.3, Math.max(cs * 0.18, 18 / S.zoom));
+
   for (const key of S.connections) {
     const [as, bs] = key.split('->');
     const a = +as, b = +bs;
@@ -989,33 +998,46 @@ function renderConnections(wxMin, wyMin, wxMax, wyMax) {
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) continue;
 
-    const margin = cs * 0.34;
-    const t1 = margin / len, t2 = 1 - margin / len;
-    if (t2 <= t1) continue;
+    const ux = dx / len, uy = dy / len;   // unit vector A→B
+    const half = cs * 0.5;                 // cell radius — arrow tip sits here
 
     if (isBi) {
-      const px = (-dy / len) * 5, py = (dx / len) * 5;
-      const ax1 = cx1 + dx * t1 + px, ay1 = cy1 + dy * t1 + py;
-      const ax2 = cx1 + dx * t2 + px, ay2 = cy1 + dy * t2 + py;
-      const bx1 = cx2 - dx * t1 - px, by1 = cy2 - dy * t1 - py;
-      const bx2 = cx2 - dx * t2 - px, by2 = cy2 - dy * t2 - py;
-      drawArrow(ax1, ay1, ax2, ay2, 'rgba(180,220,255,0.65)');
-      drawArrow(bx1, by1, bx2, by2, 'rgba(180,220,255,0.65)');
+      // Two-way: two clearly separated parallel arrows, one per direction.
+      const px = -uy * 10, py = ux * 10;  // perpendicular offset
+
+      // A→B arrow
+      const a_tip  = { x: cx2 - ux*half + px, y: cy2 - uy*half + py };
+      const a_tail0 = { x: cx1 + ux*half + px, y: cy1 + uy*half + py };
+      const a_back = Math.max(arrowHead * 1.5, (a_tip.x - a_tail0.x)*ux + (a_tip.y - a_tail0.y)*uy);
+      const a_tail = { x: a_tip.x - ux*a_back, y: a_tip.y - uy*a_back };
+      drawArrow(a_tail.x, a_tail.y, a_tip.x, a_tip.y, 'rgba(140,200,255,0.9)', arrowHead, 2);
+
+      // B→A arrow
+      const b_tip  = { x: cx1 + ux*half - px, y: cy1 + uy*half - py };
+      const b_tail0 = { x: cx2 - ux*half - px, y: cy2 - uy*half - py };
+      const b_back = Math.max(arrowHead * 1.5, (b_tip.x - b_tail0.x)*(-ux) + (b_tip.y - b_tail0.y)*(-uy));
+      const b_tail = { x: b_tip.x + ux*b_back, y: b_tip.y + uy*b_back };
+      drawArrow(b_tail.x, b_tail.y, b_tip.x, b_tip.y, 'rgba(140,200,255,0.9)', arrowHead, 2);
     } else {
-      const ax1 = cx1 + dx * t1, ay1 = cy1 + dy * t1;
-      const ax2 = cx1 + dx * t2, ay2 = cy1 + dy * t2;
-      drawArrow(ax1, ay1, ax2, ay2, 'rgba(255,190,60,0.85)');
+      // One-way: tip at cell B's border, tail at cell A's border.
+      // For adjacent/touching cells the tail is pulled back so the arrowhead
+      // is always fully visible — no midpoint markers.
+      const tipX = cx2 - ux * half, tipY = cy2 - uy * half;
+      const gapLen = (tipX - (cx1 + ux*half)) * ux + (tipY - (cy1 + uy*half)) * uy;
+      const lineLen = Math.max(arrowHead * 1.5, gapLen);
+      const tailX = tipX - ux * lineLen, tailY = tipY - uy * lineLen;
+      drawArrow(tailX, tailY, tipX, tipY, 'rgba(255,190,60,0.95)', arrowHead, 3);
     }
   }
 }
 
-function drawArrow(x1, y1, x2, y2, color) {
+// Full arrow: line + arrowhead at the destination end.
+function drawArrow(x1, y1, x2, y2, color, hl = 9, lw = 1.5) {
   const dx = x2 - x1, dy = y2 - y1;
   const angle = Math.atan2(dy, dx);
-  const hl = 9;
   ctx.strokeStyle = color;
   ctx.fillStyle   = color;
-  ctx.lineWidth   = 1.5;
+  ctx.lineWidth   = lw;
   ctx.beginPath();  ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x2, y2);
@@ -1023,6 +1045,7 @@ function drawArrow(x1, y1, x2, y2, color) {
   ctx.lineTo(x2 - hl * Math.cos(angle + Math.PI / 6), y2 - hl * Math.sin(angle + Math.PI / 6));
   ctx.closePath(); ctx.fill();
 }
+
 
 function renderCells(wxMin, wyMin, wxMax, wyMax) {
   const cs = S.cellSize;
