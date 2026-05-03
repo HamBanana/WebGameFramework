@@ -63,7 +63,15 @@
     list() { return Array.from(this.districts.values()); }
     get(id) { return this.districts.get(id); }
 
-    /** Recompute mayor for `districtId` based on structure ownership. */
+    /** Recompute mayor for `districtId`.
+     *  Mayor = the player with a STRICT MAJORITY of all buildable cells in the
+     *  district (i.e. owns more than half). With four players this means owning
+     *  ⌈buildable/2⌉ + (buildable even ? 1 : 0) cells; with two players it's just
+     *  more than half. We require >50% (not plurality) so the mayor seat is a
+     *  meaningful prize the player has to actually contest, but it is now
+     *  reachable in normal 4-player play (vs the previous "owns all cells in
+     *  the district" rule that the 500-turn playtest never satisfied).
+     */
     recomputeMayor(districtId) {
       const d = this.districts.get(districtId);
       if (!d) return;
@@ -76,13 +84,21 @@
         }
         return;
       }
-      const owners = new Set();
-      let allOwned = true;
-      for (const c of buildable) {
-        if (!c.structure || c.structure.ownerIndex < 0) { allOwned = false; break; }
-        owners.add(c.structure.ownerIndex);
-      }
-      const newMayor = (allOwned && owners.size === 1) ? owners.values().next().value : -1;
+      // Tally owned cells by player index. Unowned cells don't get counted —
+      // the threshold is against TOTAL buildable cells, so unowned cells make
+      // the mayor seat harder to win (but not impossible).
+      const tally = new Map();
+      buildable.forEach(c => {
+        const s = c.structure;
+        if (!s || s.ownerIndex < 0) return;
+        tally.set(s.ownerIndex, (tally.get(s.ownerIndex) || 0) + 1);
+      });
+      let bestIdx = -1, bestCount = 0;
+      tally.forEach((count, idx) => {
+        if (count > bestCount) { bestIdx = idx; bestCount = count; }
+      });
+      const threshold = Math.floor(buildable.length / 2) + 1;
+      const newMayor = (bestCount >= threshold) ? bestIdx : -1;
       if (newMayor !== d.mayorIndex) {
         const old = d.mayorIndex;
         d.mayorIndex = newMayor;

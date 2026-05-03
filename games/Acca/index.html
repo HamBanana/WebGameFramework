@@ -68,6 +68,33 @@
     }
     .tb-cell:last-child { border-right: none; }
 
+    /* Bankrupt badge — replaces the inline "(bankrupt)" suffix that used to
+       truncate the player's name in the topbar. (Playtest #5.) */
+    .tb-bankrupt-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      font-size: 9px;
+      font-weight: bold;
+      color: #fff;
+      background: #c84444;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+    .tb-name-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow: hidden;
+    }
+    .tb-name-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .tb-label {
       font-size: 9px;
       letter-spacing: 1px;
@@ -326,7 +353,10 @@
       </div>
       <div class="tb-cell">
         <div class="tb-label">Name</div>
-        <div class="tb-value" id="tb-name">—</div>
+        <div class="tb-value tb-name-wrap">
+          <span class="tb-name-text" id="tb-name">—</span>
+          <span class="tb-bankrupt-badge" id="tb-bankrupt-badge" style="display:none;">Bankrupt</span>
+        </div>
       </div>
       <div class="tb-cell">
         <div class="tb-label">Money on hand</div>

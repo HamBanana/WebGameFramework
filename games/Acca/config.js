@@ -64,8 +64,8 @@
     "oil": 0
   },
   "win": {
-    "type": "MoneyOnHand",
-    "target": 5000,
+    "type": "NetWorthOrLastStanding",
+    "target": 50000,
     "tiebreaker": "TotalValue"
   },
   "mode": "competitive",
@@ -127,7 +127,7 @@
       {
         "type": "vault",
         "label": "Vault",
-        "cost": 500
+        "cost": 1000
       }
     ],
     "sprites": {
@@ -141,11 +141,11 @@
     },
     "shopBaseCap": 800,
     "shopCapPerStructure": 200,
-    "shopVisitRate": 0.08,
+    "shopVisitRate": 0.20,
     "shopInvestStep": 100,
-    "tollIncrement": 10,
+    "tollIncrement": 25,
     "teleportFee": 75,
-    "houseRentRate": 0.1,
+    "houseRentRate": 0.25,
     "houseTaxIfMayor": 60,
     "housePopContribution": 4,
     "factoryBaseRate": 1,
@@ -154,8 +154,24 @@
     "factoryJobs": 4,
     "shopJobs": 2,
     "policeProtectionTier": 1,
-    "vaultInterestRate": 0.04,
-    "vaultUpkeep": 25
+    "vaultLevels": [
+      { "level": 1, "buildCost": 1000, "capacity": 5000 },
+      { "level": 2, "upgradeCost": 2000, "capacity": 15000 },
+      { "level": 3, "upgradeCost": 3000, "capacity": 30000 },
+      { "level": 4, "upgradeCost": 4000, "capacity": 50000 },
+      { "level": 5, "upgradeCost": 5000, "capacity": 75000 }
+    ],
+    "upkeep": {
+      "houseFood": 1,
+      "shopElectricity": 1,
+      "houseElectricity": 1,
+      "factoryOil": 1,
+      "policeElectricity": 1,
+      "tollElectricity": 0,
+      "teleporterElectricity": 1,
+      "vaultElectricity": 0,
+      "shortagePenalty": 4
+    }
   },
   "market": {
     "resources": [
@@ -200,7 +216,7 @@
     }
   },
   "district": {
-    "taxBase": 0.5,
+    "taxBase": 1.0,
     "maxTaxRate": 0.5,
     "defaultTaxRate": 0.1,
     "defaultPopulation": 30,
@@ -210,7 +226,8 @@
     "grantCost": 300,
     "grantPopulation": 5,
     "grantCooldown": 5,
-    "festivalCooldown": 5
+    "festivalCooldown": 5,
+    "happinessGrowthMultiplier": 1.5
   },
   "chance": {
     "repeatGuard": 3,
@@ -355,6 +372,19 @@
         },
         "scope": "self",
         "message": "Steel surge: +5 steel."
+      },
+      {
+        "id": "coal_seam",
+        "label": "Coal Seam",
+        "category": "resource",
+        "weight": 0.6,
+        "effect": "resource",
+        "value": {
+          "resource": "coal",
+          "qty": 5
+        },
+        "scope": "self",
+        "message": "A coal seam is uncovered: +5 coal."
       },
       {
         "id": "energy_surplus",

@@ -33,6 +33,9 @@
         currentValue: c.structure.currentValue,
         tollAccrued: c.structure.tollAccrued,
         sabotagedUntilTurn: c.structure.sabotagedUntilTurn,
+        level: c.structure.level || 1,
+        storedMoney: c.structure.storedMoney || 0,
+        idleUntilTurn: c.structure.idleUntilTurn || -1,
       } : null,
     }));
 
@@ -55,21 +58,18 @@
   function deserialize(data, game) {
     if (!data) return false;
     if (data.version !== VERSION) {
-      console.warn(`[AccaSave] save version ${data.version} != ${VERSION}; refusing.`);
+      console.warn('[AccaSave] save version ' + data.version + ' != ' + VERSION + '; refusing.');
       return false;
     }
-    // Restore players (positions + money + resources + structure ownership)
     const cellById = new Map();
     game.cells.forEach(c => cellById.set(c.id, c));
 
-    // Reset structures from save
     game.cells.forEach(c => { c.structure = null; });
     game.players.forEach(p => {
       p.ownedStructures = [];
-      p.regionsMayoredOf = new Set();
+      p.districtsMayoredOf = new Set();
     });
 
-    // First pass: rebuild structures
     data.cells.forEach(snap => {
       const cell = cellById.get(snap.id);
       if (!cell) return;
@@ -80,11 +80,13 @@
           s.currentValue = snap.structure.currentValue;
           s.tollAccrued  = snap.structure.tollAccrued || 0;
           s.sabotagedUntilTurn = snap.structure.sabotagedUntilTurn || -1;
+          s.level        = snap.structure.level || 1;
+          s.storedMoney  = snap.structure.storedMoney || 0;
+          s.idleUntilTurn = snap.structure.idleUntilTurn || -1;
         }
       }
     });
 
-    // Restore player state
     data.players.forEach((snap, i) => {
       const p = game.players[i];
       if (!p) return;

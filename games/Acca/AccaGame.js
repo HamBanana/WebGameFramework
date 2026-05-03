@@ -77,6 +77,9 @@
       this.animator    = animator;
       // Per-type state:
       this.tollAccrued = 0;     // toll_gate
+      this.level       = 1;     // vault: 1..5
+      this.storedMoney = 0;     // vault: cash deposited by owner (counted in net worth)
+      this.idleUntilTurn = -1;  // resource-shortage idle marker (G8)
     }
   }
 
@@ -162,12 +165,13 @@
       return this.ownedStructures.filter(s => s.type === 'house').length;
     }
 
+    /** Adjust ready cash. The cash balance is allowed to go below zero
+     *  mid-turn (debt) — the end-of-turn pipeline (AccaGame._resolveDebt)
+     *  will force-sell to clear it before the turn rotates, and bankruptcy
+     *  fires only when the player's net worth reaches zero. (Playtest #12.)
+     */
     addMoney(amount) {
       this.money += amount;
-      if (this.money < 0) {
-        this.isBankrupt = true;
-        this.money = 0;
-      }
     }
   }
 
@@ -212,9 +216,8 @@
 
     /** Pull the current cell's pre-resolved cardinal slots (up/down/left/
      *  right) into the active direction map. The slots are computed once at
-     *  map load (see Acca map loader: angle-bucketed by dominant axis, then
-     *  the most-cardinal candidate wins the slot), so MOVE just reads them
-     *  here — no pixel-exact match required, no roads list. */
+     *  map load via greedy angle-fit assignment (see _initBoard), so MOVE
+     *  just reads them here. */
     _refreshCandidates() {
       const cur = this.player && this.player.currentCell;
       this.adjacent = { up: null, down: null, left: null, right: null };
@@ -225,10 +228,14 @@
       this.adjacent.down  = cur.down  || null;
       this.adjacent.left  = cur.left  || null;
       this.adjacent.right = cur.right || null;
-      // Dead-end (no cardinal slots filled) — forfeit movement.
+      // Dead-end (no cardinal slots filled) — forfeit movement and log it
+      // so the player knows what happened (S23).
       const anyAdj = !!(this.adjacent.up || this.adjacent.down ||
                         this.adjacent.left || this.adjacent.right);
       if (!anyAdj) {
+        if (this.game && this.game.log && this.player) {
+          this.game.log(`${this.player.name} reached a dead end with ${this.movesLeft} move${this.movesLeft === 1 ? '' : 's'} remaining.`);
+        }
         this.active = false;
         this.events.emit('move:complete', { player: this.player });
       }
@@ -476,12 +483,70 @@
           break;
         }
         case 'vault': {
-          const interest = Math.round(player.money * cfg.vaultInterestRate);
-          opts.push({ label: `Collect interest (+$${interest})`, action: () => {
-            player.addMoney(interest);
-            game.log(`${player.name} earned $${interest} interest from their Vault.`);
-            onDone();
-          } });
+          const levels = cfg.vaultLevels || [];
+          const lvl    = structure.level || 1;
+          const cur    = levels.find(l => l.level === lvl) || { capacity: 5000 };
+          const next   = levels.find(l => l.level === lvl + 1);
+          const cap    = cur.capacity;
+          const stored = structure.storedMoney || 0;
+          const room   = Math.max(0, cap - stored);
+
+          // Deposit choices — small/medium/all that fit the available room.
+          const depositSteps = [];
+          if (player.money > 0 && room > 0) {
+            const candidates = [100, 500, 1000];
+            candidates.forEach(amt => {
+              const eff = Math.min(amt, player.money, room);
+              if (eff > 0 && !depositSteps.includes(eff)) depositSteps.push(eff);
+            });
+            const allIn = Math.min(player.money, room);
+            if (allIn > 0 && !depositSteps.includes(allIn)) depositSteps.push(allIn);
+          }
+          depositSteps.forEach(amt => {
+            opts.push({ label: `Deposit $${amt}  (vault $${stored}/$${cap})`, action: () => {
+              player.addMoney(-amt);
+              structure.storedMoney = (structure.storedMoney || 0) + amt;
+              game.log(`${player.name} deposited $${amt} in their Vault (now $${structure.storedMoney}/$${cap}).`);
+              onDone();
+            } });
+          });
+
+          // Withdraw choices.
+          if (stored > 0) {
+            [100, 500, 1000].forEach(amt => {
+              if (amt > stored) return;
+              opts.push({ label: `Withdraw $${amt}`, action: () => {
+                structure.storedMoney = stored - amt;
+                player.addMoney(amt);
+                game.log(`${player.name} withdrew $${amt} from their Vault.`);
+                onDone();
+              } });
+            });
+            opts.push({ label: `Withdraw all $${stored}`, action: () => {
+              structure.storedMoney = 0;
+              player.addMoney(stored);
+              game.log(`${player.name} withdrew $${stored} from their Vault.`);
+              onDone();
+            } });
+          }
+
+          // Upgrade.
+          if (next) {
+            const cost = next.upgradeCost;
+            if (player.money >= cost) {
+              opts.push({ label: `Upgrade to L${next.level}  ($${cost} → cap $${next.capacity})`, action: () => {
+                player.addMoney(-cost);
+                structure.level = next.level;
+                structure.currentValue += cost;
+                game.log(`${player.name} upgraded their Vault to L${next.level} (capacity $${next.capacity}).`);
+                onDone();
+              } });
+            } else {
+              opts.push({ label: `Upgrade to L${next.level}  ($${cost})  — cannot afford`, action: onDone, _disabled: true });
+            }
+          } else {
+            opts.push({ label: `Vault is at max level (L${lvl}, cap $${cap})`, action: onDone });
+          }
           break;
         }
         case 'toll_gate':
@@ -523,8 +588,8 @@
           return null;
         }
         case 'vault': {
-          const fee = Math.max(1, Math.round(structure.baseValue * cfg.houseRentRate));
-          this._payRent(player, owner, fee, 'inspect a Vault');
+          // Vaults are private storage — visitors don't pay rent (P2 rework).
+          game.log(`${player.name} walks past ${owner.name}'s Vault.`);
           onDone();
           return null;
         }
@@ -581,13 +646,10 @@
 
     /** End-of-turn upkeep & passive effects for the active player. */
     endOfTurnFor(player) {
-      const cfg = this.game.cfg.structures;
-      player.ownedStructures.forEach(s => {
-        if (s.type === 'vault') {
-          player.addMoney(-cfg.vaultUpkeep);
-          this.game.log(`Vault upkeep: -$${cfg.vaultUpkeep}.`);
-        }
-      });
+      // Vault upkeep was removed in the P2 rework — vaults are now passive
+      // money stores with no per-turn cost.
+      // Resource upkeep (food/electricity/oil) is handled in
+      // AccaGame._runResourceUpkeep, which fires before this hook.
     }
 
     _shopMaxCapital(structure, player) {
@@ -707,22 +769,67 @@
         opts.push({ label: 'Trade / Hostile actions', action: () => this._showTradeRootMenu() });
       }
       opts.push({ label: 'Market', action: () => this._showMarketMenu() });
+      // Save/Load are always shown for symmetry; Load is greyed out when no
+      // saved slot exists. (Playtest #19.)
       opts.push({ label: 'Save game', action: () => {
         if (GF.Acca && GF.Acca.Save) {
-          GF.Acca.Save.save(game);
-          game.log('Game saved.');
+          if (GF.Acca.Save.save(game)) game.log('Game saved.');
+          else game.log('Save failed.');
         }
         this._showStartMenu();
       } });
-      if (GF.Acca && GF.Acca.Save && GF.Acca.Save.exists()) {
-        opts.push({ label: 'Load game', action: () => {
-          if (GF.Acca.Save.load(game)) game.log('Game loaded.');
-          else game.log('Nothing to load.');
-          this._showStartMenu();
-        } });
-      }
+      const hasSave = !!(GF.Acca && GF.Acca.Save && GF.Acca.Save.exists());
+      opts.push({
+        label: hasSave ? 'Load game' : 'Load game  — no save slot',
+        _disabled: !hasSave,
+        action: () => {
+          if (!hasSave) { this._showStartMenu(); return; }
+          if (GF.Acca.Save.load(game)) {
+            game.log('Game loaded.');
+            // The save tracks currentPlayerIndex — re-enter the turn for the
+            // player whose turn it was at the time of save.
+            this.player = game.currentPlayer;
+            this._showStartMenu();
+          } else {
+            game.log('Load failed.');
+            this._showStartMenu();
+          }
+        },
+      });
+      // S20 — Full game log panel, paginated.
+      opts.push({ label: 'Game log', action: () => this._showGameLog(0) });
       opts.push({ label: 'Pass turn', action: () => this.enter(TURN_STAGE.END_TURN) });
       this.menu.show(`${p.name}'s turn  ($${p.money})`, opts);
+    }
+
+    /** S20 — paginated game-log viewer. Shows 14 entries per page in reverse
+     *  chronological order (newest first), with prev/next/close. */
+    _showGameLog(page) {
+      const game = this.game;
+      const PER_PAGE = 14;
+      const all = (game.eventLog || []).slice().reverse();
+      const totalPages = Math.max(1, Math.ceil(all.length / PER_PAGE));
+      const safePage = Math.max(0, Math.min(page, totalPages - 1));
+      const start = safePage * PER_PAGE;
+      const slice = all.slice(start, start + PER_PAGE);
+
+      const opts = [];
+      slice.forEach(line => opts.push({
+        label: '· ' + (line.length > 60 ? line.slice(0, 57) + '…' : line),
+        action: () => this._showGameLog(safePage),
+      }));
+      if (slice.length === 0) {
+        opts.push({ label: '(no events yet)', action: () => this._showStartMenu() });
+      }
+      if (safePage + 1 < totalPages) {
+        opts.push({ label: `Next page (${safePage + 2}/${totalPages})`, action: () => this._showGameLog(safePage + 1) });
+      }
+      if (safePage > 0) {
+        opts.push({ label: `Previous page (${safePage}/${totalPages})`, action: () => this._showGameLog(safePage - 1) });
+      }
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      this.menu.show('Game log', opts,
+        `Page ${safePage + 1} of ${totalPages}  ·  ${all.length} entries (newest first)`);
     }
 
     // ── Manage submenu ────────────────────────────────────────────────────
@@ -961,10 +1068,38 @@
         case 'buildable':
           this._handleBuildable(cell);
           break;
+        case 'power_plant':
+          this._grantResource(cell, 'electricity', 3, 'Power Plant');
+          break;
+        case 'well':
+          this._grantResource(cell, 'water', 3, 'Well');
+          break;
+        case 'mine': {
+          // mine.subType ∈ { coal, iron, oil } — iron mines grant steel.
+          const meta = (GF.mapData && GF.mapData.cells || []).find(c => c.id === cell.id) || {};
+          const sub = meta.subType || 'coal';
+          const resource = (sub === 'iron') ? 'steel' : sub;
+          this._grantResource(cell, resource, 3, `${sub.charAt(0).toUpperCase()}${sub.slice(1)} Mine`);
+          break;
+        }
+        case 'market':
+          // Visiting a market cell shortcuts the player into the market UI.
+          this.game.log(`${this.player.name} stops at the Market.`);
+          this._showMarketMenu();
+          this.stage = TURN_STAGE.LAND_PROMPT;
+          break;
         default:
           this.enter(TURN_STAGE.END_TURN);
           break;
       }
+    }
+
+    /** Grant a fixed amount of a resource to the active player and log it. */
+    _grantResource(cell, resource, qty, label) {
+      const p = this.player;
+      p.resources[resource] = (p.resources[resource] || 0) + qty;
+      this.game.log(`${p.name} stops at the ${label} (+${qty} ${resource}).`);
+      this.enter(TURN_STAGE.END_TURN);
     }
 
     // ── Buildable cells (was: property) ──────────────────────────────────
@@ -1053,22 +1188,32 @@
       const cfg = game.cfg.structures;
       this.stage = TURN_STAGE.LAND_PROMPT;
 
-      const opts = cfg.catalog
-        .filter(entry => p.money >= entry.cost)
-        .map(entry => ({
-          label: `Build ${entry.label} ($${entry.cost})`,
+      // Sort the catalog by cost ascending so the cheapest builds are at the
+      // top (S21). Unaffordable options stay in the list but render greyed
+      // out so the player can see what they're missing (B17).
+      const sorted = cfg.catalog.slice().sort((a, b) => a.cost - b.cost);
+      const opts = sorted.map(entry => {
+        const can = p.money >= entry.cost;
+        return {
+          label: can
+            ? `Build ${entry.label} ($${entry.cost})`
+            : `Build ${entry.label} ($${entry.cost})  — need $${entry.cost - p.money}`,
+          _disabled: !can,
           action: () => {
+            if (!can) { this._showBuildMenu(cell); return; }
             p.addMoney(-entry.cost);
             game.structures.build(cell, entry.type, p.index);
             game.log(`${p.name} built a ${entry.label} in ${cell.district}.`);
             game.checkMayor(p, cell.district);
             this.enter(TURN_STAGE.END_TURN);
           },
-        }));
+        };
+      });
       opts.push({ label: 'Skip', action: () => this.enter(TURN_STAGE.END_TURN) });
 
-      this.menu.show(`Empty plot in ${cell.district}`, opts,
-        `Cash: $${p.money}`);
+      const cheapest = sorted[0] ? sorted[0].cost : 0;
+      const subtitle = `Cash: $${p.money}  ·  Cheapest: $${cheapest}`;
+      this.menu.show(`Empty plot in ${cell.district}`, opts, subtitle);
     }
 
     _typeLabel(type) {
@@ -1194,6 +1339,7 @@
         container   : document.getElementById('gameContainer'),
         tbTurn      : document.getElementById('tb-turn'),
         tbName      : document.getElementById('tb-name'),
+        tbBankruptBadge : document.getElementById('tb-bankrupt-badge'),
         tbMoney     : document.getElementById('tb-money'),
         tbNetWorth  : document.getElementById('tb-networth'),
         tbResources : document.getElementById('tb-resources'),
@@ -1213,15 +1359,27 @@
     // ── Logging ───────────────────────────────────────────────────────────
     log(message) {
       this.eventLog.push(message);
-      if (this.eventLog.length > 30) this.eventLog.shift();
+      // Cap raised from 30 to 500 (S20) so the in-game "Game log" panel can
+      // surface a useful history. Notifications panel still slices the last
+      // 12, so the visible HUD doesn't change.
+      const CAP = 500;
+      if (this.eventLog.length > CAP) {
+        this.eventLog.splice(0, this.eventLog.length - CAP);
+      }
     }
 
     get currentPlayer() { return this.players[this.currentPlayerIndex]; }
 
-    /** Net worth = cash + structure currentValues + resources at market price. */
+    /** Net worth = cash + structure currentValues + vault stored money +
+     *  resources at market price. Vault stored money is owner-only; ready
+     *  cash may be negative mid-turn (see Player.addMoney) and that's fine
+     *  for the net-worth calc — debt is netted against everything else. */
     netWorth(p) {
       let nw = p.money;
-      p.ownedStructures.forEach(s => { nw += s.currentValue; });
+      p.ownedStructures.forEach(s => {
+        nw += s.currentValue;
+        if (s.type === 'vault') nw += (s.storedMoney || 0);
+      });
       const prices = this.cfg.market.basePrices;
       Object.entries(p.resources).forEach(([res, qty]) => {
         nw += (prices[res] || 0) * qty;
@@ -1337,31 +1495,41 @@
         });
       });
 
-      // Cardinal slot assignment from neighbor angles
+      // Cardinal slot assignment from neighbor angles. Algorithm (S22 expand):
+      //   1. For every neighbor, compute its angular deviation from each of
+      //      the four cardinal axes (up/down/left/right). Sort the four
+      //      directions per neighbor, best fit first.
+      //   2. Sort neighbors by their best-fit deviation (most-cardinal first).
+      //   3. Greedily assign each neighbor to its first available slot.
+      //
+      // The previous logic bucketed by dominant axis and only the single
+      // most-cardinal candidate in each bucket won a slot — which left
+      // multi-neighbor junctions appearing as dead-ends in the playtest.
+      // The new pass guarantees that *every* neighbor gets a slot as long
+      // as any of the four cardinal buckets is still free, so a 5-way
+      // junction is reachable with arrow keys.
+      const cardinalAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
+      const angularDev = (a, b) => Math.abs(((a - b + Math.PI) % (2 * Math.PI)) - Math.PI);
       this.cells.forEach(cell => {
-        const candidates = { up: [], down: [], left: [], right: [] };
-        cell._neighbors.forEach(neighbor => {
+        cell.up = cell.down = cell.left = cell.right = null;
+        if (!cell._neighbors || cell._neighbors.length === 0) return;
+        const ranked = cell._neighbors.map(neighbor => {
           const dx = neighbor.x - cell.x;
           const dy = neighbor.y - cell.y;
           const angle = Math.atan2(dy, dx);
-          let direction;
-          if (Math.abs(dy) > Math.abs(dx)) direction = dy > 0 ? 'down' : 'up';
-          else                              direction = dx > 0 ? 'right' : 'left';
-          candidates[direction].push({ neighbor, angle });
-        });
+          const fits = Object.keys(cardinalAngles).map(dir => ({
+            dir,
+            dev: angularDev(angle, cardinalAngles[dir]),
+          })).sort((a, b) => a.dev - b.dev);
+          return { neighbor, fits, bestDev: fits[0].dev };
+        }).sort((a, b) => a.bestDev - b.bestDev);
 
-        const cardinalAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
-
-        Object.entries(candidates).forEach(([dir, cands]) => {
-          if (cands.length > 0) {
-            const cardinal = cardinalAngles[dir];
-            let best = cands[0];
-            let bestDev = Math.abs(((cands[0].angle - cardinal + Math.PI) % (2 * Math.PI)) - Math.PI);
-            for (let i = 1; i < cands.length; i++) {
-              const dev = Math.abs(((cands[i].angle - cardinal + Math.PI) % (2 * Math.PI)) - Math.PI);
-              if (dev < bestDev) { best = cands[i]; bestDev = dev; }
+        ranked.forEach(r => {
+          for (const f of r.fits) {
+            if (cell[f.dir] === null) {
+              cell[f.dir] = r.neighbor;
+              break;
             }
-            cell[dir] = best.neighbor;
           }
         });
       });
@@ -1402,7 +1570,17 @@
 
     _initPlayers() {
       this.players = [];
-      const startCell = this.cells.find(c => c.type === 'bank') || this.cells[0];
+      // Pick the spawn cell: map's spawnCellId wins; fall back to first bank cell.
+      // (See playtest #15 — all players share the same spawn so the early game
+      //  isn't a single-region land grab.)
+      let startCell = null;
+      const spawnId = (GF.mapData && GF.mapData.spawnCellId !== undefined && GF.mapData.spawnCellId !== null)
+        ? GF.mapData.spawnCellId : null;
+      if (spawnId !== null) {
+        startCell = this.cells.find(c => c.id === spawnId) || null;
+      }
+      if (!startCell) startCell = this.cells.find(c => c.type === 'bank') || this.cells[0];
+
       const count = Math.min(this.menuPlayerCount, this.cfg.players.length);
       const startRes = this.cfg.startingResources || {};
       for (let i = 0; i < count; i++) {
@@ -1460,18 +1638,27 @@
 
     _checkWinCondition() {
       const w = this.cfg.win;
+      // Combined default: net-worth target OR last player standing — whichever
+      // fires first. This replaces the cash-only win that 500-turn playtest
+      // showed to be effectively unreachable.
+      const live = this.players.filter(p => !p.isBankrupt);
+      const lastStanding = (live.length === 1) ? live[0] : null;
       switch (w.type) {
         case 'MoneyOnHand':
-          return this.players.find(p => p.money >= w.target) || null;
+          return this.players.find(p => p.money >= w.target) || lastStanding;
+        case 'NetWorth':
         case 'TotalValue':
-          return this.players.find(p => this.netWorth(p) >= w.target) || null;
+          return this.players.find(p => this.netWorth(p) >= w.target) || lastStanding;
         case 'Level':
-          return this.players.find(p => p.level >= w.target) || null;
-        case 'LastManStanding': {
-          const live = this.players.filter(p => !p.isBankrupt);
-          return live.length === 1 ? live[0] : null;
+          return this.players.find(p => p.level >= w.target) || lastStanding;
+        case 'LastManStanding':
+          return lastStanding;
+        case 'NetWorthOrLastStanding':
+        default: {
+          const target = w.target || 50000;
+          const byWealth = this.players.find(p => !p.isBankrupt && this.netWorth(p) >= target);
+          return byWealth || lastStanding;
         }
-        default: return null;
       }
     }
 
@@ -1562,6 +1749,55 @@
 
       // 2. Mayor tax collection (only for the active player).
       if (this.districtSys) this.districtSys.collectTaxes(player);
+
+      // 3. Contextual prompts (G7) — surface non-obvious affordances at the
+      //    top of the turn so casual players actually notice the trade,
+      //    market, and mayor menus.
+      this._runContextualPrompts(player);
+    }
+
+    /** G7 — emit log/notification lines that nudge the player toward
+     *  underused mechanics. Stays advisory: no pop-ups, no blocking menus. */
+    _runContextualPrompts(player) {
+      const M = this.marketSys;
+      const cfg = this.cfg.market || {};
+      // Resource hint: any resource above 20 → suggest visiting the market.
+      const hot = (cfg.resources || []).filter(r => (player.resources[r] || 0) >= 20);
+      if (hot.length > 0 && M) {
+        const r = hot[0];
+        const have = player.resources[r] || 0;
+        const sellPrice = M.sellPriceOf ? M.sellPriceOf(r) : (cfg.basePrices && cfg.basePrices[r]) || 0;
+        this.log(`Tip: you have ${have} ${r} — Market would buy at $${sellPrice} each.`);
+      }
+      // Cash hint: cheapest build unaffordable → suggest skipping or selling.
+      const cheapest = (this.cfg.structures.catalog || []).reduce(
+        (m, e) => Math.min(m, e.cost), Infinity);
+      if (player.money >= 0 && player.money < cheapest && player.ownedStructures.length === 0) {
+        this.log(`Tip: cheapest build is $${cheapest}; you have $${player.money}.`);
+      }
+      // Mayor hint: mayor of a populous district → flag the Manage menu.
+      if (player.districtsMayoredOf && player.districtsMayoredOf.size > 0 && this.districtSys) {
+        let totalPop = 0;
+        player.districtsMayoredOf.forEach(id => {
+          const d = this.districtSys.get(id);
+          if (d) totalPop += d.population;
+        });
+        if (totalPop >= 60) {
+          this.log(`Tip: as Mayor you can hold festivals or set tax rates from Manage.`);
+        }
+      }
+      // Trade hint — opponents holding ≥ 5 of a resource you have 0 of.
+      if (this.players.length > 1) {
+        const opps = this.players.filter(o => o !== player && !o.isBankrupt);
+        for (const o of opps) {
+          for (const r of (cfg.resources || [])) {
+            if ((player.resources[r] || 0) === 0 && (o.resources[r] || 0) >= 5) {
+              this.log(`Tip: ${o.name} has ${o.resources[r]} ${r} — try Trade / Hostile actions.`);
+              return;
+            }
+          }
+        }
+      }
     }
 
     /** End-of-turn pipeline (Planning §4.3 + §6 + §8 + §9). Passive income has
@@ -1571,8 +1807,33 @@
       this.turnCounter = (this.turnCounter || 0) + 1;
       this.log(`${player.name} ends their turn.`);
 
-      // 1. Structure upkeep (vault upkeep, etc.)
+      // 1. Resource upkeep (G8) — houses eat food, buildings draw electricity,
+      //    factories burn oil. Shortages idle the structure for the next turn
+      //    and ding the district's happiness.
+      this._runResourceUpkeep(player);
+
+      // 1b. Structure upkeep (legacy hook — no longer charges vault upkeep).
       this.structures.endOfTurnFor(player);
+
+      // 1c. Force-resolve debt: cash can go below zero mid-turn (e.g. from
+      //     resource upkeep), but it has to be back above zero before the
+      //     turn rotates. We auto-sell resources (at market sell price) and
+      //     then structures (at half currentValue) cheapest-first until the
+      //     debt clears or the player runs out of things to sell. (Playtest #12.)
+      this._resolveDebt(player);
+
+      // 1d. Bankruptcy check — only fires when *net worth* hits zero
+      //     (everything sold, debt still outstanding). The flag now triggers
+      //     turn-rotation skipping in _advanceToNextPlayer. (Playtest #12.)
+      const nw = this.netWorth(player);
+      if (nw <= 0 && !player.isBankrupt) {
+        player.isBankrupt = true;
+        this.log(`${player.name} is bankrupt — net worth $${nw}.`);
+      } else if (nw > 0 && player.isBankrupt) {
+        // Recovery (rare but possible if sabotage decay restored value).
+        player.isBankrupt = false;
+        this.log(`${player.name} is no longer bankrupt.`);
+      }
 
       // 2. Population/happiness/migration tick (every district, once per turn).
       if (this.populationSys) this.populationSys.tick(this.turnCounter, this.players);
@@ -1616,17 +1877,26 @@
     _runProduction(player) {
       const cfg = this.cfg.structures;
       player.ownedStructures.forEach(s => {
-        if (s.sabotagedUntilTurn > this.turnCounter) return; // idle
+        if (s.sabotagedUntilTurn > this.turnCounter) return; // idle from sabotage
+        if ((s.idleUntilTurn || -1) > this.turnCounter) return; // idle from upkeep shortage
         if (s.type === 'factory') {
+          // Factory output is the DISTRICT'S specialty resource (B18) — that
+          // way every district produces a different resource, and across the
+          // five Danish regions all of electricity / food / oil / wood / water
+          // can be accumulated through factories. Districts without a
+          // specialty fall back to the configured factoryResource (food).
           const houseBonus = 1 + player.housesOwned * cfg.factoryHouseBonus;
-          let qty = Math.max(1, Math.round(cfg.factoryBaseRate * houseBonus));
-          // District specialty bonus
+          const qtyBase = Math.max(1, Math.round(cfg.factoryBaseRate * houseBonus));
+          let qty = qtyBase;
+          let resource = cfg.factoryResource;
           if (this.districtSys && s.cell.district) {
             const d = this.districtSys.get(s.cell.district);
-            if (d && d.specialty === cfg.factoryResource) qty += this.cfg.market.specialtyBonus;
+            if (d && d.specialty) {
+              resource = d.specialty;
+              qty += this.cfg.market.specialtyBonus || 0;
+            }
           }
-          player.resources[cfg.factoryResource] =
-            (player.resources[cfg.factoryResource] || 0) + qty;
+          player.resources[resource] = (player.resources[resource] || 0) + qty;
         }
         if (s.type === 'house') {
           // Houses passively contribute residents to their district population
@@ -1640,6 +1910,155 @@
           player.money += 20;
         }
       });
+    }
+
+    /** End-of-turn resource upkeep — every owned structure consumes a resource
+     *  (G8). Shortfalls force the player to BUY the missing units at market
+     *  price (paid out of cash, allowed to push cash negative — debt is
+     *  resolved by _resolveDebt afterwards) and idle the structure for one
+     *  turn so it produces nothing on the next start-of-turn. */
+    _runResourceUpkeep(player) {
+      const cfg = this.cfg.structures;
+      const upkeep = cfg.upkeep || {};
+      const prices = this.cfg.market.basePrices || {};
+      // Cost for each resource type the player is missing
+      const need = { food: 0, electricity: 0, oil: 0 };
+      const idle = [];
+
+      // Houses eat food per resident (housePopContribution residents per house).
+      const houses = player.ownedStructures.filter(s => s.type === 'house');
+      const houseFoodPer = upkeep.houseFood || 0;
+      if (houses.length > 0 && houseFoodPer > 0) {
+        need.food += houses.length * houseFoodPer;
+      }
+
+      // Buildings draw electricity (per-type configurable).
+      const buildingElec = (s) => {
+        if (s.type === 'shop')           return upkeep.shopElectricity || 0;
+        if (s.type === 'house')          return upkeep.houseElectricity || 0;
+        if (s.type === 'police_station') return upkeep.policeElectricity || 0;
+        if (s.type === 'toll_gate')      return upkeep.tollElectricity || 0;
+        if (s.type === 'teleporter')     return upkeep.teleporterElectricity || 0;
+        if (s.type === 'vault')          return upkeep.vaultElectricity || 0;
+        return 0;
+      };
+      player.ownedStructures.forEach(s => { need.electricity += buildingElec(s); });
+
+      // Factories burn oil.
+      const factories = player.ownedStructures.filter(s => s.type === 'factory');
+      const factoryOilPer = upkeep.factoryOil || 0;
+      need.oil += factories.length * factoryOilPer;
+
+      // Pay each resource — first from stockpile, then by buying at market price.
+      const summary = [];
+      Object.keys(need).forEach(res => {
+        const required = need[res];
+        if (required <= 0) return;
+        const have = player.resources[res] || 0;
+        const fromStock = Math.min(have, required);
+        player.resources[res] = have - fromStock;
+        const short = required - fromStock;
+        if (short <= 0) {
+          summary.push(`-${fromStock} ${res}`);
+          return;
+        }
+        // Shortfall — pay market price (drives cash potentially negative,
+        // resolved by _resolveDebt). Idle one structure of the affected type
+        // and ding district happiness (playtest #G8).
+        const unitPrice = prices[res] || 0;
+        const cost = short * unitPrice;
+        if (cost > 0) {
+          player.addMoney(-cost);
+          summary.push(`-${fromStock} ${res} (+$${cost} bought)`);
+          this.log(`${player.name} bought ${short} ${res} at market for $${cost} (upkeep shortfall).`);
+        } else {
+          summary.push(`-${fromStock} ${res}`);
+        }
+        // Find one structure of the affected type to idle (cosmetic — flips
+        // production off for next turn) and apply happiness penalty.
+        let idleType = null;
+        if (res === 'food') idleType = 'house';
+        else if (res === 'oil') idleType = 'factory';
+        else if (res === 'electricity') idleType = 'shop';
+        if (idleType) {
+          const target = player.ownedStructures.find(s => s.type === idleType
+            && (s.idleUntilTurn || -1) <= (this.turnCounter || 0));
+          if (target) {
+            target.idleUntilTurn = (this.turnCounter || 0) + 1;
+            idle.push({ type: idleType, district: target.cell && target.cell.district });
+          }
+        }
+      });
+
+      // Apply happiness penalty for shortages.
+      if (idle.length > 0 && this.districtSys) {
+        const penalty = upkeep.shortagePenalty || 0;
+        idle.forEach(({ district }) => {
+          if (!district) return;
+          const d = this.districtSys.get(district);
+          if (d) d.happiness = Math.max(0, d.happiness - penalty);
+        });
+      }
+      if (summary.length > 0) {
+        this.log(`Upkeep for ${player.name}: ${summary.join(', ')}.`);
+      }
+    }
+
+    /** Auto-sell to clear debt. Resources first (at market sell price), then
+     *  structures (at half currentValue, returned to the bank). Vault stored
+     *  money is automatically withdrawn first since it's the player's own
+     *  cash sitting in storage. */
+    _resolveDebt(player) {
+      if (player.money >= 0) return;
+
+      // 1. Withdraw any vault stored money first — it IS the player's cash.
+      const vaults = player.ownedStructures.filter(s => s.type === 'vault' && (s.storedMoney || 0) > 0);
+      vaults.forEach(v => {
+        if (player.money >= 0) return;
+        const amt = v.storedMoney;
+        v.storedMoney = 0;
+        player.money += amt;
+        this.log(`${player.name}'s Vault auto-withdraws $${amt} to cover debt.`);
+      });
+
+      // 2. Sell resources at market sell price.
+      if (player.money < 0 && this.marketSys) {
+        const M = this.marketSys;
+        const resList = (this.cfg.market.resources || []).slice()
+          .sort((a, b) => (M.sellPriceOf(b) || 0) - (M.sellPriceOf(a) || 0));
+        resList.forEach(res => {
+          if (player.money >= 0) return;
+          const have = player.resources[res] || 0;
+          if (have <= 0) return;
+          const r = M.sell(player, res, have);
+          if (r && r.ok) {
+            this.log(`${player.name} auto-sold ${have} ${res} for $${r.totalProceeds} to settle debt.`);
+          }
+        });
+      }
+
+      // 3. Sell structures at half currentValue (cheapest first to preserve
+      //    high-value holdings as long as possible).
+      if (player.money < 0) {
+        const sellable = player.ownedStructures.slice().sort((a, b) => a.currentValue - b.currentValue);
+        for (const s of sellable) {
+          if (player.money >= 0) break;
+          const refund = Math.round((s.currentValue || 0) * (this.cfg.property.bankBuybackRate || 0.5));
+          // Vault stored money was already withdrawn above; if any leaked in
+          // as part of currentValue, refund includes it. Detach the structure.
+          const cell = s.cell;
+          if (cell) {
+            cell.structure = null;
+            cell.sprite = 'cell_property';
+            cell.animator = this.sprites.createAnimator('cell_property', 'idle');
+          }
+          const idx = player.ownedStructures.indexOf(s);
+          if (idx >= 0) player.ownedStructures.splice(idx, 1);
+          player.money += refund;
+          this.log(`${player.name} auto-sold their ${s.type} in ${cell && cell.district || '(?)'} for $${refund} to settle debt.`);
+          if (this.districtSys && cell && cell.district) this.districtSys.recomputeMayor(cell.district);
+        }
+      }
     }
 
     _advanceToNextPlayer() {
@@ -1885,6 +2304,57 @@
         // lives in a cardinal slot, so MOVE is driven purely by arrow keys
         // and there are no on-board road choices to indicate.)
       });
+
+      // P1 — next-cell tooltip preview. While the active player is choosing
+      // a direction, label each cardinal-adjacent cell with what kind of
+      // cell it is so empty plots, banks, chance cells and structures are
+      // distinguishable BEFORE landing on them.
+      if (this.gameState === GAME_STATE.PLAYING && this.movement && this.movement.active) {
+        const adj = this.movement.adjacent || {};
+        ['up', 'down', 'left', 'right'].forEach(dir => {
+          const target = adj[dir];
+          if (!target) return;
+          const px = this._toPixel(target);
+          const label = this._describeCell(target);
+          if (!label) return;
+          this.ui.drawText(ctx, label, px.x, px.y - size / 2 - 6, {
+            font: 'bold 10px monospace',
+            color: '#ffffff',
+            align: 'center',
+            stroke: '#000',
+            strokeWidth: 3,
+          });
+        });
+      }
+    }
+
+    /** P1 — short human-readable description of a cell for the next-cell
+     *  tooltip overlay during MOVE stage. */
+    _describeCell(cell) {
+      if (!cell) return '';
+      const labelMap = {
+        bank: 'Bank +$200',
+        chance: 'Chance',
+        market: 'Market',
+        power_plant: 'Power Plant',
+        well: 'Well',
+        mine: 'Mine',
+        empty: '',
+      };
+      if (cell.type === 'buildable') {
+        if (cell.structure) {
+          const s = cell.structure;
+          const owner = (this.players && this.players[s.ownerIndex]) || null;
+          const labelEntry = (this.cfg.structures.catalog || []).find(c => c.type === s.type);
+          const label = labelEntry ? labelEntry.label : s.type;
+          if (owner) {
+            return `${label} (${owner.name})`;
+          }
+          return label;
+        }
+        return 'Empty plot';
+      }
+      return labelMap[cell.type] || '';
     }
 
     /** Draw road segments between connected cells. Roads are rendered before
@@ -2029,14 +2499,17 @@
 
       opts.forEach((opt, i) => {
         const oy = curY + 8 + i * optH;
+        const disabled = !!opt._disabled;
         if (i === this.menu.index) {
-          ctx.fillStyle = 'rgba(120,160,220,0.25)';
+          ctx.fillStyle = disabled ? 'rgba(120,120,120,0.18)' : 'rgba(120,160,220,0.25)';
           ctx.fillRect(x + 8, oy - 4, w - 16, optH - 4);
         }
         const prefix = i === this.menu.index ? '> ' : '  ';
+        const color = disabled
+          ? (i === this.menu.index ? '#9aa0a8' : '#666c75')
+          : (i === this.menu.index ? '#ffffff' : '#bcd0e8');
         UI.drawText(ctx, prefix + opt.label, x + 24, oy,
-          { font: '13px monospace',
-            color: i === this.menu.index ? '#ffffff' : '#bcd0e8' });
+          { font: '13px monospace', color });
       });
 
       UI.drawText(ctx, '↑↓ select   Enter confirm', x + w / 2, y + h - 18,
@@ -2121,10 +2594,14 @@
         if (dom.tbTurn.textContent !== turnStr) dom.tbTurn.textContent = turnStr;
       }
 
-      // Top bar (current player)
-      const nameStr = cur.name + (cur.isBankrupt ? ' (bankrupt)' : '');
-      if (dom.tbName.textContent !== nameStr) dom.tbName.textContent = nameStr;
+      // Top bar (current player). The "(bankrupt)" suffix used to truncate
+      // the topbar money/networth — bankruptcy now renders as a separate
+      // pill-shaped badge next to the name. (Playtest #5.)
+      if (dom.tbName.textContent !== cur.name) dom.tbName.textContent = cur.name;
       dom.tbName.style.color = cur.color;
+      if (dom.tbBankruptBadge) {
+        dom.tbBankruptBadge.style.display = cur.isBankrupt ? 'inline-block' : 'none';
+      }
       const moneyStr = '$' + cur.money;
       if (dom.tbMoney.textContent !== moneyStr) dom.tbMoney.textContent = moneyStr;
       const nwStr = '$' + nw;

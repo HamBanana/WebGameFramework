@@ -78,8 +78,13 @@
 
     _stepGrowth(r) {
       const c = this.cfg.population;
+      const dCfg = this.cfg.district || {};
       const happy01 = r.happiness / 100;
-      const births = Math.round(r.population * c.birthRate * happy01);
+      // Happiness now scales births more aggressively (P4 — make happiness
+      // visibly drive population growth). The multiplier is a designer-tunable
+      // knob in cfg.district.happinessGrowthMultiplier.
+      const growthMul = dCfg.happinessGrowthMultiplier || 1;
+      const births = Math.round(r.population * c.birthRate * happy01 * growthMul);
       const deaths = Math.round(r.population * c.deathRate * (1 - happy01));
       const delta  = births - deaths;
       r.birthsThisTurn = births;
