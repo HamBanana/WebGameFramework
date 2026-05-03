@@ -22,9 +22,6 @@
       currentCellId: p.currentCell && p.currentCell.id,
       districtsMayoredOf: Array.from(p.districtsMayoredOf || []),
       ownedStructureCellIds: p.ownedStructures.map(s => s.cell && s.cell.id),
-      companyId: p.company && p.company.id,
-      companyName: p.company && p.company.name,
-      companyIndustry: p.company && p.company.industry,
     }));
 
     const cells = game.cells.map(c => ({
@@ -98,9 +95,6 @@
       const cell    = cellById.get(snap.currentCellId);
       if (cell) p.currentCell = cell;
       (snap.districtsMayoredOf || []).forEach(r => p.districtsMayoredOf.add(r));
-      if (snap.companyId) {
-        p.company = { id: snap.companyId, name: snap.companyName, industry: snap.companyIndustry };
-      }
     });
 
     game.currentPlayerIndex = data.currentPlayerIndex;

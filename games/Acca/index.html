@@ -48,7 +48,7 @@
     #topbar {
       grid-area: topbar;
       display: grid;
-      grid-template-columns: 110px 130px 130px 1fr;
+      grid-template-columns: 80px 110px 130px 130px 1fr;
       align-items: stretch;
       background: linear-gradient(180deg, #1c92e8 0%, #1879c4 100%);
       border-bottom: 2px solid #08436b;
@@ -318,8 +318,12 @@
 <body>
   <div id="gameContainer">
 
-    <!-- Top bar: current player stats + resources -->
+    <!-- Top bar: turn counter + current player stats + resources -->
     <div id="topbar">
+      <div class="tb-cell">
+        <div class="tb-label">Turn</div>
+        <div class="tb-value" id="tb-turn">1</div>
+      </div>
       <div class="tb-cell">
         <div class="tb-label">Name</div>
         <div class="tb-value" id="tb-name">—</div>
@@ -332,7 +336,7 @@
         <div class="tb-label">Net worth</div>
         <div class="tb-value" id="tb-networth">$0</div>
       </div>
-      <div class="tb-cell" id="tb-resources" style="grid-column: 4;"></div>
+      <div class="tb-cell" id="tb-resources" style="grid-column: 5;"></div>
     </div>
 
     <!-- Left sidebar: district information -->

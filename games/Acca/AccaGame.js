@@ -119,6 +119,13 @@
       this.animator.update(dt);
     }
 
+    /** Set the visible face directly (used to count down during movement). */
+    setFace(value) {
+      const v = Math.max(1, Math.min(6, value | 0));
+      this.rolledValue = v;
+      this.animator.play('face' + v, true);
+    }
+
     draw(ctx, x, y) { this.animator.draw(ctx, x, y); }
   }
 
@@ -140,7 +147,6 @@
       this.ownedStructures  = []; // array of PlayerStructure
       this.resources        = {}; // resourceName → quantity
       this.districtsMayoredOf = new Set(); // ids of districts this player is mayor of
-      this.company          = null; // Planning §7 — null until founded
 
       this.currentCell = startCell;
       this.moveOffset  = { x: 0, y: 0 };
@@ -166,36 +172,138 @@
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  //  MovementController — per-step arrow input during MOVE stage
+  //  MovementController — drives stepping during MOVE stage.
+  //
+  //  Two distinct movement modes coexist (Acca playtest fix #1):
+  //
+  //    1. ADJACENT MOVEMENT — when a neighbour sits exactly one cellSize away
+  //       on a single axis (orthogonally adjacent), it lives in the cardinal
+  //       slot for that direction. The matching arrow key (↑/↓/←/→) steps to
+  //       it directly, no selection needed.
+  //
+  //    2. ROAD SELECTION    — when neighbours are NOT orthogonally adjacent
+  //       (e.g. diagonal links to chance cells, long-range jumps), they are
+  //       "roads". Roads are highlighted on the board with one currently
+  //       selected; ←/→ cycle the selection (only when the corresponding
+  //       cardinal arrow has no adjacent step), and ENTER steps to the
+  //       selected road.
+  //
+  //  Cells whose neighbours are all adjacent never enter selection mode.
   // ──────────────────────────────────────────────────────────────────────────
   class MovementController {
-    constructor(input, controls, eventBus) {
+    constructor(input, controls, eventBus, game) {
       this.input    = input;
       this.controls = controls;
       this.events   = eventBus;
+      this.game     = game;
       this.active   = false;
       this.player   = null;
       this.movesLeft = 0;
+      // Adjacent neighbours by cardinal direction (or null).
+      this.adjacent = { up: null, down: null, left: null, right: null };
+      // Non-adjacent road choices.
+      this.roads    = [];
+      this.roadIdx  = 0;
     }
 
     begin(player, moves) {
       this.player    = player;
       this.movesLeft = moves;
       this.active    = true;
+      if (this.game && this.game.die) this.game.die.setFace(this.movesLeft);
+      this._refreshCandidates();
+    }
+
+    /** Bucket the current cell's neighbours into "adjacent (cardinal)" and
+     *  "road (non-adjacent)" sets. Adjacency means dy=0 ∧ |dx|=cellSize OR
+     *  dx=0 ∧ |dy|=cellSize — i.e. the neighbour is one square away in a
+     *  cardinal direction. */
+    _refreshCandidates() {
+      const cur = this.player && this.player.currentCell;
+      this.adjacent = { up: null, down: null, left: null, right: null };
+      this.roads    = [];
+      this.roadIdx  = 0;
+      if (!cur) return;
+      const cellSize = (this.game && this.game._cellSize) || 64;
+      cur.neighbors().forEach(n => {
+        const dx = n.x - cur.x;
+        const dy = n.y - cur.y;
+        if (dx === 0 && Math.abs(dy) === cellSize) {
+          if (dy < 0) this.adjacent.up   = this.adjacent.up   || n;
+          else        this.adjacent.down = this.adjacent.down || n;
+        } else if (dy === 0 && Math.abs(dx) === cellSize) {
+          if (dx < 0) this.adjacent.left  = this.adjacent.left  || n;
+          else        this.adjacent.right = this.adjacent.right || n;
+        } else {
+          this.roads.push(n);
+        }
+      });
+      // Dead-end (no adjacent neighbours and no roads) — forfeit movement.
+      const anyAdj = !!(this.adjacent.up || this.adjacent.down ||
+                        this.adjacent.left || this.adjacent.right);
+      if (!anyAdj && this.roads.length === 0) {
+        this.active = false;
+        this.events.emit('move:complete', { player: this.player });
+      }
+    }
+
+    /** The road currently highlighted (renderer hook). Returns null when
+     *  there are no non-adjacent roads or when MOVE is not active. */
+    selectedRoad() {
+      if (!this.active || this.roads.length === 0) return null;
+      return this.roads[this.roadIdx] || null;
     }
 
     update() {
       if (!this.active || !this.player) return;
-      const cur = this.player.currentCell;
-      if (!cur) return;
+      // Hand input over to the menu while it's visible (e.g. landing on a
+      // property → buy/continue prompt).
+      if (this.game && this.game.menu && this.game.menu.visible) return;
 
-      let target = null;
-      if      (this._pressed('up')    && cur.up)    target = cur.up;
-      else if (this._pressed('down')  && cur.down)  target = cur.down;
-      else if (this._pressed('left')  && cur.left)  target = cur.left;
-      else if (this._pressed('right') && cur.right) target = cur.right;
+      // 1. Adjacent stepping — pressing an arrow key with a cardinal-adjacent
+      //    neighbour in that direction steps immediately.
+      if (this._pressed('up')    && this.adjacent.up)    { this.stepTo(this.adjacent.up);    return; }
+      if (this._pressed('down')  && this.adjacent.down)  { this.stepTo(this.adjacent.down);  return; }
+      if (this._pressed('left')  && this.adjacent.left)  { this.stepTo(this.adjacent.left);  return; }
+      if (this._pressed('right') && this.adjacent.right) { this.stepTo(this.adjacent.right); return; }
 
-      if (target) this._stepTo(target);
+      // 2. Road selection — only meaningful when non-adjacent roads exist.
+      if (this.roads.length === 0) return;
+      // Cycle with ←/→, but only if those keys aren't already used for
+      // adjacent stepping in this cell.
+      if (this._pressed('left')  && !this.adjacent.left) {
+        this.roadIdx = (this.roadIdx - 1 + this.roads.length) % this.roads.length;
+      }
+      if (this._pressed('right') && !this.adjacent.right) {
+        this.roadIdx = (this.roadIdx + 1) % this.roads.length;
+      }
+      // Confirm steps onto the selected road.
+      if (this._pressed('confirm')) {
+        const target = this.roads[this.roadIdx];
+        if (target) this.stepTo(target);
+      }
+    }
+
+    /** Public so a future hook (e.g. teleporter) can drive movement. */
+    stepTo(target) {
+      const p = this.player;
+      this.events.emit('cell:leave', { player: p, cell: p.currentCell });
+      p.currentCell = target;
+      this.movesLeft--;
+      if (this.game && this.game.die) {
+        if (this.movesLeft > 0) this.game.die.setFace(this.movesLeft);
+      }
+      const final = this.movesLeft <= 0;
+      this.events.emit('cell:enter', { player: p, cell: target, final });
+
+      if (final) {
+        this.active = false;
+        this.adjacent = { up: null, down: null, left: null, right: null };
+        this.roads    = [];
+        this.events.emit('move:complete', { player: p });
+      } else {
+        this._refreshCandidates();
+      }
     }
 
     _pressed(action) {
@@ -204,24 +312,13 @@
       return codes.some(code => this.input.wasPressed(code));
     }
 
-    _stepTo(target) {
-      const p = this.player;
-      this.events.emit('cell:leave', { player: p, cell: p.currentCell });
-      p.currentCell = target;
-      this.movesLeft--;
-      const final = this.movesLeft <= 0;
-      this.events.emit('cell:enter', { player: p, cell: target, final });
-
-      if (final) {
-        this.active = false;
-        this.events.emit('move:complete', { player: p });
-      }
-    }
-
     cancel() {
       this.active = false;
       this.player = null;
       this.movesLeft = 0;
+      this.adjacent = { up: null, down: null, left: null, right: null };
+      this.roads    = [];
+      this.roadIdx  = 0;
     }
   }
 
@@ -230,34 +327,77 @@
   // ──────────────────────────────────────────────────────────────────────────
   class Menu {
     constructor(input, controls) {
-      this.input    = input;
-      this.controls = controls;
-      this.options  = [];
-      this.index    = 0;
-      this.title    = '';
-      this.subtitle = '';
-      this.visible  = false;
+      this.input          = input;
+      this.controls       = controls;
+      this.options        = [];
+      this.index          = 0;
+      this.title          = '';
+      this.subtitle       = '';
+      this.visible        = false;
+      this.onIndexChange  = null;
+      this.onCancel       = null;
     }
 
-    show(title, options, subtitle) {
+    /**
+     * @param {string} title
+     * @param {Array<{label, action, meta?}>} options
+     * @param {string} [subtitle]
+     * @param {{ onIndexChange?: function, onCancel?: function }} [opts]
+     */
+    show(title, options, subtitle, opts) {
       this.title    = title;
       this.subtitle = subtitle || '';
       this.options  = options;
       this.index    = 0;
       this.visible  = true;
+      this.onIndexChange = (opts && opts.onIndexChange) || null;
+      // If no explicit onCancel was provided, default to a "Back" option's action
+      // so Escape walks the menu stack the same way the user would. Pass
+      // `onCancel: null` (an explicit own-property) to disable Escape entirely
+      // (used for mandatory choices like road selection).
+      if (opts && Object.prototype.hasOwnProperty.call(opts, 'onCancel')) {
+        this.onCancel = opts.onCancel || null;
+        this._cancelDisabled = opts.onCancel === null;
+      } else {
+        const back = options.find(o => o && o.label === 'Back');
+        this.onCancel = (back && back.action) || null;
+        // If we couldn't find a Back action and the caller didn't supply one,
+        // treat Escape as a no-op rather than dismissing the menu into thin
+        // air (e.g. the turn-start menu has no "back" since it's the root).
+        this._cancelDisabled = !this.onCancel;
+      }
+      // Fire a synthetic onIndexChange for the initial item so consumers (e.g.
+      // the property spotlight) can react immediately when the menu opens.
+      if (this.onIndexChange && this.options[0]) {
+        this.onIndexChange(this.options[0], 0);
+      }
     }
 
     hide() {
       this.visible = false;
       this.options = [];
       this.subtitle = '';
+      this.onIndexChange = null;
+      this.onCancel = null;
     }
 
     update() {
       if (!this.visible || this.options.length === 0) return;
 
-      if (this._pressed('up'))   this.index = (this.index - 1 + this.options.length) % this.options.length;
-      if (this._pressed('down')) this.index = (this.index + 1) % this.options.length;
+      let moved = false;
+      if (this._pressed('up'))   { this.index = (this.index - 1 + this.options.length) % this.options.length; moved = true; }
+      if (this._pressed('down')) { this.index = (this.index + 1) % this.options.length; moved = true; }
+      if (moved && this.onIndexChange) {
+        this.onIndexChange(this.options[this.index], this.index);
+      }
+
+      if (this._pressed('cancel')) {
+        if (this._cancelDisabled) return; // mandatory choice — ignore Escape
+        const cb = this.onCancel;
+        this.hide();
+        if (cb) cb();
+        return;
+      }
 
       if (this._pressed('confirm')) {
         const opt = this.options[this.index];
@@ -533,6 +673,9 @@
         case TURN_STAGE.TURN_START:
           this.game._zoomInOnPlayer(this.player);
           this.game.log(`— ${this.player.name}'s turn —`);
+          // Passive income / production fires at the START of the turn so
+          // newly-built structures don't pay out on the same turn they were built.
+          this.game._runStartOfTurn(this.player);
           this._showStartMenu();
           break;
 
@@ -558,7 +701,7 @@
 
         case TURN_STAGE.MOVE:
           this.movement.begin(this.player, this.game.lastRoll);
-          this.game.log(`Move ${this.game.lastRoll} step(s) — use arrow keys.`);
+          this.game.log(`Move ${this.game.lastRoll} step(s) — arrows for adjacent, ←/→ + Enter for roads.`);
           break;
 
         case TURN_STAGE.LANDING:
@@ -599,6 +742,13 @@
         }
         this._showStartMenu();
       } });
+      if (GF.Acca && GF.Acca.Save && GF.Acca.Save.exists()) {
+        opts.push({ label: 'Load game', action: () => {
+          if (GF.Acca.Save.load(game)) game.log('Game loaded.');
+          else game.log('Nothing to load.');
+          this._showStartMenu();
+        } });
+      }
       opts.push({ label: 'Pass turn', action: () => this.enter(TURN_STAGE.END_TURN) });
       this.menu.show(`${p.name}'s turn  ($${p.money})`, opts);
     }
@@ -611,11 +761,6 @@
       if (p.districtsMayoredOf.size > 0 && game.districtSys) {
         opts.push({ label: `Mayor controls (${p.districtsMayoredOf.size} district${p.districtsMayoredOf.size !== 1 ? 's' : ''})`,
           action: () => this._showMayorMenu() });
-      }
-      if (game.cfg.industries) {
-        opts.push({ label: p.company ? `Company: ${p.company.name} (${p.company.industry})`
-                                       : 'Create company',
-          action: () => this._showCompanyMenu() });
       }
       opts.push({ label: 'Properties: ' + p.ownedStructures.length, action: () => this._showPortfolioMenu() });
       opts.push({ label: 'Back', action: () => this._showStartMenu() });
@@ -680,61 +825,38 @@
         `Comfort target ≤ ${Math.round(game.cfg.population.taxComfortRate * 100)}%`);
     }
 
-    // ── Company submenu (Planning §7) ─────────────────────────────────────
-    _showCompanyMenu() {
-      const p = this.player;
-      const game = this.game;
-      const cfg = game.cfg.industries;
-      if (!p.company) {
-        const cost = cfg.newCompanyCost;
-        const opts = cfg.types.map(t => ({
-          label: `Found "${p.name} ${t.toUpperCase()}" — ${t}  ($${cost})`,
-          action: () => {
-            if (p.money < cost) { game.log('Cannot afford.'); this._showManageMenu(); return; }
-            p.money -= cost;
-            p.company = { id: 'co_' + p.index, name: `${p.name} ${t.toUpperCase()}`, industry: t };
-            game.log(`${p.name} founded ${p.company.name}.`);
-            this._showManageMenu();
-          },
-        }));
-        opts.push({ label: 'Back', action: () => this._showManageMenu() });
-        this.menu.show(`Found a company  ($${cost})`, opts);
-        return;
-      }
-      // Existing company — specialize / rename
-      const opts = cfg.types.map(t => ({
-        label: `Specialize: ${t}${t === p.company.industry ? '   ← current' : ''}  ($${cfg.changeCost})`,
-        action: () => {
-          if (t === p.company.industry) { this._showManageMenu(); return; }
-          if (p.money < cfg.changeCost) { game.log('Cannot afford.'); this._showManageMenu(); return; }
-          p.money -= cfg.changeCost;
-          p.company.industry = t;
-          game.log(`${p.company.name} now specializes in ${t}.`);
-          this._showManageMenu();
-        },
-      }));
-      opts.push({ label: 'Back', action: () => this._showManageMenu() });
-      this.menu.show(`${p.company.name}`, opts, `Industry: ${p.company.industry}`);
-    }
-
     _showPortfolioMenu() {
       const p = this.player;
       const game = this.game;
-      const opts = p.ownedStructures.map(s => ({
+      const back = () => { game._clearSpotlight(); this._showManageMenu(); };
+      const opts = p.ownedStructures.map((s) => ({
         label: `${s.cell.district} · ${this._typeLabel(s.type)} · $${s.currentValue}` +
+               ` · cell ${s.cell.id}` +
                (s.sabotagedUntilTurn > game.turnCounter ? ' (sabotaged)' : ''),
-        action: () => this._showStartMenu(),
+        meta: { cell: s.cell, structure: s },
+        action: back,
       }));
-      if (opts.length === 0) opts.push({ label: '(no structures)', action: () => this._showManageMenu() });
-      opts.push({ label: 'Back', action: () => this._showManageMenu() });
-      this.menu.show('Your structures', opts);
+      if (opts.length === 0) opts.push({ label: '(no structures)', action: back });
+      opts.push({ label: 'Back', action: back });
+      this.menu.show('Your structures', opts, 'Highlight a property to focus the camera on it.', {
+        onIndexChange: (opt) => {
+          if (opt && opt.meta && opt.meta.cell) {
+            game._spotlightOnCell(opt.meta.cell);
+          } else {
+            game._clearSpotlight();
+          }
+        },
+        onCancel: back,
+      });
     }
 
     // ── Trade / Hostile actions root ──────────────────────────────────────
+    // Hostile takeover of a property is only available by *landing* on it
+    // (handled via _offerTakeoverOnLand below) — it is no longer reachable
+    // from this menu.
     _showTradeRootMenu() {
       const opts = [
         { label: 'Trade with player',     action: () => this._showTradeTargetMenu() },
-        { label: 'Hostile takeover',      action: () => this._showTakeoverTargetMenu() },
         { label: 'Sabotage a structure',  action: () => this._showSabotageTargetMenu() },
         { label: 'Back',                  action: () => this._showStartMenu() },
       ];
@@ -783,31 +905,6 @@
         game.log(`Trade refused: ${res.reason}.`);
       }
       this._showStartMenu();
-    }
-
-    _showTakeoverTargetMenu() {
-      const others = this._otherPlayers();
-      const candidates = [];
-      others.forEach(p => p.ownedStructures.forEach(s => candidates.push({ p, s })));
-      if (candidates.length === 0) {
-        this.menu.show('Hostile takeover', [{ label: '(no targets)', action: () => this._showTradeRootMenu() }]);
-        return;
-      }
-      const game = this.game;
-      const opts = candidates.map(({ p, s }) => {
-        const cost = Math.round(s.currentValue * game.cfg.property.takeoverMultiplier);
-        return {
-          label: `${s.cell.district}/${this._typeLabel(s.type)} · ${p.name} · $${cost}`,
-          action: () => {
-            const r = game.tradeSys.takeover(this.player, s, game.players, game.turnCounter);
-            game.log(r.ok ? `${this.player.name} took over ${this._typeLabel(s.type)} from ${p.name} for $${r.cost}.`
-                          : `Takeover refused: ${r.reason}.`);
-            this._showStartMenu();
-          },
-        };
-      });
-      opts.push({ label: 'Back', action: () => this._showTradeRootMenu() });
-      this.menu.show('Hostile takeover', opts);
     }
 
     _showSabotageTargetMenu() {
@@ -916,13 +1013,66 @@
           () => this.enter(TURN_STAGE.END_TURN));
         this.menu.show(`Your ${this._typeLabel(s.type)}`, opts);
       } else {
-        const onDone = () => this.enter(TURN_STAGE.END_TURN);
-        const followUp = game.structures.visitorEffect(s, p, onDone);
+        // Apply the visit effect (rent / fee), then — provided the player is
+        // still on the cell — offer the option to buy the property from its
+        // owner. Hostile takeover is only available here, by landing on the
+        // cell.
+        const visitDoneCb = () => {};
+        const followUp = game.structures.visitorEffect(s, p, visitDoneCb);
+        const present = () => {
+          // If a follow-up effect (teleporter) moved the player off the cell,
+          // skip the takeover offer for this structure.
+          if (p.currentCell !== s.cell) {
+            this.enter(TURN_STAGE.END_TURN);
+            return;
+          }
+          this._offerTakeoverOnLand(s);
+        };
         if (followUp) {
+          const wrapped = followUp.map(opt => ({
+            label: opt.label,
+            action: () => {
+              if (opt.action) opt.action();
+              present();
+            },
+          }));
           this.menu.show(`${this._typeLabel(s.type)} (owner: ${game.players[s.ownerIndex].name})`,
-            followUp);
+            wrapped);
+        } else {
+          present();
         }
       }
+    }
+
+    /** Offer the landing player the option to take over the structure they
+     *  just landed on for 5× current value (Acca playtest fix #2). */
+    _offerTakeoverOnLand(structure) {
+      const game = this.game;
+      const p    = this.player;
+      const owner = game.players[structure.ownerIndex];
+      const cost  = Math.round(structure.currentValue * game.cfg.property.takeoverMultiplier);
+      const opts = [];
+      const can  = p.money >= cost;
+      const label = can
+        ? `Buy from ${owner.name}  ($${cost} = 5× value)`
+        : `Buy from ${owner.name}  ($${cost})  — cannot afford`;
+      opts.push({
+        label,
+        action: () => {
+          if (!can) { this.enter(TURN_STAGE.END_TURN); return; }
+          const r = game.tradeSys.takeover(p, structure, game.players, game.turnCounter);
+          game.log(r.ok
+            ? `${p.name} bought the ${this._typeLabel(structure.type)} from ${owner.name} for $${r.cost}.`
+            : `Purchase refused: ${r.reason}.`);
+          this.enter(TURN_STAGE.END_TURN);
+        },
+      });
+      opts.push({ label: 'Continue', action: () => this.enter(TURN_STAGE.END_TURN) });
+      this.menu.show(
+        `${this._typeLabel(structure.type)} owned by ${owner.name}`,
+        opts,
+        `Cell ${structure.cell.id}  ·  Value $${structure.currentValue}`
+      );
     }
 
     _showBuildMenu(cell) {
@@ -1002,7 +1152,7 @@
 
       this.die        = new DieController(sprites);
       this.menu       = new Menu(engine.input, ctl);
-      this.movement   = new MovementController(engine.input, ctl, engine.events);
+      this.movement   = new MovementController(engine.input, ctl, engine.events, this);
       this.structures = new StructureManager(this);
 
       // ── Planning §6–§11 systems ──
@@ -1062,9 +1212,15 @@
 
       this._betweenTurnsTimer = 0;
 
+      // Spotlight target — when set, the camera focuses on this cell and the
+      // renderer dims everything else with a vignette / spotlight effect.
+      // Used by the "Your structures" portfolio menu.
+      this._spotlightCell = null;
+
       // ── DOM HUD references ────────────────────────────────────────────
       this.dom = {
         container   : document.getElementById('gameContainer'),
+        tbTurn      : document.getElementById('tb-turn'),
         tbName      : document.getElementById('tb-name'),
         tbMoney     : document.getElementById('tb-money'),
         tbNetWorth  : document.getElementById('tb-networth'),
@@ -1310,10 +1466,20 @@
 
     _updateCamera(dt) {
       const cam = this._camera;
-      // During the active player's turn, follow them while zoomed in.
-      if (this.gameState === GAME_STATE.PLAYING &&
-          this.turn.stage !== TURN_STAGE.BETWEEN &&
-          this.turn.player) {
+      // Spotlight wins over follow-the-player so the portfolio menu can focus
+      // the camera on the highlighted property.
+      if (this._spotlightCell) {
+        const px = this._toPixel(this._spotlightCell);
+        cam.targetCx = px.x;
+        cam.targetCy = px.y;
+        // Zoom in tighter on the spotlit cell.
+        const W = this.cfg.engine.width, H = this.cfg.engine.height;
+        const cells = Math.max(4, this.cfg.camera.zoomedInCellsAcross - 4);
+        const minDim = Math.min(W, H);
+        cam.targetScale = minDim / (cells * this._cellSize);
+      } else if (this.gameState === GAME_STATE.PLAYING &&
+                 this.turn.stage !== TURN_STAGE.BETWEEN &&
+                 this.turn.player) {
         const px = this._toPixel(this.turn.player.currentCell);
         cam.targetCx = px.x;
         cam.targetCy = px.y;
@@ -1324,36 +1490,65 @@
       cam.cy    += (cam.targetCy    - cam.cy)    * alpha;
     }
 
+    /** Spotlight a cell — focus the camera on it and dim the rest of the board. */
+    _spotlightOnCell(cell) {
+      this._spotlightCell = cell;
+      // When the spotlight is engaged, re-zoom on the spotlit cell. The actual
+      // scale is computed in _updateCamera each frame.
+      if (cell) {
+        const px = this._toPixel(cell);
+        this._camera.targetCx = px.x;
+        this._camera.targetCy = px.y;
+      }
+    }
+
+    _clearSpotlight() {
+      this._spotlightCell = null;
+      // Snap-target the active player again so the camera lerps back.
+      if (this.turn && this.turn.player) {
+        this._zoomInOnPlayer(this.turn.player);
+      }
+    }
+
     // ── Turn flow ─────────────────────────────────────────────────────────
     _beginBetweenTurns() {
       this._zoomOutToBoard();
       this._betweenTurnsTimer = this.cfg.camera.betweenTurnsHold;
     }
 
-    /** End-of-turn pipeline (Planning §4.3 + §6 + §8 + §9). */
+    /** Start-of-turn pipeline — passive income & production fire BEFORE the
+     *  active player rolls, so a structure built last turn pays out this turn
+     *  (and a freshly-built one does not double-dip on the build turn). */
+    _runStartOfTurn(player) {
+      // 1. Per-structure passive production (shop income, factory output,
+      //    house population). Mayor tax collection is also a passive income
+      //    stream so it lives here too.
+      this._runProduction(player);
+
+      // 2. Mayor tax collection (only for the active player).
+      if (this.districtSys) this.districtSys.collectTaxes(player);
+    }
+
+    /** End-of-turn pipeline (Planning §4.3 + §6 + §8 + §9). Passive income has
+     *  already been awarded at the start of the turn, so end-of-turn only
+     *  handles upkeep, world ticks, and bookkeeping. */
     _runEndOfTurn(player) {
       this.turnCounter = (this.turnCounter || 0) + 1;
       this.log(`${player.name} ends their turn.`);
 
-      // 1. Structure upkeep + per-structure passive (vault upkeep, etc.)
+      // 1. Structure upkeep (vault upkeep, etc.)
       this.structures.endOfTurnFor(player);
 
-      // 2. Production: structure-driven resources & population contributions.
-      this._runProduction(player);
-
-      // 3. Mayor tax collection (only for the player whose turn just ended).
-      if (this.districtSys) this.districtSys.collectTaxes(player);
-
-      // 4. Population/happiness/migration tick (every district, once per turn).
+      // 2. Population/happiness/migration tick (every district, once per turn).
       if (this.populationSys) this.populationSys.tick(this.turnCounter, this.players);
 
-      // 5. Market drift.
+      // 3. Market drift.
       if (this.marketSys) this.marketSys.drift();
 
-      // 6. Trade per-turn counters (takeover limit reset).
+      // 4. Trade per-turn counters (takeover limit reset).
       if (this.tradeSys) this.tradeSys.resetTurnCounters(player);
 
-      // 7. Sabotage decay — clear sabotage flags whose duration expired.
+      // 5. Sabotage decay — clear sabotage flags whose duration expired.
       this.cells.forEach(c => {
         if (c.structure && c.structure.sabotagedUntilTurn > 0
             && c.structure.sabotagedUntilTurn <= this.turnCounter) {
@@ -1361,7 +1556,7 @@
         }
       });
 
-      // 8. Cooperative threat track.
+      // 6. Cooperative threat track.
       if (this.cfg.mode === 'cooperative') {
         const co = this.cfg.cooperative;
         this.cooperativeThreat += co.threatPerTurn;
@@ -1377,19 +1572,19 @@
         }
       }
 
-      // 9. Recompute mayor flags after possible bankruptcies / sabotage.
+      // 7. Recompute mayor flags after possible bankruptcies / sabotage.
       if (this.districtSys) this.districtSys.recomputeAll();
     }
 
-    /** Per-turn structure production for the player whose turn ended. */
+    /** Per-turn structure production for the active player.
+     *  Now invoked at TURN_START rather than at end-of-turn. */
     _runProduction(player) {
       const cfg = this.cfg.structures;
-      const industryBonus = this._industryBonus(player);
       player.ownedStructures.forEach(s => {
         if (s.sabotagedUntilTurn > this.turnCounter) return; // idle
         if (s.type === 'factory') {
           const houseBonus = 1 + player.housesOwned * cfg.factoryHouseBonus;
-          let qty = Math.max(1, Math.round(cfg.factoryBaseRate * houseBonus * industryBonus.production));
+          let qty = Math.max(1, Math.round(cfg.factoryBaseRate * houseBonus));
           // District specialty bonus
           if (this.districtSys && s.cell.district) {
             const d = this.districtSys.get(s.cell.district);
@@ -1406,23 +1601,10 @@
           }
         }
         if (s.type === 'shop') {
-          // Tiny passive owner income (modeled via industry incomeMul)
-          const inc = Math.round(20 * industryBonus.income);
-          player.money += inc;
+          // Tiny passive owner income.
+          player.money += 20;
         }
       });
-    }
-
-    _industryBonus(player) {
-      const def = { income: 1, production: 1 };
-      if (!player.company) return def;
-      const ind = this.cfg.industries;
-      const b = ind && ind.bonus[player.company.industry];
-      if (!b) return def;
-      return {
-        income: b.incomeMul || 1,
-        production: b.productionMul || 1,
-      };
     }
 
     _advanceToNextPlayer() {
@@ -1484,15 +1666,9 @@
           break;
 
         case GAME_STATE.PLAYING:
-          // Quick save / load (Planning §16, §18 Phase 8)
-          if (this.engine.input.wasPressed('quickSave') && GF.Acca && GF.Acca.Save) {
-            GF.Acca.Save.save(this);
-            this.log('Quick-saved.');
-          }
-          if (this.engine.input.wasPressed('quickLoad') && GF.Acca && GF.Acca.Save) {
-            if (GF.Acca.Save.load(this)) this.log('Quick-loaded.');
-            else this.log('Nothing to load.');
-          }
+          // Save / Load are reachable from the Start-of-turn menu — no
+          // keyboard shortcut (it used to be F5, which collided with the
+          // browser reload).
           if (this.turn.stage === TURN_STAGE.BETWEEN) {
             this._betweenTurnsTimer -= dt;
             if (this._betweenTurnsTimer <= 0) {
@@ -1555,6 +1731,42 @@
       ctx.translate(-cam.cx, -cam.cy);
       this._drawBoard(ctx);
       this._drawTokens(ctx);
+      ctx.restore();
+      // Screen-space spotlight overlay.
+      this._drawSpotlight(ctx, W, H);
+    }
+
+    /** Dim the screen and punch a glowing hole over the spotlit cell. */
+    _drawSpotlight(ctx, W, H) {
+      const cell = this._spotlightCell;
+      if (!cell) return;
+      const cam = this._camera;
+      const px = this._toPixel(cell);
+      const sx = (px.x - cam.cx) * cam.scale + W / 2;
+      const sy = (px.y - cam.cy) * cam.scale + H / 2;
+      const inner = this._cellSize * cam.scale * 0.65;
+      const outer = this._cellSize * cam.scale * 2.4;
+
+      ctx.save();
+      const grad = ctx.createRadialGradient(sx, sy, inner, sx, sy, outer);
+      grad.addColorStop(0,    'rgba(0,0,0,0)');
+      grad.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+      grad.addColorStop(1,    'rgba(0,0,0,0.78)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Pulsing halo around the spotlit cell.
+      const pulse = 0.7 + 0.3 * Math.abs(Math.sin(performance.now() / 350));
+      ctx.strokeStyle = `rgba(255,233,120,${0.55 * pulse})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(sx, sy, inner * 1.05, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.25 * pulse})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, inner * 1.25, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1628,16 +1840,39 @@
           });
         }
 
-        // Highlight movable cells during MOVE
+        // Highlight road choices during MOVE. Only non-adjacent neighbours
+        // ("roads") need on-board indication — adjacent neighbours are
+        // reached just by pressing the matching arrow key. The currently
+        // selected road gets a brighter, pulsing ring; the others get a
+        // dim dashed ring.
         if (this.gameState === GAME_STATE.PLAYING &&
-            this.turn.stage === TURN_STAGE.MOVE &&
-            this.currentPlayer.currentCell.neighbors().includes(cell)) {
-          ctx.save();
-          ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() / 250));
-          ctx.strokeStyle = '#ffe978';
-          ctx.lineWidth   = 2;
-          ctx.strokeRect(x - size / 2 + 2, y - size / 2 + 2, size - 4, size - 4);
-          ctx.restore();
+            this.turn.stage === TURN_STAGE.MOVE) {
+          const roads = this.movement.roads || [];
+          if (roads.includes(cell)) {
+            const selected = this.movement.selectedRoad
+                             ? this.movement.selectedRoad() : null;
+            const isSelected = cell === selected;
+            ctx.save();
+            if (isSelected) {
+              const pulse = 0.6 + 0.4 * Math.abs(Math.sin(performance.now() / 200));
+              ctx.globalAlpha = pulse;
+              ctx.strokeStyle = '#fff58a';
+              ctx.lineWidth   = 4;
+              ctx.strokeRect(x - size / 2 + 2, y - size / 2 + 2, size - 4, size - 4);
+              ctx.globalAlpha = 0.35 * pulse;
+              ctx.strokeStyle = '#fff58a';
+              ctx.lineWidth   = 8;
+              ctx.strokeRect(x - size / 2 - 2, y - size / 2 - 2, size + 4, size + 4);
+            } else {
+              ctx.globalAlpha = 0.4 + 0.2 * Math.abs(Math.sin(performance.now() / 350));
+              ctx.strokeStyle = '#7fb0ff';
+              ctx.lineWidth   = 2;
+              ctx.setLineDash([4, 3]);
+              ctx.strokeRect(x - size / 2 + 2, y - size / 2 + 2, size - 4, size - 4);
+              ctx.setLineDash([]);
+            }
+            ctx.restore();
+          }
         }
       });
     }
@@ -1774,6 +2009,13 @@
       if (!cur) return;
       const dom = this.dom;
       const nw = this.netWorth(cur);
+
+      // Turn counter — turnCounter is incremented at end-of-turn, so the
+      // human-friendly "current turn" is +1.
+      if (dom.tbTurn) {
+        const turnStr = String((this.turnCounter || 0) + 1);
+        if (dom.tbTurn.textContent !== turnStr) dom.tbTurn.textContent = turnStr;
+      }
 
       // Top bar (current player)
       const nameStr = cur.name + (cur.isBankrupt ? ' (bankrupt)' : '');

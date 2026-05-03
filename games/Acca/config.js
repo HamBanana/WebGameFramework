@@ -83,7 +83,7 @@
     "mayorBonus": 50,
     "sabotageRebate": 15,
     "bankBuybackRate": 0.5,
-    "takeoverMultiplier": 2,
+    "takeoverMultiplier": 5,
     "maxTakeoversPerTurn": 1,
     "tierUpgradeCost": {
       "2": 300,
@@ -156,58 +156,6 @@
     "policeProtectionTier": 1,
     "vaultInterestRate": 0.04,
     "vaultUpkeep": 25
-  },
-  "industries": {
-    "types": [
-      "general",
-      "logistics",
-      "service",
-      "extraction",
-      "energy",
-      "agriculture"
-    ],
-    "bonus": {
-      "general": {
-        "incomeMul": 1.05,
-        "structureTypes": null
-      },
-      "logistics": {
-        "incomeMul": 1.1,
-        "structureTypes": [
-          "shop",
-          "factory",
-          "toll_gate"
-        ]
-      },
-      "service": {
-        "incomeMul": 1.1,
-        "structureTypes": [
-          "house",
-          "shop"
-        ]
-      },
-      "extraction": {
-        "productionMul": 1.2,
-        "structureTypes": [
-          "factory"
-        ]
-      },
-      "energy": {
-        "incomeMul": 1.1,
-        "structureTypes": [
-          "vault"
-        ]
-      },
-      "agriculture": {
-        "productionMul": 1.15,
-        "structureTypes": [
-          "factory",
-          "house"
-        ]
-      }
-    },
-    "changeCost": 1000,
-    "newCompanyCost": 500
   },
   "market": {
     "resources": [
@@ -542,12 +490,6 @@
     ],
     "endTurn": [
       "KeyE"
-    ],
-    "quickSave": [
-      "F5"
-    ],
-    "quickLoad": [
-      "F9"
     ]
   }
 };
