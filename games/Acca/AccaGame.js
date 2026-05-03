@@ -1267,20 +1267,75 @@
       const cellById = new Map();
       cells.forEach(c => {
         let sprite, gameType;
-        if (c.type === 'bank') {
-          sprite = 'cell_start';
-          gameType = 'bank';
-        } else if (c.type === 'chance') {
-          sprite = 'cell_chance';
-          gameType = 'chance';
-        } else if (c.type === 'empty') {
-          if (c.district !== null) {
+
+        switch (c.type) {
+          case 'bank':
+            sprite = 'cell_start';
+            gameType = 'bank';
+            break;
+
+          case 'chance':
+            sprite = 'cell_chance';
+            gameType = 'chance';
+            break;
+
+          case 'market':
+            sprite = 'cell_market';
+            gameType = 'market';
+            break;
+
+          case 'property':
             sprite = 'cell_property';
             gameType = 'buildable';
-          } else {
-            sprite = 'cell_normal';
-            gameType = 'empty';
+            break;
+
+          case 'power_plant':
+            sprite = 'cell_power_plant';
+            gameType = 'power_plant';
+            break;
+
+          case 'well':
+            sprite = 'cell_well';
+            gameType = 'well';
+            break;
+
+          case 'mine': {
+            // Pick a sub-typed sprite when possible (cell_mine_coal, _iron, _oil)
+            // and fall back to the generic cell_mine.
+            const sub = c.subType;
+            const subSprite = sub ? `cell_mine_${sub}` : null;
+            sprite = (subSprite && GF.sprites && GF.sprites[subSprite])
+              ? subSprite
+              : 'cell_mine';
+            gameType = 'mine';
+            break;
           }
+
+          case 'structure': {
+            // Cell predefined with a structure (e.g. shop). Use the matching
+            // structure sprite (cell_shop, cell_factory, etc.); fall back to
+            // cell_property if the type is unknown.
+            const st = c.structureType;
+            const stSprite = st ? `cell_${st}` : null;
+            sprite = (stSprite && GF.sprites && GF.sprites[stSprite])
+              ? stSprite
+              : 'cell_property';
+            gameType = 'structure';
+            break;
+          }
+
+          case 'empty':
+          default:
+            // Empty plot: a districted empty cell is a buildable property,
+            // an undistricted one is a plain landable square.
+            if (c.district !== null && c.district !== undefined) {
+              sprite = 'cell_property';
+              gameType = 'buildable';
+            } else {
+              sprite = 'cell_normal';
+              gameType = 'empty';
+            }
+            break;
         }
 
         const cell = new Cell(c.id, c.x, c.y, gameType, c.district, sprite);
