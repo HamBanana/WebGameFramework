@@ -61,6 +61,13 @@
       cursorColor    : '#ffdd44',
     },
 
+    // ── Debug ───────────────────────────────────────────────────────────────
+    // enabled: start visible; toggleKey: keyboard code to show/hide overlay
+    debug: {
+      enabled  : false,
+      toggleKey: 'F1',
+    },
+
     // ── Controls ────────────────────────────────────────────────────────────
     controls: {
       up     : ['ArrowUp',    'KeyW'],

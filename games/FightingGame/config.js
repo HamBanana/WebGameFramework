@@ -91,6 +91,13 @@
       stageH    : 480,
     },
 
+    // ── Debug ─────────────────────────────────────────────────────────────────
+    // enabled: start visible; toggleKey: keyboard code to show/hide overlay
+    debug: {
+      enabled  : false,
+      toggleKey: 'F1',
+    },
+
     // ── Controls ─────────────────────────────────────────────────────────────
     // KeyboardEvent.code strings
     controls: {

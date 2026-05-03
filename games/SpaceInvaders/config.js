@@ -84,8 +84,8 @@
       300
     ],
     "spawnInterval": [
-      15,
-      25
+      12,
+      20
     ]
   },
   "bunkers": {
@@ -115,26 +115,66 @@
     ]
   },
   "powerups": {
-    "dropChance": 0.12,
+    "dropChance": 0.18,
     "speed": 65,
     "duration": 8,
     "types": [
       {
         "type": "rapidFire",
         "sprite": "powerupRapidFire",
-        "color": "#ff5500"
+        "color": "#ff5500",
+        "weight": 3
       },
       {
         "type": "doubleShot",
         "sprite": "powerupDoubleShot",
-        "color": "#ffcc00"
+        "color": "#ffcc00",
+        "weight": 3
       },
       {
         "type": "shield",
         "sprite": "powerupShield",
-        "color": "#4488ff"
+        "color": "#4488ff",
+        "weight": 2
+      },
+      {
+        "type": "smartBomb",
+        "sprite": "powerupSmartBomb",
+        "color": "#ff2266",
+        "weight": 1
+      },
+      {
+        "type": "megaLaser",
+        "sprite": "powerupMegaLaser",
+        "color": "#aa44ff",
+        "weight": 1,
+        "duration": 6
+      },
+      {
+        "type": "extraLife",
+        "sprite": "powerupExtraLife",
+        "color": "#44ff88",
+        "weight": 1
       }
     ]
+  },
+  "boss": {
+    "everyNLevels": 3,
+    "baseHealth": 35,
+    "healthPerLevel": 8,
+    "bonusPoints": 1000,
+    "speed": 110,
+    "y": 90,
+    "fireRate": 0.55,
+    "bulletSpeed": 200,
+    "minionSpawnInterval": [
+      6,
+      11
+    ]
+  },
+  "combo": {
+    "window": 1.6,
+    "maxMultiplier": 5
   },
   "scoring": {
     "extraLifeAt": 1500
@@ -144,6 +184,10 @@
     "hud": "#ffffff",
     "hudAccent": "#00e5ff",
     "floor": "rgba(0,229,255,0.3)"
+  },
+  "debug": {
+    "enabled": false,
+    "toggleKey": "F1"
   }
 };
 

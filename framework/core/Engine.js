@@ -141,12 +141,3 @@
   GF.Engine = Engine;
 
 })(window.GF = window.GF || {});
-me. */
-    getSystem(name) {
-      return this._systems.find(s => s.name === name) || null;
-    }
-  }
-
-  GF.Engine = Engine;
-
-})(window.GF = window.GF || {});

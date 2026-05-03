@@ -277,6 +277,13 @@
         desc: 'Score 2000 or more.' },
     ],
 
+    // ── Debug ─────────────────────────────────────────────────────────────
+    // enabled: start visible; toggleKey: keyboard code to show/hide overlay
+    debug: {
+      enabled  : false,
+      toggleKey: 'F1',
+    },
+
     // ── Controls ──────────────────────────────────────────────────────────
     controls: {
       walk     : ['w', 'W'],

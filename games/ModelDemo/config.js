@@ -15,4 +15,9 @@ window.GAME_CONFIG = {
   game: {
     name: 'ModelDemo',
   },
+  // enabled: start visible; toggleKey: keyboard code to show/hide overlay
+  debug: {
+    enabled  : false,
+    toggleKey: 'F1',
+  },
 };

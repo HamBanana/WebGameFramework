@@ -491,6 +491,10 @@
     "endTurn": [
       "KeyE"
     ]
+  },
+  "debug": {
+    "enabled": true,
+    "toggleKey": "F1"
   }
 };
 

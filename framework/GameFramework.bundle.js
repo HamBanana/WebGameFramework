@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-05-01T00:08:14.517Z
+// Built: 2026-05-03T00:00:00.000Z
 
 // -- utils/MathUtils.js ------------------------------------------
 
@@ -5146,11 +5146,30 @@
     var useParticles = opts.particles !== false;
     var useScenes    = opts.scenes    !== false;
     var useTilemap   = opts.tilemap   !== false;
-    var useDebug     = opts.debug     !== false;
     var useDialogue  = opts.dialogue  !== false;
     var useModels    = !!opts.models;
     var useGrids     = opts.grids     !== false;
     var useBattle    = opts.battle    !== false;
+
+    // Resolve debug config. GAME_CONFIG.debug is authoritative when present:
+    //   false           → disable overlay entirely
+    //   { enabled, toggleKey, ... } → use as DebugOverlay config
+    //   (absent)        → fall back to opts.debug / opts.debugOpts
+    var gameCfgDebug = (GF.GAME_CONFIG && GF.GAME_CONFIG.debug !== undefined)
+      ? GF.GAME_CONFIG.debug : null;
+    var useDebug, debugOpts;
+    if (gameCfgDebug === false) {
+      useDebug  = false;
+      debugOpts = {};
+    } else if (gameCfgDebug && typeof gameCfgDebug === 'object') {
+      useDebug  = true;
+      // opts.debugOpts can still layer on top for programmatic overrides
+      debugOpts = Object.assign({}, gameCfgDebug, opts.debugOpts || {});
+    } else {
+      // No GAME_CONFIG.debug — honour opts flags (backward-compat)
+      useDebug  = opts.debug !== false;
+      debugOpts = opts.debugOpts || {};
+    }
 
     var engine  = new GF.Engine(engineConfig);
     var sprites = new GF.SpriteSystem();
@@ -5173,7 +5192,7 @@
     var models    = useModels    ? new GF.ModelSystem(opts.modelOpts || {})            : null;
     var grids     = useGrids     ? new GF.GridSystem()                                  : null;
     var battle    = useBattle    ? new GF.TurnBasedBattleSystem()                       : null;
-    var debug     = useDebug     ? new GF.DebugOverlay(opts.debugOpts || {})           : null;
+    var debug     = useDebug     ? new GF.DebugOverlay(debugOpts)                       : null;
 
     if (audio)    engine.addSystem(audio);
     if (tweens)   engine.addSystem(tweens);

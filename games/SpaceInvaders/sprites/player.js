@@ -15,7 +15,6 @@
     const hull   = '#00e5ff';
     const dark   = '#005577';
     const cannon = '#88ffff';
-    const glow   = 'rgba(0,229,255,0.4)';
 
     // Engine glow (bottom)
     if (thruster) {
@@ -63,6 +62,26 @@
     ctx.fillRect(1, 2, 2, 8);
   }
 
+  // ── Mega laser bullet (thicker, purple-pink piercing beam segment) ───────
+  // 8×16, origin (4, 16)
+  function drawMegaLaserBullet(ctx, frame) {
+    // Outer halo
+    ctx.fillStyle = frame === 0 ? 'rgba(170,68,255,0.45)' : 'rgba(220,120,255,0.45)';
+    ctx.fillRect(0, 0, 8, 16);
+    // Mid beam
+    ctx.fillStyle = frame === 0 ? '#aa44ff' : '#cc77ff';
+    ctx.fillRect(1, 0, 6, 16);
+    // Bright core
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3, 0, 2, 16);
+    // Sparkle
+    if (frame === 1) {
+      ctx.fillStyle = '#ffeeff';
+      ctx.fillRect(2, 4, 4, 2);
+      ctx.fillRect(2, 10, 4, 2);
+    }
+  }
+
   // ── Alien bullet ─────────────────────────────────────────────────────────
   function drawAlienBullet(ctx, frame) {
     const c = frame === 0 ? '#ff4444' : '#ff8888';
@@ -70,6 +89,19 @@
     ctx.fillRect(1, 0,  2, 4);
     ctx.fillRect(0, 4,  4, 4);
     ctx.fillRect(1, 8,  2, 4);
+  }
+
+  // ── Boss spread bullet (chunkier, orange-red) ────────────────────────────
+  // 8×12, origin (4, 12)
+  function drawBossBullet(ctx, frame) {
+    const c1 = frame === 0 ? '#ff4422' : '#ffaa44';
+    const c2 = frame === 0 ? '#ffcc66' : '#ffeeaa';
+    ctx.fillStyle = c1;
+    ctx.fillRect(1, 0, 6, 12);
+    ctx.fillStyle = c2;
+    ctx.fillRect(2, 1, 4, 10);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3, 2, 2, 8);
   }
 
   // ── Powerup sprites ───────────────────────────────────────────────────────
@@ -125,6 +157,62 @@
     ctx.fillRect(15, 9, 2, 3);
   }
 
+  function drawPUSmartBomb(ctx) {
+    // Smart Bomb: magenta starburst with skull-like center
+    ctx.fillStyle = '#ff2266';
+    // Cross-shaped burst arms
+    ctx.fillRect(9, 2, 2, 16);
+    ctx.fillRect(2, 9, 16, 2);
+    // Diagonal arms
+    ctx.fillRect(4,  4,  3, 3);
+    ctx.fillRect(13, 4,  3, 3);
+    ctx.fillRect(4,  13, 3, 3);
+    ctx.fillRect(13, 13, 3, 3);
+    // Bright center core
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(8, 8, 4, 4);
+    ctx.fillStyle = '#ffaacc';
+    ctx.fillRect(7, 7, 6, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(9, 9, 2, 2);
+  }
+
+  function drawPUMegaLaser(ctx) {
+    // Mega Laser: vertical purple beam with sparkles
+    ctx.fillStyle = '#aa44ff';
+    ctx.fillRect(8, 2, 4, 16);   // beam shaft
+    ctx.fillStyle = '#cc88ff';
+    ctx.fillRect(7, 4, 6, 12);   // halo
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(9, 2, 2, 16);   // bright core
+    // Tip sparkles
+    ctx.fillStyle = '#ffccff';
+    ctx.fillRect(5, 3, 2, 2);
+    ctx.fillRect(13, 3, 2, 2);
+    ctx.fillRect(5, 15, 2, 2);
+    ctx.fillRect(13, 15, 2, 2);
+  }
+
+  function drawPUExtraLife(ctx) {
+    // Extra Life: green "1UP" heart shape
+    ctx.fillStyle = '#44ff88';
+    // Heart silhouette
+    ctx.fillRect(4, 5,  4, 3);
+    ctx.fillRect(12, 5, 4, 3);
+    ctx.fillRect(3, 7,  14, 4);
+    ctx.fillRect(5, 11, 10, 3);
+    ctx.fillRect(7, 14, 6,  2);
+    ctx.fillRect(9, 16, 2,  1);
+    // Highlight
+    ctx.fillStyle = '#aaffcc';
+    ctx.fillRect(5, 6, 2, 2);
+    ctx.fillRect(13, 6, 2, 2);
+    // "1" text in middle
+    ctx.fillStyle = '#003322';
+    ctx.fillRect(9, 9, 2, 5);
+    ctx.fillRect(8, 9, 2, 1);
+  }
+
   // ── Register sprites ──────────────────────────────────────────────────────
 
   window.addEventListener('GF:ready', function () {
@@ -167,6 +255,20 @@
         },
       },
 
+      megaLaserBullet: {
+        frameWidth: 8, frameHeight: 16,
+        originX: 4, originY: 16,
+        animations: {
+          idle: {
+            fps: 14, loop: true,
+            frames: [
+              ctx => drawMegaLaserBullet(ctx, 0),
+              ctx => drawMegaLaserBullet(ctx, 1),
+            ],
+          },
+        },
+      },
+
       alienBullet: {
         frameWidth: 4, frameHeight: 12,
         originX: 2, originY: 12,
@@ -176,6 +278,20 @@
             frames: [
               ctx => drawAlienBullet(ctx, 0),
               ctx => drawAlienBullet(ctx, 1),
+            ],
+          },
+        },
+      },
+
+      bossBullet: {
+        frameWidth: 8, frameHeight: 12,
+        originX: 4, originY: 12,
+        animations: {
+          idle: {
+            fps: 10, loop: true,
+            frames: [
+              ctx => drawBossBullet(ctx, 0),
+              ctx => drawBossBullet(ctx, 1),
             ],
           },
         },
@@ -218,6 +334,48 @@
             frames: [
               ctx => { drawPowerupBg(ctx, '#4488ff', 0); drawPUShield(ctx); },
               ctx => { drawPowerupBg(ctx, '#66aaff', 1); drawPUShield(ctx); },
+            ],
+          },
+        },
+      },
+
+      powerupSmartBomb: {
+        frameWidth: 20, frameHeight: 20,
+        originX: 10, originY: 10,
+        animations: {
+          idle: {
+            fps: 6, loop: true,
+            frames: [
+              ctx => { drawPowerupBg(ctx, '#ff2266', 0); drawPUSmartBomb(ctx); },
+              ctx => { drawPowerupBg(ctx, '#ff5588', 1); drawPUSmartBomb(ctx); },
+            ],
+          },
+        },
+      },
+
+      powerupMegaLaser: {
+        frameWidth: 20, frameHeight: 20,
+        originX: 10, originY: 10,
+        animations: {
+          idle: {
+            fps: 6, loop: true,
+            frames: [
+              ctx => { drawPowerupBg(ctx, '#aa44ff', 0); drawPUMegaLaser(ctx); },
+              ctx => { drawPowerupBg(ctx, '#cc77ff', 1); drawPUMegaLaser(ctx); },
+            ],
+          },
+        },
+      },
+
+      powerupExtraLife: {
+        frameWidth: 20, frameHeight: 20,
+        originX: 10, originY: 10,
+        animations: {
+          idle: {
+            fps: 6, loop: true,
+            frames: [
+              ctx => { drawPowerupBg(ctx, '#44ff88', 0); drawPUExtraLife(ctx); },
+              ctx => { drawPowerupBg(ctx, '#77ffaa', 1); drawPUExtraLife(ctx); },
             ],
           },
         },

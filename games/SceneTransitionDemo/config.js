@@ -48,6 +48,13 @@
       { fill: '#74b9ff', glow: 'rgba(116,185,255,0.55)' },
     ],
 
+    // ── Debug ─────────────────────────────────────────────────────────────────
+    // enabled: start visible; toggleKey: keyboard code to show/hide overlay
+    debug: {
+      enabled  : false,
+      toggleKey: 'F1',
+    },
+
   };
 
   // Apply any overrides set by the launcher once the framework is ready.
