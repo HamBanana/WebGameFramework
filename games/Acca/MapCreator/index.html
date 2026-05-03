@@ -968,9 +968,9 @@ function renderConnections(wxMin, wyMin, wxMax, wyMax) {
   // At extreme zoom-out, connections become noise — skip them.
   if (S.zoom < 0.12) return;
 
-  // Arrowhead: at least 18 screen-px at zoom 1, scaling up as you zoom out,
-  // capped at 30% of cell size in world space.
-  const arrowHead = Math.min(cs * 0.3, Math.max(cs * 0.18, 18 / S.zoom));
+  // Arrowhead: ~9 screen-px at zoom 1, scaling up as you zoom out,
+  // capped at 16% of cell size in world space.
+  const arrowHead = Math.min(cs * 0.16, Math.max(cs * 0.09, 9 / S.zoom));
 
   for (const key of S.connections) {
     const [as, bs] = key.split('->');
@@ -1010,14 +1010,14 @@ function renderConnections(wxMin, wyMin, wxMax, wyMax) {
       const a_tail0 = { x: cx1 + ux*half + px, y: cy1 + uy*half + py };
       const a_back = Math.max(arrowHead * 1.5, (a_tip.x - a_tail0.x)*ux + (a_tip.y - a_tail0.y)*uy);
       const a_tail = { x: a_tip.x - ux*a_back, y: a_tip.y - uy*a_back };
-      drawArrow(a_tail.x, a_tail.y, a_tip.x, a_tip.y, 'rgba(140,200,255,0.9)', arrowHead, 2);
+      drawArrow(a_tail.x, a_tail.y, a_tip.x, a_tip.y, 'rgba(140,200,255,0.9)', arrowHead, 1.5);
 
       // B→A arrow
       const b_tip  = { x: cx1 + ux*half - px, y: cy1 + uy*half - py };
       const b_tail0 = { x: cx2 - ux*half - px, y: cy2 - uy*half - py };
       const b_back = Math.max(arrowHead * 1.5, (b_tip.x - b_tail0.x)*(-ux) + (b_tip.y - b_tail0.y)*(-uy));
       const b_tail = { x: b_tip.x + ux*b_back, y: b_tip.y + uy*b_back };
-      drawArrow(b_tail.x, b_tail.y, b_tip.x, b_tip.y, 'rgba(140,200,255,0.9)', arrowHead, 2);
+      drawArrow(b_tail.x, b_tail.y, b_tip.x, b_tip.y, 'rgba(140,200,255,0.9)', arrowHead, 1.5);
     } else {
       // One-way: tip at cell B's border, tail at cell A's border.
       // For adjacent/touching cells the tail is pulled back so the arrowhead
@@ -1026,7 +1026,7 @@ function renderConnections(wxMin, wyMin, wxMax, wyMax) {
       const gapLen = (tipX - (cx1 + ux*half)) * ux + (tipY - (cy1 + uy*half)) * uy;
       const lineLen = Math.max(arrowHead * 1.5, gapLen);
       const tailX = tipX - ux * lineLen, tailY = tipY - uy * lineLen;
-      drawArrow(tailX, tailY, tipX, tipY, 'rgba(255,190,60,0.95)', arrowHead, 3);
+      drawArrow(tailX, tailY, tipX, tipY, 'rgba(255,190,60,0.95)', arrowHead, 2);
     }
   }
 }
