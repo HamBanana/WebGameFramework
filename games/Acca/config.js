@@ -19,7 +19,7 @@
     "rightWall": 768
   },
   "board": {
-    "map": "maps/default.json",
+    "map": "maps/denmark.json",
     "cellSize": 64,
     "originX": 32,
     "originY": 32
