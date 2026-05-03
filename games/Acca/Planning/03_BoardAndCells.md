@@ -36,7 +36,7 @@ class Cell {
   sprite;      // base sprite name
   // gameplay state
   ownerIndex;       // -1 if unowned
-  purchasePrice;
+  value;            // intrinsic property value; purchase price is derived from this
   property;         // Property entity if type ∈ purchasable
   // navigation
   up; down; left; right; // directional neighbors
@@ -89,7 +89,7 @@ class District {
       "type": "property",
       "subType": null,
       "district": "Downtown",   // must match a name in the districts array
-      "purchasePrice": 200
+      "value": 200
     }
   ],
   "connections": [
@@ -102,7 +102,7 @@ class District {
 Notes:
 
 - `direction` is `"both"` (bidirectional) or `"forward"` (one-way) to support special board layouts.
-- `purchasePrice` is optional in the map; falls back to `cfg.property.basePrice` × region multiplier.
+- `value` is the intrinsic worth of the property; the runtime derives the actual purchase price from it (e.g. via market conditions or config multipliers).
 - `region.bonus` references a key in `cfg.industries.bonusKeys` (see `07_Companies.md`).
 
 ## 3.5 Validation
@@ -144,4 +144,4 @@ Render order, back to front:
 
 ## 3.8 Map Creator alignment
 
-`games/Acca/MapCreator/` must export the same JSON shape described in 3.4. Any new fields here (`subType`, `purchasePrice` per cell, `region.bonus`) must be addable in MapCreator before they're consumed by the runtime, so authors aren't blocked.
+`games/Acca/MapCreator/` must export the same JSON shape described in 3.4. Any new fields here (`subType`, `value` per cell, `region.bonus`) must be addable in MapCreator before they're consumed by the runtime, so authors aren't blocked.

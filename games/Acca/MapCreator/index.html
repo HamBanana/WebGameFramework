@@ -519,7 +519,7 @@ const SPATIAL_BUCKET = 256;     // px per spatial-hash cell (independent of cell
 //      id, x, y,
 //      type, subType, structureType,
 //      districtId,
-//      purchasePrice,        // null = use default (cfg.property.basePrice)
+//      value,                // property value (default 200)
 //      spriteOverride,       // null = use type-derived sprite
 //      ownerIndex,           // -1 = unowned (initial owner)
 //      tier,                 // 1..5 (initial tier for purchasable cells)
@@ -680,7 +680,7 @@ function newBlankCell(id, x, y, type) {
                           ? STRUCTURE_TYPES[0].id
                           : null,
     districtId:        null,
-    purchasePrice:     null,
+    value:             200,
     spriteOverride:    null,
     ownerIndex:        -1,
     tier:              1,
@@ -1688,11 +1688,11 @@ function buildCellEditor(host, cells) {
       rebuildDistrictPanel(); render();
     });
 
-  // Purchase price (override)
-  const samePrice = allSame(c => c.purchasePrice);
-  addNumberField(host, 'Purchase $', samePrice,
-    v => { for (const c of cells) c.purchasePrice = (v === '' || v === null) ? null : Number(v); render(); },
-    { allowEmpty: true, multi, placeholder: '(default)' });
+  // Property value
+  const samePrice = allSame(c => c.value);
+  addNumberField(host, 'Value', samePrice,
+    v => { for (const c of cells) c.value = Number(v) || 0; render(); },
+    { multi, min: 0 });
 
   // Initial tier
   const sameTier = allSame(c => c.tier);
@@ -2227,7 +2227,7 @@ function generateExport() {
     if (c.subType)        parts.push(`subType:${JSON.stringify(c.subType)}`);
     if (c.structureType)  parts.push(`structureType:${JSON.stringify(c.structureType)}`);
     parts.push(`district:${c.districtId === null ? 'null' : JSON.stringify(c.districtId)}`);
-    if (c.purchasePrice !== null && c.purchasePrice !== undefined) parts.push(`purchasePrice:${c.purchasePrice}`);
+    if (c.value !== null && c.value !== undefined) parts.push(`value:${c.value}`);
     if (c.spriteOverride)        parts.push(`sprite:${JSON.stringify(c.spriteOverride)}`);
     if (c.ownerIndex !== -1)     parts.push(`ownerIndex:${c.ownerIndex}`);
     if (c.tier && c.tier !== 1)  parts.push(`tier:${c.tier}`);
@@ -2300,7 +2300,7 @@ function saveMap() {
       // For legacy compatibility we also resolve district name when possible:
       : (S.districts.get(c.districtId)?.name ?? null);
     o.districtId = c.districtId;
-    if (c.purchasePrice !== null && c.purchasePrice !== undefined) o.purchasePrice = c.purchasePrice;
+    if (c.value !== null && c.value !== undefined) o.value = c.value;
     if (c.spriteOverride)            o.sprite              = c.spriteOverride;
     if (c.ownerIndex !== -1)         o.ownerIndex          = c.ownerIndex;
     if (c.tier && c.tier !== 1)      o.tier                = c.tier;
@@ -2426,7 +2426,7 @@ function importMap(json) {
       subType:          c.subType ?? null,
       structureType:    c.structureType ?? null,
       districtId:       did,
-      purchasePrice:    (c.purchasePrice !== undefined) ? c.purchasePrice : null,
+      value:            (c.value != null) ? c.value : (c.purchasePrice != null) ? c.purchasePrice : 200,
       spriteOverride:   c.sprite ?? c.spriteOverride ?? null,
       ownerIndex:       c.ownerIndex ?? -1,
       tier:             c.tier ?? 1,
