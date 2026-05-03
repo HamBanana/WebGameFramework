@@ -388,6 +388,38 @@
       </div>
 
       <div class="section">
+        <div class="section-label">Background Image</div>
+        <button class="btn-sm" id="btn-bg-load">📂 Load Image…</button>
+        <input type="file" id="bg-file-input" accept="image/*" style="display:none">
+        <div id="bg-controls" style="display:none; margin-top:6px;">
+          <div class="check-row">
+            <input type="checkbox" id="chk-bg-show" checked>
+            <label for="chk-bg-show">Show image</label>
+          </div>
+          <div class="field-row" style="align-items:center;">
+            <span class="field-label">Opacity</span>
+            <span class="field-value" style="display:flex;align-items:center;gap:4px;">
+              <input type="range" id="bg-opacity" min="0" max="100" value="40" style="flex:1;padding:0;height:14px;">
+              <span id="bg-opacity-label" style="width:28px;text-align:right;font-size:10px;">40%</span>
+            </span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Scale</span>
+            <span class="field-value"><input type="number" id="bg-scale" value="1" min="0.01" max="20" step="0.05" style="width:100%;"></span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Offset X</span>
+            <span class="field-value"><input type="number" id="bg-offx" value="0" step="1" style="width:100%;"></span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Offset Y</span>
+            <span class="field-value"><input type="number" id="bg-offy" value="0" step="1" style="width:100%;"></span>
+          </div>
+          <button class="btn-sm" id="btn-bg-clear" style="margin-top:4px;">✕ Remove Image</button>
+        </div>
+      </div>
+
+      <div class="section">
         <div class="section-label">Export</div>
         <textarea id="export-output" readonly placeholder="Click 'Export JS'…"></textarea>
         <button style="width:100%;margin-top:4px" id="btn-copy-sm">Copy to Clipboard</button>
@@ -563,6 +595,14 @@ const S = {
   showGrid:  true,
   showIds:   false,
   panX: 200, panY: 150, zoom: 1.0,
+
+  // Background image
+  bgImage:        null,   // HTMLImageElement | null
+  bgImageOpacity: 0.4,    // 0.0 – 1.0
+  bgImageOffX:    0,      // world-coord offset X
+  bgImageOffY:    0,      // world-coord offset Y
+  bgImageScale:   1.0,    // scale multiplier
+  showBgImage:    true,
 
   // Input tracking
   hover:        null,
@@ -926,6 +966,20 @@ function render() {
 function renderBg() {
   ctx.fillStyle = '#080c12';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Background image — drawn in world-space so it pans/zooms with the map
+  if (S.bgImage && S.showBgImage) {
+    const img = S.bgImage;
+    const iw = img.naturalWidth  * S.bgImageScale;
+    const ih = img.naturalHeight * S.bgImageScale;
+    ctx.save();
+    ctx.globalAlpha = S.bgImageOpacity;
+    ctx.setTransform(S.zoom, 0, 0, S.zoom, S.panX, S.panY);
+    ctx.drawImage(img, S.bgImageOffX, S.bgImageOffY, iw, ih);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   if (!S.showGrid) return;
   const gs = S.cellSize * S.zoom;
   if (gs < 4) return; // too small to draw
@@ -2556,6 +2610,61 @@ document.getElementById('btn-sel-delete').addEventListener('click', () => {
 document.getElementById('chk-snap').addEventListener('change', e => { S.snapOn = e.target.checked; });
 document.getElementById('chk-grid').addEventListener('change', e => { S.showGrid = e.target.checked; render(); });
 document.getElementById('chk-ids').addEventListener('change',  e => { S.showIds  = e.target.checked; render(); });
+
+// ── Background image controls ──────────────────────────────────────────────
+document.getElementById('btn-bg-load').addEventListener('click', () => {
+  document.getElementById('bg-file-input').click();
+});
+
+document.getElementById('bg-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    if (S.bgImage) URL.revokeObjectURL(S.bgImage._blobUrl || '');
+    img._blobUrl = url;
+    S.bgImage = img;
+    document.getElementById('bg-controls').style.display = '';
+    render();
+    setStatus(`Background image loaded: ${file.name} (${img.naturalWidth}×${img.naturalHeight}px)`);
+  };
+  img.onerror = () => { setStatus('Failed to load image.'); URL.revokeObjectURL(url); };
+  img.src = url;
+  e.target.value = ''; // allow re-loading same file
+});
+
+document.getElementById('chk-bg-show').addEventListener('change', e => {
+  S.showBgImage = e.target.checked; render();
+});
+
+document.getElementById('bg-opacity').addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10);
+  S.bgImageOpacity = v / 100;
+  document.getElementById('bg-opacity-label').textContent = v + '%';
+  render();
+});
+
+document.getElementById('bg-scale').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (v > 0) { S.bgImageScale = v; render(); }
+});
+
+document.getElementById('bg-offx').addEventListener('input', e => {
+  S.bgImageOffX = parseFloat(e.target.value) || 0; render();
+});
+
+document.getElementById('bg-offy').addEventListener('input', e => {
+  S.bgImageOffY = parseFloat(e.target.value) || 0; render();
+});
+
+document.getElementById('btn-bg-clear').addEventListener('click', () => {
+  if (S.bgImage) URL.revokeObjectURL(S.bgImage._blobUrl || '');
+  S.bgImage = null;
+  document.getElementById('bg-controls').style.display = 'none';
+  document.getElementById('bg-file-input').value = '';
+  render(); setStatus('Background image removed.');
+});
 
 document.getElementById('inp-cell-size').addEventListener('change', e => {
   const v = parseInt(e.target.value, 10);
