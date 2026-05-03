@@ -52,7 +52,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 3,
+  "numberOfPlayers": 4,
   "startingMoney": 1500,
   "startingResources": {
     "wood": 0,
