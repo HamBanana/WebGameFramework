@@ -2427,15 +2427,34 @@ function saveMap() {
     connections,
   };
 
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
   const safe = (S.mapName || 'acca-map').replace(/[^A-Za-z0-9_\-]+/g, '_').toLowerCase();
-  a.href     = url;
-  a.download = `${safe || 'acca-map'}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setStatus(`Map saved as ${safe}.json (${S.cells.size} cells).`);
+  const filename = safe || 'acca-map';
+
+  // Try saving directly to the maps folder via the dev server.
+  fetch('/save-map', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ filename, data }),
+  })
+  .then(r => r.json().then(j => ({ ok: r.ok, j })))
+  .then(({ ok, j }) => {
+    if (ok) {
+      setStatus(`Map saved to maps/${filename}.json (${S.cells.size} cells).`);
+    } else {
+      throw new Error(j.error || 'Server error');
+    }
+  })
+  .catch(() => {
+    // Fallback: browser download (file:// or server unavailable).
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${filename}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(`Map downloaded as ${filename}.json (${S.cells.size} cells).`);
+  });
 }
 
 function importMap(json) {

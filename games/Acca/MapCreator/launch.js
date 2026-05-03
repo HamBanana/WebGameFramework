@@ -13,8 +13,9 @@ const fs   = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
-const PORT = parseInt(process.argv[2] || '3001', 10);
-const DIR  = __dirname;
+const PORT     = parseInt(process.argv[2] || '3001', 10);
+const DIR      = __dirname;
+const MAPS_DIR = path.join(DIR, '..', 'maps');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -26,7 +27,47 @@ const MIME = {
   '.ico':  'image/x-icon',
 };
 
+function jsonReply(res, status, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(status, {
+    'Content-Type':  'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(body);
+}
+
+function handleSaveMap(req, res) {
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    let payload;
+    try { payload = JSON.parse(body); }
+    catch { jsonReply(res, 400, { error: 'Invalid JSON body' }); return; }
+
+    const { filename, data } = payload;
+    if (!filename || !/^[A-Za-z0-9_\-]+$/.test(filename)) {
+      jsonReply(res, 400, { error: 'Invalid filename' }); return;
+    }
+
+    const filePath = path.join(MAPS_DIR, `${filename}.json`);
+    if (!filePath.startsWith(MAPS_DIR + path.sep) && filePath !== MAPS_DIR) {
+      jsonReply(res, 403, { error: 'Forbidden' }); return;
+    }
+
+    const content = JSON.stringify(data, null, 2);
+    fs.writeFile(filePath, content, 'utf8', err => {
+      if (err) { jsonReply(res, 500, { error: err.message }); return; }
+      jsonReply(res, 200, { ok: true, path: `maps/${filename}.json` });
+    });
+  });
+}
+
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/save-map') {
+    handleSaveMap(req, res); return;
+  }
+
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
   if (urlPath === '/' || urlPath.endsWith('/')) urlPath = '/index.html';
 
