@@ -2,7 +2,7 @@
 (function (GF) {
   'use strict';
 
-  GF.VERSION = '2.2.0';
+  GF.VERSION = '2.3.0';
 
   // Auto-detect the directory this bundle was loaded from so that
   // GF.resolvePath() works regardless of where the game lives on disk.
@@ -34,11 +34,13 @@
     var useModels    = !!opts.models;
     var useGrids     = opts.grids     !== false;
     var useBattle    = opts.battle    !== false;
+    var useScore     = opts.score     === true;       // opt-in
+    var useParallax  = opts.parallax  === true;       // opt-in
 
     // Resolve debug config. GAME_CONFIG.debug is authoritative when present:
-    //   false           → disable overlay entirely
-    //   { enabled, toggleKey, ... } → use as DebugOverlay config
-    //   (absent)        → fall back to opts.debug / opts.debugOpts
+    //   false           -> disable overlay entirely
+    //   { enabled, toggleKey, ... } -> use as DebugOverlay config
+    //   (absent)        -> fall back to opts.debug / opts.debugOpts
     var gameCfgDebug = (GF.GAME_CONFIG && GF.GAME_CONFIG.debug !== undefined)
       ? GF.GAME_CONFIG.debug : null;
     var useDebug, debugOpts;
@@ -50,7 +52,7 @@
       // opts.debugOpts can still layer on top for programmatic overrides
       debugOpts = Object.assign({}, gameCfgDebug, opts.debugOpts || {});
     } else {
-      // No GAME_CONFIG.debug — honour opts flags (backward-compat)
+      // No GAME_CONFIG.debug - honour opts flags (backward-compat)
       useDebug  = opts.debug !== false;
       debugOpts = opts.debugOpts || {};
     }
@@ -77,6 +79,12 @@
     var grids     = useGrids     ? new GF.GridSystem()                                  : null;
     var battle    = useBattle    ? new GF.TurnBasedBattleSystem()                       : null;
     var debug     = useDebug     ? new GF.DebugOverlay(debugOpts)                       : null;
+    var score     = useScore     ? new GF.ScoreManager(Object.assign(
+                                       { gameName: opts.gameName, save: save, events: engine.events },
+                                       opts.scoreOpts || {}))                          : null;
+    var parallax  = useParallax  ? new GF.ParallaxSystem(Object.assign(
+                                       { viewportW: engineConfig.width, viewportH: engineConfig.height },
+                                       opts.parallaxOpts || {}))                       : null;
 
     if (audio)    engine.addSystem(audio);
     if (tweens)   engine.addSystem(tweens);
@@ -87,13 +95,16 @@
     if (models)   engine.addSystem(models);
     if (grids)    engine.addSystem(grids);
     if (battle)   engine.addSystem(battle);
+    if (score)    engine.addSystem(score);
     if (debug)    engine.addSystem(debug);
+    // ParallaxSystem is intentionally NOT added to engine.systems by default;
+    // games typically draw it themselves at the start of their scene's render.
 
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
-      grids: grids, battle: battle,
+      grids: grids, battle: battle, score: score, parallax: parallax,
     };
   };
 

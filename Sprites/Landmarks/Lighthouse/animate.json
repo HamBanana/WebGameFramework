@@ -1,0 +1,132 @@
+{
+  "frames": [
+    {
+      "filename": "idle_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 80,
+        "h": 96
+      },
+      "duration": 250
+    },
+    {
+      "filename": "idle_01.aseprite",
+      "frame": {
+        "x": 80,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 80,
+        "h": 96
+      },
+      "duration": 250
+    },
+    {
+      "filename": "idle_02.aseprite",
+      "frame": {
+        "x": 160,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 80,
+        "h": 96
+      },
+      "duration": 250
+    },
+    {
+      "filename": "idle_03.aseprite",
+      "frame": {
+        "x": 240,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 80,
+        "h": 96
+      },
+      "duration": 250
+    }
+  ],
+  "meta": {
+    "app": "GameFramework sprite renderer",
+    "version": "1.0",
+    "image": "spritesheet.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 320,
+      "h": 96
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "idle",
+        "from": 0,
+        "to": 3,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      }
+    ],
+    "origin": {
+      "x": 19,
+      "y": 96
+    },
+    "frameSize": {
+      "w": 80,
+      "h": 96
+    },
+    "animationRows": [
+      "idle"
+    ],
+    "layers": [
+      {
+        "name": "sprite",
+        "opacity": 255,
+        "blendMode": "normal"
+      }
+    ],
+    "slices": []
+  }
+}

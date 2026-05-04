@@ -1,0 +1,88 @@
+{
+  "frames": [
+    {
+      "filename": "idle_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 14,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 14,
+        "h": 26
+      },
+      "sourceSize": {
+        "w": 14,
+        "h": 26
+      },
+      "duration": 200
+    },
+    {
+      "filename": "idle_01.aseprite",
+      "frame": {
+        "x": 14,
+        "y": 0,
+        "w": 14,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 14,
+        "h": 26
+      },
+      "sourceSize": {
+        "w": 14,
+        "h": 26
+      },
+      "duration": 200
+    }
+  ],
+  "meta": {
+    "app": "GameFramework sprite renderer",
+    "version": "1.0",
+    "image": "spritesheet.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 28,
+      "h": 26
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "idle",
+        "from": 0,
+        "to": 1,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      }
+    ],
+    "origin": {
+      "x": 7,
+      "y": 26
+    },
+    "frameSize": {
+      "w": 14,
+      "h": 26
+    },
+    "animationRows": [
+      "idle"
+    ],
+    "layers": [
+      {
+        "name": "sprite",
+        "opacity": 255,
+        "blendMode": "normal"
+      }
+    ],
+    "slices": []
+  }
+}

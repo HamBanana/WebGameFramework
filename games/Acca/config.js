@@ -147,7 +147,7 @@
     },
     "shopBaseCap": 800,
     "shopCapPerStructure": 200,
-    "shopVisitRate": 0.20,
+    "shopVisitRate": 0.2,
     "shopInvestStep": 100,
     "tollIncrement": 25,
     "teleportFee": 75,
@@ -167,11 +167,31 @@
     "shopJobs": 2,
     "policeProtectionTier": 1,
     "vaultLevels": [
-      { "level": 1, "buildCost": 1000, "capacity": 5000 },
-      { "level": 2, "upgradeCost": 2000, "capacity": 15000 },
-      { "level": 3, "upgradeCost": 3000, "capacity": 30000 },
-      { "level": 4, "upgradeCost": 4000, "capacity": 50000 },
-      { "level": 5, "upgradeCost": 5000, "capacity": 75000 }
+      {
+        "level": 1,
+        "buildCost": 1000,
+        "capacity": 5000
+      },
+      {
+        "level": 2,
+        "upgradeCost": 2000,
+        "capacity": 15000
+      },
+      {
+        "level": 3,
+        "upgradeCost": 3000,
+        "capacity": 30000
+      },
+      {
+        "level": 4,
+        "upgradeCost": 4000,
+        "capacity": 50000
+      },
+      {
+        "level": 5,
+        "upgradeCost": 5000,
+        "capacity": 75000
+      }
     ],
     "upkeep": {
       "houseFood": 1,
@@ -228,7 +248,7 @@
     }
   },
   "district": {
-    "taxBase": 1.0,
+    "taxBase": 1,
     "maxTaxRate": 0.5,
     "defaultTaxRate": 0.1,
     "defaultPopulation": 30,

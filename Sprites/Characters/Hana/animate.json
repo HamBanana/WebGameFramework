@@ -1,0 +1,1261 @@
+{
+  "frames": [
+    {
+      "filename": "idle_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 200
+    },
+    {
+      "filename": "idle_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 200
+    },
+    {
+      "filename": "idle_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 200
+    },
+    {
+      "filename": "idle_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 200
+    },
+    {
+      "filename": "walk_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 76,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 76,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 76,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 76,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_04.aseprite",
+      "frame": {
+        "x": 208,
+        "y": 76,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_05.aseprite",
+      "frame": {
+        "x": 260,
+        "y": 76,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "jump_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 152,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "jump_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 152,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "fall_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 228,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 250
+    },
+    {
+      "filename": "crouch_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 304,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 250
+    },
+    {
+      "filename": "block_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 380,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 250
+    },
+    {
+      "filename": "lightPunch_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 456,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 63
+    },
+    {
+      "filename": "lightPunch_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 456,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 63
+    },
+    {
+      "filename": "lightPunch_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 456,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 63
+    },
+    {
+      "filename": "lightPunch_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 456,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 63
+    },
+    {
+      "filename": "lightPunch_04.aseprite",
+      "frame": {
+        "x": 208,
+        "y": 456,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 63
+    },
+    {
+      "filename": "heavyPunch_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 532,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyPunch_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 532,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyPunch_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 532,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyPunch_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 532,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyPunch_04.aseprite",
+      "frame": {
+        "x": 208,
+        "y": 532,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyPunch_05.aseprite",
+      "frame": {
+        "x": 260,
+        "y": 532,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "lightKick_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 608,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 71
+    },
+    {
+      "filename": "lightKick_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 608,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 71
+    },
+    {
+      "filename": "lightKick_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 608,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 71
+    },
+    {
+      "filename": "lightKick_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 608,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 71
+    },
+    {
+      "filename": "lightKick_04.aseprite",
+      "frame": {
+        "x": 208,
+        "y": 608,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 71
+    },
+    {
+      "filename": "heavyKick_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 684,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyKick_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 684,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyKick_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 684,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyKick_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 684,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyKick_04.aseprite",
+      "frame": {
+        "x": 208,
+        "y": 684,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "heavyKick_05.aseprite",
+      "frame": {
+        "x": 260,
+        "y": 684,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 83
+    },
+    {
+      "filename": "special_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 760,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "special_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 760,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "special_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 760,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "special_03.aseprite",
+      "frame": {
+        "x": 156,
+        "y": 760,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "special_04.aseprite",
+      "frame": {
+        "x": 208,
+        "y": 760,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "special_05.aseprite",
+      "frame": {
+        "x": 260,
+        "y": 760,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "hit_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 836,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "hit_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 836,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 100
+    },
+    {
+      "filename": "ko_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 912,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 167
+    },
+    {
+      "filename": "ko_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 912,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 167
+    },
+    {
+      "filename": "ko_02.aseprite",
+      "frame": {
+        "x": 104,
+        "y": 912,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 167
+    },
+    {
+      "filename": "victory_00.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 988,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 200
+    },
+    {
+      "filename": "victory_01.aseprite",
+      "frame": {
+        "x": 52,
+        "y": 988,
+        "w": 52,
+        "h": 76
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 76
+      },
+      "sourceSize": {
+        "w": 52,
+        "h": 76
+      },
+      "duration": 200
+    }
+  ],
+  "meta": {
+    "app": "GameFramework sprite renderer",
+    "version": "1.0",
+    "image": "spritesheet.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 312,
+      "h": 1064
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "idle",
+        "from": 0,
+        "to": 3,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      },
+      {
+        "name": "walk",
+        "from": 4,
+        "to": 9,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      },
+      {
+        "name": "jump",
+        "from": 10,
+        "to": 11,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "fall",
+        "from": 12,
+        "to": 12,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      },
+      {
+        "name": "crouch",
+        "from": 13,
+        "to": 13,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      },
+      {
+        "name": "block",
+        "from": 14,
+        "to": 14,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      },
+      {
+        "name": "lightPunch",
+        "from": 15,
+        "to": 19,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "heavyPunch",
+        "from": 20,
+        "to": 25,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "lightKick",
+        "from": 26,
+        "to": 30,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "heavyKick",
+        "from": 31,
+        "to": 36,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "special",
+        "from": 37,
+        "to": 42,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "hit",
+        "from": 43,
+        "to": 44,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "ko",
+        "from": 45,
+        "to": 47,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": false
+      },
+      {
+        "name": "victory",
+        "from": 48,
+        "to": 49,
+        "direction": "forward",
+        "color": "#ffffff",
+        "loop": true
+      }
+    ],
+    "origin": {
+      "x": 26,
+      "y": 76
+    },
+    "frameSize": {
+      "w": 52,
+      "h": 76
+    },
+    "animationRows": [
+      "idle",
+      "walk",
+      "jump",
+      "fall",
+      "crouch",
+      "block",
+      "lightPunch",
+      "heavyPunch",
+      "lightKick",
+      "heavyKick",
+      "special",
+      "hit",
+      "ko",
+      "victory"
+    ],
+    "layers": [
+      {
+        "name": "sprite",
+        "opacity": 255,
+        "blendMode": "normal"
+      }
+    ],
+    "slices": []
+  }
+}

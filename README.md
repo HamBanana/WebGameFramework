@@ -1,6 +1,20 @@
 # GameFramework — Developer Guide
 
-**Version 2.1.0**
+**Version 2.3.0**
+
+## What's new in 2.3.0
+
+- **New systems** promoted from games:
+  - `GF.StateMachine` — finite state machine with timed states (FightingGame's character logic)
+  - `GF.PlayerController` — pre-wired movement/animation controller (platformer / topdown / sideways modes)
+  - `GF.ScoreManager` — score, persistent high score, combo multiplier (SpaceInvaders, scene transitions)
+  - `GF.WaveSpawner` — wave-based enemy spawning with difficulty ramp
+  - `GF.ParallaxSystem` — multi-layer scroll backgrounds (RoadToSkagen)
+- **New scene templates**: `GF.TitleScene`, `GF.GameOverScene`
+- **New procedural-audio helpers**: `GF.Audio.makeToneBuffer`, `GF.Audio.makeArpeggioBuffer`, `GF.Audio.registerStandardSet` (extracted from SpaceInvaders/ShiningQuest)
+- **Built-in sprites**: 109 sprites + 6 portraits previously inside individual games are now available in the framework. Asset paths live in `framework/sprites/<category>.js`; games refer to sprites by name only (e.g. `'goblin'`, `'tree_pine'`, `'token_red'`, `'hana'`). Categories: `aliens`, `boss`, `businesses`, `cells`, `characters`, `landmarks`, `monsters`, `player`, `portraits`, `resources`, `scenery`, `tokens`, `ui`, `vehicles`, `wildlife`.
+- **Sprite assets** rendered to `/Sprites/<Category>/<Name>/spritesheet.png` + `animate.json` (Aseprite frameTags format) — same layout as `Claude` and `Claudia`.
+- Two bundles now: `GameFramework.bundle.js` (core, ~217 KB) and `GameFramework.sprites.bundle.js` (optional, all built-in sprite registrations, ~84 KB). Include the second only if you want every sprite eagerly loaded.
 
 GameFramework is a modular JavaScript framework for building HTML-based games. A game only needs to include the bundled framework script in its `index.html`; all asset paths, sprite registrations, and system wiring live inside the framework and your game's config file — keeping individual game files lean and focused on logic.
 

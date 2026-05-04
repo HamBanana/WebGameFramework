@@ -1,5 +1,6 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-05-03T00:00:00.000Z
+// Built: 2026-05-04T03:49:48.521Z
+// Source: framework/build.js (core)
 
 // -- utils/MathUtils.js ------------------------------------------
 
@@ -242,6 +243,130 @@
 
     /** Easing functions — all take t in [0,1] and return a number. */
     ease,
+  };
+
+})(window.GF = window.GF || {});
+
+
+// -- utils/ProceduralAudio.js ------------------------------------
+
+// GameFramework/framework/utils/ProceduralAudio.js
+// Procedural sound generation helpers — extracted from SpaceInvaders &
+// ShiningQuest so games can synthesise simple SFX without needing audio assets.
+//
+// The core function is GF.Audio.makeToneBuffer(audioCtx, freq, duration, type, env).
+// Higher-level helpers provide common SFX presets (laser, hit, coin, etc.).
+//
+// Example:
+//   const audio = game.audio;
+//   GF.Audio.registerStandardSet(audio);   // registers 'laser', 'hit', 'coin', …
+//   audio.play('laser');
+
+(function (GF) {
+  'use strict';
+
+  GF.Audio = GF.Audio || {};
+
+  // ── Core synthesis ─────────────────────────────────────────────────────────
+  // type: 'sine' | 'square' | 'sweep' | 'noise'
+  // env:  { attack, release, volume, sweep }
+  GF.Audio.makeToneBuffer = function (audioCtx, freq, duration, type, env) {
+    env = env || {};
+    var sr     = audioCtx.sampleRate;
+    var len    = Math.floor(sr * duration);
+    var buffer = audioCtx.createBuffer(1, len, sr);
+    var data   = buffer.getChannelData(0);
+    var attack  = env.attack  || 0.01;
+    var release = env.release || duration;
+    var volume  = env.volume  || 0.3;
+    var sweep   = env.sweep   || 0;
+
+    for (var i = 0; i < len; i++) {
+      var t = i / sr;
+      var sample = 0;
+      if (type === 'square') {
+        sample = Math.sin(2 * Math.PI * freq * t) > 0 ? 1 : -1;
+      } else if (type === 'noise') {
+        sample = Math.random() * 2 - 1;
+      } else if (type === 'sweep') {
+        var f = freq + sweep * t;
+        sample = Math.sin(2 * Math.PI * f * t);
+      } else {
+        sample = Math.sin(2 * Math.PI * freq * t);
+      }
+      var amp = 1;
+      if (t < attack) amp = t / attack;
+      else amp = Math.max(0, 1 - (t - attack) / Math.max(0.0001, release - attack));
+      data[i] = sample * amp * volume;
+    }
+    return buffer;
+  };
+
+  // Multi-tone arpeggio (e.g. a level-up or coin-pickup chord).
+  GF.Audio.makeArpeggioBuffer = function (audioCtx, freqs, stepDuration, type, env) {
+    env = env || {};
+    var totalDur = freqs.length * stepDuration;
+    var sr       = audioCtx.sampleRate;
+    var len      = Math.floor(sr * totalDur);
+    var buffer   = audioCtx.createBuffer(1, len, sr);
+    var data     = buffer.getChannelData(0);
+    var volume   = env.volume || 0.3;
+
+    for (var i = 0; i < len; i++) {
+      var t      = i / sr;
+      var step   = Math.min(freqs.length - 1, Math.floor(t / stepDuration));
+      var stepT  = t - step * stepDuration;
+      var freq   = freqs[step];
+      var sample = (type === 'square')
+        ? (Math.sin(2 * Math.PI * freq * stepT) > 0 ? 1 : -1)
+        : Math.sin(2 * Math.PI * freq * stepT);
+      var attack  = 0.01;
+      var release = stepDuration;
+      var amp     = stepT < attack ? stepT / attack
+                    : Math.max(0, 1 - (stepT - attack) / (release - attack));
+      data[i] = sample * amp * volume;
+    }
+    return buffer;
+  };
+
+  // ── Standard SFX preset library ────────────────────────────────────────────
+  // Registers a generic, broadly-useful palette into an AudioSystem.
+  GF.Audio.registerStandardSet = function (audioSystem, options) {
+    if (!audioSystem) return;
+    options = options || {};
+    if (audioSystem._ensureContext) audioSystem._ensureContext();
+    var ctx = audioSystem._ctx;
+    if (!ctx) {
+      console.warn('[ProceduralAudio] no AudioContext on AudioSystem');
+      return;
+    }
+    var T = GF.Audio.makeToneBuffer;
+    var A = GF.Audio.makeArpeggioBuffer;
+
+    var presets = {
+      laser:     T(ctx, 880, 0.12, 'square', { attack: 0.005, release: 0.12, volume: 0.20 }),
+      shoot:     T(ctx, 880, 0.12, 'square', { attack: 0.005, release: 0.12, volume: 0.20 }),
+      hit:       T(ctx, 200, 0.10, 'noise',  { attack: 0.005, release: 0.10, volume: 0.30 }),
+      explode:   T(ctx, 150, 0.50, 'noise',  { attack: 0.01,  release: 0.50, volume: 0.35 }),
+      coin:      A(ctx, [880, 1320], 0.07, 'square', { volume: 0.25 }),
+      jump:      T(ctx, 520, 0.18, 'sweep',  { attack: 0.005, release: 0.18, sweep: 240, volume: 0.22 }),
+      land:      T(ctx, 180, 0.10, 'square', { attack: 0.005, release: 0.10, volume: 0.18 }),
+      pickup:    T(ctx, 750, 0.28, 'sweep',  { attack: 0.01,  release: 0.28, sweep: 320, volume: 0.30 }),
+      powerup:   T(ctx, 750, 0.28, 'sweep',  { attack: 0.01,  release: 0.28, sweep: 320, volume: 0.30 }),
+      levelUp:   A(ctx, [550, 660, 780, 1040], 0.08, 'square', { volume: 0.25 }),
+      gameOver:  A(ctx, [440, 350, 260, 180], 0.18, 'square', { volume: 0.30 }),
+      menuMove:  T(ctx, 660, 0.05, 'square', { attack: 0.001, release: 0.05, volume: 0.15 }),
+      menuConfirm: T(ctx, 880, 0.12, 'square', { attack: 0.005, release: 0.12, volume: 0.22 }),
+      menuCancel:  T(ctx, 220, 0.12, 'square', { attack: 0.005, release: 0.12, volume: 0.18 }),
+    };
+
+    var only = options.only || null;     // ['laser','hit'] etc
+    var skip = options.skip || [];
+    Object.keys(presets).forEach(function (k) {
+      if (only && only.indexOf(k) < 0) return;
+      if (skip.indexOf(k) >= 0) return;
+      audioSystem.register(k, presets[k]);
+    });
   };
 
 })(window.GF = window.GF || {});
@@ -5112,13 +5237,908 @@
 })(window.GF = window.GF || {});
 
 
+// -- systems/StateMachine.js -------------------------------------
+
+// GameFramework/framework/systems/StateMachine.js
+// A small, allocation-free finite state machine with timed states and
+// onEnter / onUpdate / onExit hooks. Useful for fighter character logic,
+// boss phases, AI behaviour, dialog flow, etc.
+//
+// Example:
+//   const fsm = new GF.StateMachine({
+//     initial: 'idle',
+//     states: {
+//       idle: {
+//         onEnter(prev) { /* … */ },
+//         onUpdate(dt)  { if (input.wasPressed('attack')) fsm.go('punch'); },
+//       },
+//       punch: {
+//         duration: 0.4,                // auto-transition after 0.4 s
+//         onEnter() { anim.play('punch'); },
+//         onComplete: 'idle',           // state to enter when duration elapses
+//       },
+//       hurt: {
+//         duration: 0.3,
+//         onEnter() { anim.play('hit'); },
+//         onComplete: (fsm) => fsm.previous,  // dynamic transition
+//       },
+//     },
+//   });
+//
+//   // Inside scene update:
+//   fsm.update(dt);
+//   fsm.go('punch');                    // explicit transition
+//   if (fsm.is('idle', 'walk')) { … }   // multi-state membership test
+//   fsm.timeInState                     // seconds since entering current state
+
+(function (GF) {
+  'use strict';
+
+  function StateMachine(opts) {
+    opts = opts || {};
+    this.states  = opts.states || {};
+    this.current = null;
+    this.previous = null;
+    this.timeInState = 0;
+    this._duration   = 0;       // 0 = no auto-transition
+    this._onComplete = null;    // string or function
+    this._owner = opts.owner || null;
+
+    if (opts.initial) this.go(opts.initial);
+  }
+
+  StateMachine.prototype.has = function (name) { return !!this.states[name]; };
+
+  StateMachine.prototype.is = function (/* ...names */) {
+    for (var i = 0; i < arguments.length; i++) {
+      if (this.current === arguments[i]) return true;
+    }
+    return false;
+  };
+
+  StateMachine.prototype.go = function (name, payload) {
+    if (!this.states[name]) {
+      console.warn('[StateMachine] unknown state: ' + name);
+      return false;
+    }
+    if (name === this.current) return false;
+
+    var oldName = this.current;
+    var oldDef  = oldName ? this.states[oldName] : null;
+    var newDef  = this.states[name];
+
+    if (oldDef && typeof oldDef.onExit === 'function') {
+      oldDef.onExit.call(this._owner || this, name, this);
+    }
+
+    this.previous     = oldName;
+    this.current      = name;
+    this.timeInState  = 0;
+    this._duration    = newDef.duration || 0;
+    this._onComplete  = newDef.onComplete || null;
+
+    if (typeof newDef.onEnter === 'function') {
+      newDef.onEnter.call(this._owner || this, oldName, this, payload);
+    }
+    return true;
+  };
+
+  // Force re-enter: useful when the same state needs to restart its timer.
+  StateMachine.prototype.restart = function (payload) {
+    if (!this.current) return;
+    var def = this.states[this.current];
+    this.timeInState = 0;
+    if (typeof def.onEnter === 'function') {
+      def.onEnter.call(this._owner || this, this.current, this, payload);
+    }
+  };
+
+  StateMachine.prototype.update = function (dt) {
+    if (!this.current) return;
+    this.timeInState += dt;
+
+    var def = this.states[this.current];
+    if (typeof def.onUpdate === 'function') {
+      def.onUpdate.call(this._owner || this, dt, this);
+    }
+
+    // Auto-transition
+    if (this._duration > 0 && this.timeInState >= this._duration) {
+      var next = this._onComplete;
+      if (typeof next === 'function') next = next.call(this._owner || this, this);
+      if (next) this.go(next);
+      else this._duration = 0;  // stop firing
+    }
+  };
+
+  // Convenience: fire a state-specific handler if defined (e.g. on input).
+  StateMachine.prototype.handle = function (event /* , ...args */) {
+    var def = this.current && this.states[this.current];
+    if (!def) return;
+    var fn = def['on_' + event] || def[event];
+    if (typeof fn === 'function') {
+      var args = Array.prototype.slice.call(arguments, 1);
+      args.push(this);
+      return fn.apply(this._owner || this, args);
+    }
+  };
+
+  GF.StateMachine = StateMachine;
+
+})(window.GF = window.GF || {});
+
+
+// -- systems/PlayerController.js ---------------------------------
+
+// GameFramework/framework/systems/PlayerController.js
+// A reusable 2D player movement controller that wires together a PhysicsBody,
+// a SpriteAnimator, and the InputManager.
+//
+// Three preset modes cover the bulk of game types:
+//   'platformer' — left/right run + jump (with optional double-jump)
+//   'topdown'    — 8-direction free movement, no gravity
+//   'sideways'   — left/right only, no jump (for fighting / arcade)
+//
+// Animation names follow a convention:
+//   idle, walk (or run), jump (one-shot), fall, land (one-shot)
+// Override via opts.animations to map convention -> your sprite's animation
+// names (e.g. { walk: 'run', jump: 'leap' }).
+
+(function (GF) {
+  'use strict';
+
+  var DEFAULT_ANIM = {
+    idle: 'idle', walk: 'walk', run: 'run', jump: 'jump',
+    fall: 'fall', land: 'land', crouch: 'crouch', attack: 'attack',
+  };
+
+  function PlayerController(opts) {
+    opts = opts || {};
+    this.body     = opts.body;          // GF.PhysicsBody
+    this.animator = opts.animator;      // GF.SpriteAnimator
+    this.input    = opts.input;         // engine.input
+    this.mode     = opts.mode || 'platformer';
+
+    this.speed       = opts.speed     || 220;     // px/s
+    this.runSpeed    = opts.runSpeed  || this.speed * 1.5;
+    this.jumpPower   = opts.jumpPower || 700;     // px/s upward velocity
+    this.maxJumps    = opts.maxJumps  || 1;       // 2 = double-jump
+    this.airControl  = opts.airControl != null ? opts.airControl : 0.6; // 0..1
+    this.facing      = 1;               // 1 right, -1 left
+
+    this.actions = Object.assign({
+      left:  'left',  right: 'right', up:   'up',   down:  'down',
+      jump:  'jump',  run:   'run',   crouch:'crouch',attack:'attack',
+    }, opts.actions || {});
+
+    this.animations = Object.assign({}, DEFAULT_ANIM, opts.animations || {});
+
+    this._jumpsLeft  = this.maxJumps;
+    this._wasGrounded = false;
+
+    // Hooks
+    this.onJump   = opts.onJump   || null;
+    this.onLand   = opts.onLand   || null;
+    this.onAttack = opts.onAttack || null;
+  }
+
+  PlayerController.prototype.update = function (dt) {
+    var b = this.body, anim = this.animator, input = this.input;
+    if (!b || !input) return;
+
+    var L = input.isDown(this.actions.left);
+    var R = input.isDown(this.actions.right);
+    var U = input.isDown(this.actions.up);
+    var D = input.isDown(this.actions.down);
+    var running = input.isDown(this.actions.run);
+    var moveSpeed = running ? this.runSpeed : this.speed;
+
+    if (this.mode === 'topdown') {
+      var vx = 0, vy = 0;
+      if (L) vx -= 1; if (R) vx += 1;
+      if (U) vy -= 1; if (D) vy += 1;
+      if (vx !== 0 && vy !== 0) { vx *= 0.7071; vy *= 0.7071; }  // diag
+      b.vx = vx * moveSpeed;
+      b.vy = vy * moveSpeed;
+      if (vx > 0) this.facing = 1; else if (vx < 0) this.facing = -1;
+      this._playMoveAnim(vx !== 0 || vy !== 0, running);
+    }
+    else if (this.mode === 'sideways') {
+      if (L)      { b.vx = -moveSpeed; this.facing = -1; }
+      else if (R) { b.vx = moveSpeed;  this.facing =  1; }
+      else        { b.vx = 0; }
+      this._playMoveAnim(L || R, running);
+    }
+    else {  // platformer
+      var grounded = b.grounded;
+      var control  = grounded ? 1 : this.airControl;
+      if (L)      { b.vx = -moveSpeed * control; this.facing = -1; }
+      else if (R) { b.vx = moveSpeed  * control; this.facing =  1; }
+      else if (grounded) { b.vx = 0; }
+
+      // Jump
+      if (input.wasPressed(this.actions.jump)) {
+        if (grounded) this._jumpsLeft = this.maxJumps;
+        if (this._jumpsLeft > 0) {
+          b.vy = -this.jumpPower;
+          this._jumpsLeft--;
+          if (this.onJump) this.onJump(this);
+        }
+      }
+      // Just landed?
+      if (!this._wasGrounded && grounded) {
+        if (this.onLand) this.onLand(this);
+        this._jumpsLeft = this.maxJumps;
+      }
+      this._wasGrounded = grounded;
+
+      this._playPlatformerAnim(L, R, grounded, running);
+    }
+
+    // Attack hook (any mode)
+    if (input.wasPressed(this.actions.attack) && this.onAttack) {
+      this.onAttack(this);
+    }
+
+    if (anim) {
+      anim.flipX = (this.facing < 0);
+      anim.update(dt);
+    }
+  };
+
+  PlayerController.prototype._playMoveAnim = function (moving, running) {
+    if (!this.animator) return;
+    var a = this.animations;
+    var name = !moving       ? a.idle
+            : (running && this.animator.sprite && this.animator.sprite.animations[a.run]) ? a.run
+            : a.walk;
+    this.animator.play(name);
+  };
+
+  PlayerController.prototype._playPlatformerAnim = function (L, R, grounded, running) {
+    if (!this.animator) return;
+    var a = this.animations;
+    var sprite = this.animator.sprite;
+    var anims = sprite ? sprite.animations : {};
+    if (!grounded) {
+      if (this.body.vy < 0 && anims[a.jump]) this.animator.play(a.jump);
+      else if (anims[a.fall])                this.animator.play(a.fall);
+    } else if (L || R) {
+      var name = (running && anims[a.run]) ? a.run : a.walk;
+      this.animator.play(name);
+    } else {
+      this.animator.play(a.idle);
+    }
+  };
+
+  GF.PlayerController = PlayerController;
+
+})(window.GF = window.GF || {});
+
+
+// -- systems/ScoreManager.js -------------------------------------
+
+// GameFramework/framework/systems/ScoreManager.js
+// Tracks score, persistent high score, and an optional combo multiplier.
+// Persistence uses SaveSystem when available, falling back to localStorage.
+//
+// Events emitted on engine.events (when bound):
+//   score:add        { amount, score, combo, multiplier }
+//   score:newHigh    { score }
+//   score:reset      { }
+//   score:multiplier { multiplier, combo }
+
+(function (GF) {
+  'use strict';
+
+  function ScoreManager(opts) {
+    opts = opts || {};
+    this.gameName       = opts.gameName     || 'GF';
+    this.score          = 0;
+    this.highScore      = 0;
+    this.combo          = 0;
+    this.comboMaxTime   = opts.comboMaxTime || 1.5;  // seconds
+    this._comboTimer    = 0;
+    this.multiplierStep = opts.multiplierStep || 0.5;  // +0.5x per combo
+    this.multiplierCap  = opts.multiplierCap  || 4;
+    this.events         = opts.events || null;       // EventBus
+    this.save           = opts.save   || null;       // SaveSystem
+    this._highScoreKey  = '_highScore_' + this.gameName;
+
+    this._loadHighScore();
+  }
+
+  ScoreManager.prototype.update = function (dt) {
+    if (this._comboTimer > 0) {
+      this._comboTimer -= dt;
+      if (this._comboTimer <= 0) this.resetCombo();
+    }
+  };
+
+  ScoreManager.prototype.add = function (amount, opts) {
+    opts = opts || {};
+    if (opts.combo !== false) {
+      this.combo++;
+      this._comboTimer = this.comboMaxTime;
+    }
+    var multiplier = this.multiplier();
+    var earned     = Math.round(amount * multiplier);
+    this.score    += earned;
+
+    if (this.events) {
+      this.events.emit('score:add',
+        { amount: earned, score: this.score, combo: this.combo, multiplier: multiplier });
+      if (opts.combo !== false && this.combo > 1) {
+        this.events.emit('score:multiplier', { multiplier: multiplier, combo: this.combo });
+      }
+    }
+
+    if (this.score > this.highScore) {
+      this.highScore = this.score;
+      this._saveHighScore();
+      if (this.events) this.events.emit('score:newHigh', { score: this.score });
+    }
+
+    return earned;
+  };
+
+  ScoreManager.prototype.subtract = function (amount) {
+    this.score = Math.max(0, this.score - amount);
+    if (this.events) this.events.emit('score:add',
+      { amount: -amount, score: this.score, combo: this.combo, multiplier: 1 });
+  };
+
+  ScoreManager.prototype.multiplier = function () {
+    if (this.combo <= 1) return 1;
+    return Math.min(this.multiplierCap, 1 + (this.combo - 1) * this.multiplierStep);
+  };
+
+  ScoreManager.prototype.resetCombo = function () {
+    if (this.combo === 0) return;
+    this.combo = 0;
+    this._comboTimer = 0;
+    if (this.events) this.events.emit('score:multiplier', { multiplier: 1, combo: 0 });
+  };
+
+  ScoreManager.prototype.reset = function () {
+    this.score = 0;
+    this.resetCombo();
+    if (this.events) this.events.emit('score:reset', {});
+  };
+
+  ScoreManager.prototype.resetHighScore = function () {
+    this.highScore = 0;
+    this._saveHighScore();
+  };
+
+  ScoreManager.prototype._loadHighScore = function () {
+    try {
+      if (this.save && this.save.read) {
+        var rec = this.save.read(this._highScoreKey);
+        if (rec && rec.data && typeof rec.data.highScore === 'number') {
+          this.highScore = rec.data.highScore;
+          return;
+        }
+      }
+      var raw = localStorage.getItem('GF_HIGHSCORE_' + this.gameName);
+      if (raw) this.highScore = parseInt(raw, 10) || 0;
+    } catch (e) { /* ignore */ }
+  };
+
+  ScoreManager.prototype._saveHighScore = function () {
+    try {
+      if (this.save && this.save.write) {
+        this.save.write(this._highScoreKey, { highScore: this.highScore });
+        return;
+      }
+      localStorage.setItem('GF_HIGHSCORE_' + this.gameName, String(this.highScore));
+    } catch (e) { /* ignore */ }
+  };
+
+  GF.ScoreManager = ScoreManager;
+
+})(window.GF = window.GF || {});
+
+
+// -- systems/WaveSpawner.js --------------------------------------
+
+// GameFramework/framework/systems/WaveSpawner.js
+// Generic wave-based enemy spawner. Defines a sequence of waves where each
+// wave is a list of {kind, count, spacing} entries; the spawner emits one
+// enemy at a time via a user-provided spawn callback, then progresses to the
+// next wave when all enemies from the current wave are dead.
+//
+// Designed for shooters (SpaceInvaders), tower-defense, survival modes, etc.
+//
+// Example:
+//   const waves = [
+//     { delay: 0.5, entries: [
+//       { kind: 'alienSquid', count: 8, spacing: 0.15 },
+//       { kind: 'alienCrab',  count: 8, spacing: 0.15 },
+//     ]},
+//     { delay: 1.0, entries: [
+//       { kind: 'alienOctopus', count: 12, spacing: 0.10 },
+//     ], boss: true },
+//   ];
+//
+//   const spawner = new GF.WaveSpawner({
+//     waves,
+//     spawn: (kind, info) => spawnEnemy(kind, info),
+//     onWaveStart: w => console.log('wave', w),
+//     onWaveClear: w => console.log('clear', w),
+//     onAllClear:  () => console.log('victory!'),
+//   });
+//   spawner.start();
+//   ...
+//   spawner.update(dt);                    // advance scheduling
+//   spawner.notifyKilled(enemy);          // tell the spawner an enemy died
+
+(function (GF) {
+  'use strict';
+
+  function WaveSpawner(opts) {
+    opts = opts || {};
+    this.waves       = opts.waves || [];
+    this.spawn       = opts.spawn;             // (kind, info) => entity
+    this.onWaveStart = opts.onWaveStart || null;
+    this.onWaveClear = opts.onWaveClear || null;
+    this.onAllClear  = opts.onAllClear  || null;
+
+    this.events      = opts.events || null;    // optional EventBus
+    this.eventNamespace = opts.eventNamespace || 'wave';
+
+    this.difficulty  = opts.difficulty || 1;   // multiplier on counts
+    this.difficultyRamp = opts.difficultyRamp || 0;  // +ramp per wave
+
+    this._reset();
+  }
+
+  WaveSpawner.prototype._reset = function () {
+    this.currentWaveIndex = -1;
+    this.currentEntry     = null;
+    this._delayTimer      = 0;
+    this._spawnTimer      = 0;
+    this._waveAlive       = 0;
+    this._entryQueue      = [];
+    this._entriesLeft     = 0;
+    this._active          = false;
+    this._waitingForClear = false;
+  };
+
+  WaveSpawner.prototype.start = function () {
+    this._reset();
+    this._active = true;
+    this._advanceWave();
+  };
+
+  WaveSpawner.prototype.stop = function () {
+    this._active = false;
+  };
+
+  WaveSpawner.prototype.update = function (dt) {
+    if (!this._active) return;
+
+    if (this._delayTimer > 0) {
+      this._delayTimer -= dt;
+      return;
+    }
+
+    // Currently emitting a wave's entries
+    if (this.currentEntry) {
+      this._spawnTimer -= dt;
+      while (this._spawnTimer <= 0 && this.currentEntry && this.currentEntry.remaining > 0) {
+        this._spawnOne();
+        this._spawnTimer += this.currentEntry.spacing || 0.2;
+      }
+      if (this.currentEntry && this.currentEntry.remaining === 0) {
+        this._nextEntry();
+      }
+    }
+  };
+
+  WaveSpawner.prototype._spawnOne = function () {
+    if (!this.spawn) return;
+    var entry = this.currentEntry;
+    var info  = {
+      waveIndex: this.currentWaveIndex,
+      kind:      entry.kind,
+      indexInEntry: entry.spawned,
+      total:     entry.count,
+    };
+    var ent = this.spawn(entry.kind, info);
+    entry.remaining--;
+    entry.spawned++;
+    this._waveAlive++;
+    if (this.events) this.events.emit(this.eventNamespace + ':spawn', { entity: ent, info: info });
+  };
+
+  WaveSpawner.prototype._nextEntry = function () {
+    if (this._entriesLeft > 0) {
+      this.currentEntry = this._entryQueue.shift();
+      this._entriesLeft--;
+      this._spawnTimer = 0;
+    } else {
+      this.currentEntry = null;
+      this._waitingForClear = true;
+    }
+  };
+
+  WaveSpawner.prototype._advanceWave = function () {
+    this._waitingForClear = false;
+    this.currentWaveIndex++;
+    if (this.currentWaveIndex >= this.waves.length) {
+      this._active = false;
+      if (this.onAllClear) this.onAllClear();
+      if (this.events) this.events.emit(this.eventNamespace + ':all_clear', {});
+      return;
+    }
+
+    var wave = this.waves[this.currentWaveIndex];
+    var diffMul = this.difficulty + this.currentWaveIndex * this.difficultyRamp;
+    this._entryQueue = (wave.entries || []).map(function (e) {
+      return {
+        kind:      e.kind,
+        count:     Math.max(1, Math.floor((e.count || 1) * diffMul)),
+        remaining: Math.max(1, Math.floor((e.count || 1) * diffMul)),
+        spawned:   0,
+        spacing:   e.spacing || 0.2,
+        meta:      e.meta || null,
+      };
+    });
+    this._entriesLeft  = this._entryQueue.length;
+    this._delayTimer   = wave.delay || 0;
+    this._waveAlive    = 0;
+
+    if (this.onWaveStart) this.onWaveStart(this.currentWaveIndex, wave);
+    if (this.events) this.events.emit(this.eventNamespace + ':start', { wave: this.currentWaveIndex });
+
+    this._nextEntry();
+  };
+
+  // Game must call this when an enemy spawned by us is destroyed.
+  WaveSpawner.prototype.notifyKilled = function (entity) {
+    if (this._waveAlive > 0) this._waveAlive--;
+    if (this._waitingForClear && this._waveAlive === 0) {
+      var idx = this.currentWaveIndex;
+      if (this.onWaveClear) this.onWaveClear(idx, this.waves[idx]);
+      if (this.events) this.events.emit(this.eventNamespace + ':clear', { wave: idx });
+      this._advanceWave();
+    }
+  };
+
+  Object.defineProperty(WaveSpawner.prototype, 'isActive', {
+    get: function () { return this._active; },
+  });
+  Object.defineProperty(WaveSpawner.prototype, 'aliveCount', {
+    get: function () { return this._waveAlive; },
+  });
+
+  GF.WaveSpawner = WaveSpawner;
+
+})(window.GF = window.GF || {});
+
+
+// -- systems/ParallaxSystem.js -----------------------------------
+
+// GameFramework/framework/systems/ParallaxSystem.js
+// Multi-layer horizontal/vertical parallax scrolling.
+//
+// You give the system a list of layer descriptors. Each layer has its own
+// scroll factor (0 = static like sky, 1 = same speed as the camera/world).
+// The framework draws layers in order; you supply a per-layer draw callback.
+//
+// Use it for:
+//   - infinite-side-scroller backgrounds (RoadToSkagen)
+//   - skyboxes / starfield (SpaceInvaders)
+//   - menus with depth
+//
+// Example:
+//   const parallax = new GF.ParallaxSystem({
+//     layers: [
+//       { factor: 0.1, draw: drawSky      },   // moves slowest
+//       { factor: 0.4, draw: drawMountains, tile: 800 },  // tiles every 800 px
+//       { factor: 0.8, draw: drawTrees,    tile: 400 },
+//       { factor: 1.0, draw: drawRoad     },   // foreground
+//     ],
+//   });
+//   ...
+//   parallax.scrollX = camera.x;
+//   parallax.draw(ctx);
+
+(function (GF) {
+  'use strict';
+
+  function ParallaxSystem(opts) {
+    opts = opts || {};
+    this.layers   = (opts.layers || []).map(function (l) { return Object.assign({}, l); });
+    this.scrollX  = opts.scrollX || 0;
+    this.scrollY  = opts.scrollY || 0;
+    this.viewportW = opts.viewportW || 800;
+    this.viewportH = opts.viewportH || 450;
+  }
+
+  ParallaxSystem.prototype.addLayer = function (layer) {
+    this.layers.push(Object.assign({}, layer));
+    return this.layers[this.layers.length - 1];
+  };
+
+  ParallaxSystem.prototype.removeLayer = function (layer) {
+    var i = this.layers.indexOf(layer);
+    if (i >= 0) this.layers.splice(i, 1);
+  };
+
+  // Update is optional — only useful if a layer wants its own animation timer.
+  ParallaxSystem.prototype.update = function (dt) {
+    for (var i = 0; i < this.layers.length; i++) {
+      var l = this.layers[i];
+      if (typeof l.update === 'function') l.update(dt);
+    }
+  };
+
+  ParallaxSystem.prototype.draw = function (ctx) {
+    for (var i = 0; i < this.layers.length; i++) {
+      var l = this.layers[i];
+      var ox = -this.scrollX * (l.factor || 1) - (l.offsetX || 0);
+      var oy = -this.scrollY * (l.factorY != null ? l.factorY : 0) - (l.offsetY || 0);
+
+      ctx.save();
+      if (l.tile) {
+        // Wrap layer horizontally every l.tile pixels.
+        var t = l.tile;
+        var startX = ox % t;
+        if (startX > 0) startX -= t;
+        for (var x = startX; x < this.viewportW; x += t) {
+          ctx.save();
+          ctx.translate(x, oy);
+          if (l.draw) l.draw(ctx, l, this);
+          ctx.restore();
+        }
+      } else {
+        ctx.translate(ox, oy);
+        if (l.draw) l.draw(ctx, l, this);
+      }
+      ctx.restore();
+    }
+  };
+
+  GF.ParallaxSystem = ParallaxSystem;
+
+})(window.GF = window.GF || {});
+
+
+// -- scenes/TitleScene.js ----------------------------------------
+
+// GameFramework/framework/scenes/TitleScene.js
+// Reusable title / start scene template.
+//
+// Configure via constructor options; subclass and override draw/update if you
+// need something custom. Common controls:
+//   - Press confirm  -> opts.onStart(engine)
+//   - Press menu     -> opts.onMenu  (e.g. options screen)
+//
+// Example:
+//   class MyTitle extends GF.TitleScene { constructor() { super({
+//     title:    'COSMIC CONQUEST',
+//     subtitle: 'Press SPACE to start',
+//     bgColor:  '#0a0a2e',
+//     onStart:  (engine) => engine.systems.scenes.replace(new GameScene(), engine),
+//   }); } }
+
+(function (GF) {
+  'use strict';
+
+  if (!GF.Scene) {
+    // Provide a no-op base so this file can load before SceneManager.
+    GF.Scene = function () {};
+  }
+
+  function TitleScene(opts) {
+    opts = opts || {};
+    this.opts = Object.assign({
+      title:        'GAME',
+      subtitle:     'Press SPACE to start',
+      bgColor:      '#0a0a2e',
+      titleColor:   '#ffffff',
+      subtitleColor:'#cccccc',
+      titleFont:    'bold 48px monospace',
+      subtitleFont: '20px monospace',
+      blink:        true,            // pulse the subtitle
+      confirmAction:'jump',          // input action that starts the game
+      menuAction:   null,            // optional second action
+      onStart:      null,            // (engine) => void
+      onMenu:       null,
+      drawBackground: null,          // (ctx, scene) => void  (optional)
+    }, opts);
+    this._t = 0;
+  }
+
+  TitleScene.prototype = Object.create(GF.Scene.prototype);
+  TitleScene.prototype.constructor = TitleScene;
+
+  TitleScene.prototype.init = function (engine) { this.engine = engine; };
+
+  TitleScene.prototype.update = function (dt, engine) {
+    this._t += dt;
+    var input = engine.input;
+    if (input && input.wasPressed(this.opts.confirmAction) && this.opts.onStart) {
+      this.opts.onStart(engine);
+    }
+    if (input && this.opts.menuAction && input.wasPressed(this.opts.menuAction) && this.opts.onMenu) {
+      this.opts.onMenu(engine);
+    }
+  };
+
+  TitleScene.prototype.render = function (ctx, engine) {
+    var W = engine.canvas.width, H = engine.canvas.height;
+
+    if (this.opts.drawBackground) {
+      this.opts.drawBackground(ctx, this);
+    } else {
+      ctx.fillStyle = this.opts.bgColor;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    var ui = engine.systems && engine.systems.ui ? engine.systems.ui : GF.UISystem;
+    if (ui && ui.drawText) {
+      ui.drawText(ctx, this.opts.title, W / 2, H * 0.4, {
+        font: this.opts.titleFont, color: this.opts.titleColor,
+        align: 'center', baseline: 'middle',
+        shadow: true, glow: this.opts.titleColor, glowBlur: 10,
+      });
+      var sub = this.opts.subtitle;
+      if (sub) {
+        var alpha = this.opts.blink ? (0.55 + 0.45 * Math.sin(this._t * 4)) : 1;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ui.drawText(ctx, sub, W / 2, H * 0.6, {
+          font: this.opts.subtitleFont, color: this.opts.subtitleColor,
+          align: 'center', baseline: 'middle',
+        });
+        ctx.restore();
+      }
+    } else {
+      // UISystem unavailable — minimal fallback
+      ctx.fillStyle = this.opts.titleColor;
+      ctx.font = this.opts.titleFont;
+      ctx.textAlign = 'center';
+      ctx.fillText(this.opts.title, W / 2, H * 0.4);
+      ctx.font = this.opts.subtitleFont;
+      ctx.fillText(this.opts.subtitle, W / 2, H * 0.6);
+    }
+  };
+
+  GF.TitleScene = TitleScene;
+
+})(window.GF = window.GF || {});
+
+
+// -- scenes/GameOverScene.js -------------------------------------
+
+// GameFramework/framework/scenes/GameOverScene.js
+// Reusable game-over scene template. Shows a message + score + high score
+// and waits for a "restart" input action.
+//
+// Example:
+//   game.scenes.replaceWithTransition(new GF.GameOverScene({
+//     score: scoreManager.score,
+//     highScore: scoreManager.highScore,
+//     newRecord: scoreManager.score === scoreManager.highScore,
+//     onRestart: () => game.scenes.replace(new GameScene(), game.engine),
+//     onMenu:    () => game.scenes.replace(new TitleScene(), game.engine),
+//   }), { type: 'fade', duration: 0.6 });
+
+(function (GF) {
+  'use strict';
+
+  if (!GF.Scene) GF.Scene = function () {};
+
+  function GameOverScene(opts) {
+    opts = opts || {};
+    this.opts = Object.assign({
+      title:        'GAME OVER',
+      subtitle:     'Press SPACE to restart',
+      bgColor:      'rgba(0,0,0,0.85)',
+      titleColor:   '#ff5555',
+      titleFont:    'bold 56px monospace',
+      subtitleFont: '20px monospace',
+      scoreFont:    '24px monospace',
+      score:        null,
+      highScore:    null,
+      newRecord:    false,
+      restartAction:'jump',
+      menuAction:   null,
+      onRestart:    null,
+      onMenu:       null,
+      victory:      false,           // toggle palette/title for "victory!" version
+    }, opts);
+    if (this.opts.victory) {
+      if (this.opts.title    === 'GAME OVER') this.opts.title    = 'VICTORY!';
+      if (this.opts.titleColor === '#ff5555') this.opts.titleColor = '#55ff77';
+    }
+    this._t = 0;
+  }
+
+  GameOverScene.prototype = Object.create(GF.Scene.prototype);
+  GameOverScene.prototype.constructor = GameOverScene;
+
+  GameOverScene.prototype.init = function (engine) { this.engine = engine; };
+
+  GameOverScene.prototype.update = function (dt, engine) {
+    this._t += dt;
+    var input = engine.input;
+    if (input && input.wasPressed(this.opts.restartAction) && this.opts.onRestart) {
+      this.opts.onRestart(engine);
+    }
+    if (input && this.opts.menuAction && input.wasPressed(this.opts.menuAction) && this.opts.onMenu) {
+      this.opts.onMenu(engine);
+    }
+  };
+
+  GameOverScene.prototype.render = function (ctx, engine) {
+    var W = engine.canvas.width, H = engine.canvas.height;
+    ctx.fillStyle = this.opts.bgColor;
+    ctx.fillRect(0, 0, W, H);
+
+    var ui = engine.systems && engine.systems.ui ? engine.systems.ui : GF.UISystem;
+
+    var titleY = H * 0.32;
+    var scoreY = H * 0.50;
+    var highY  = H * 0.58;
+    var subY   = H * 0.78;
+
+    if (ui && ui.drawText) {
+      ui.drawText(ctx, this.opts.title, W / 2, titleY, {
+        font: this.opts.titleFont, color: this.opts.titleColor,
+        align: 'center', baseline: 'middle',
+        shadow: true, glow: this.opts.titleColor, glowBlur: 16,
+      });
+      if (this.opts.score != null) {
+        ui.drawText(ctx, 'SCORE  ' + this.opts.score, W / 2, scoreY, {
+          font: this.opts.scoreFont, color: '#ffffff', align: 'center', baseline: 'middle',
+        });
+      }
+      if (this.opts.highScore != null) {
+        var label = this.opts.newRecord ? 'NEW HIGH SCORE  ' : 'HIGH SCORE  ';
+        ui.drawText(ctx, label + this.opts.highScore, W / 2, highY, {
+          font: this.opts.scoreFont,
+          color: this.opts.newRecord ? '#ffd54a' : '#cccccc',
+          align: 'center', baseline: 'middle',
+        });
+      }
+      var alpha = 0.55 + 0.45 * Math.sin(this._t * 4);
+      ctx.save(); ctx.globalAlpha = alpha;
+      ui.drawText(ctx, this.opts.subtitle, W / 2, subY, {
+        font: this.opts.subtitleFont, color: '#cccccc',
+        align: 'center', baseline: 'middle',
+      });
+      ctx.restore();
+    } else {
+      ctx.fillStyle = this.opts.titleColor;
+      ctx.font = this.opts.titleFont;
+      ctx.textAlign = 'center';
+      ctx.fillText(this.opts.title, W / 2, titleY);
+      if (this.opts.score != null) {
+        ctx.fillStyle = '#fff';
+        ctx.font = this.opts.scoreFont;
+        ctx.fillText('SCORE  ' + this.opts.score, W / 2, scoreY);
+      }
+      ctx.font = this.opts.subtitleFont;
+      ctx.fillText(this.opts.subtitle, W / 2, subY);
+    }
+  };
+
+  GF.GameOverScene = GameOverScene;
+
+})(window.GF = window.GF || {});
+
+
 // -- GameFramework.js --------------------------------------------
 
 // GameFramework/framework/GameFramework.js
 (function (GF) {
   'use strict';
 
-  GF.VERSION = '2.2.0';
+  GF.VERSION = '2.3.0';
 
   // Auto-detect the directory this bundle was loaded from so that
   // GF.resolvePath() works regardless of where the game lives on disk.
@@ -5150,11 +6170,13 @@
     var useModels    = !!opts.models;
     var useGrids     = opts.grids     !== false;
     var useBattle    = opts.battle    !== false;
+    var useScore     = opts.score     === true;       // opt-in
+    var useParallax  = opts.parallax  === true;       // opt-in
 
     // Resolve debug config. GAME_CONFIG.debug is authoritative when present:
-    //   false           → disable overlay entirely
-    //   { enabled, toggleKey, ... } → use as DebugOverlay config
-    //   (absent)        → fall back to opts.debug / opts.debugOpts
+    //   false           -> disable overlay entirely
+    //   { enabled, toggleKey, ... } -> use as DebugOverlay config
+    //   (absent)        -> fall back to opts.debug / opts.debugOpts
     var gameCfgDebug = (GF.GAME_CONFIG && GF.GAME_CONFIG.debug !== undefined)
       ? GF.GAME_CONFIG.debug : null;
     var useDebug, debugOpts;
@@ -5166,7 +6188,7 @@
       // opts.debugOpts can still layer on top for programmatic overrides
       debugOpts = Object.assign({}, gameCfgDebug, opts.debugOpts || {});
     } else {
-      // No GAME_CONFIG.debug — honour opts flags (backward-compat)
+      // No GAME_CONFIG.debug - honour opts flags (backward-compat)
       useDebug  = opts.debug !== false;
       debugOpts = opts.debugOpts || {};
     }
@@ -5193,6 +6215,12 @@
     var grids     = useGrids     ? new GF.GridSystem()                                  : null;
     var battle    = useBattle    ? new GF.TurnBasedBattleSystem()                       : null;
     var debug     = useDebug     ? new GF.DebugOverlay(debugOpts)                       : null;
+    var score     = useScore     ? new GF.ScoreManager(Object.assign(
+                                       { gameName: opts.gameName, save: save, events: engine.events },
+                                       opts.scoreOpts || {}))                          : null;
+    var parallax  = useParallax  ? new GF.ParallaxSystem(Object.assign(
+                                       { viewportW: engineConfig.width, viewportH: engineConfig.height },
+                                       opts.parallaxOpts || {}))                       : null;
 
     if (audio)    engine.addSystem(audio);
     if (tweens)   engine.addSystem(tweens);
@@ -5203,13 +6231,16 @@
     if (models)   engine.addSystem(models);
     if (grids)    engine.addSystem(grids);
     if (battle)   engine.addSystem(battle);
+    if (score)    engine.addSystem(score);
     if (debug)    engine.addSystem(debug);
+    // ParallaxSystem is intentionally NOT added to engine.systems by default;
+    // games typically draw it themselves at the start of their scene's render.
 
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
-      grids: grids, battle: battle,
+      grids: grids, battle: battle, score: score, parallax: parallax,
     };
   };
 
