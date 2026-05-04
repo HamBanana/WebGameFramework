@@ -1376,6 +1376,13 @@
       this._lastDomState    = null;
       this._lastDistrictSig = null;
 
+      // Money-change animation tracker. Per-player previous cash + previous
+      // resource counts so _renderHUD can flash + spawn floating "+$X" / "-$X"
+      // indicators whenever a player's cash moves. Reset in _beginGame so a
+      // fresh game doesn't fire deltas on the initial deal.
+      this._moneyAnim = null;
+      this._lastResPlayerSig = null;
+
       engine.onUpdate((dt) => this._update(dt));
       engine.onRender((ctx) => this._render(ctx));
     }
@@ -2208,6 +2215,10 @@
       this.cooperativeThreat = 0;
       this.eventLog = [];
       this._lastDistrictSig = null;
+      // Reset money/resource animation trackers so the initial cash deal
+      // doesn't get rendered as a +$X delta.
+      this._moneyAnim = null;
+      this._lastResPlayerSig = null;
       this.log('Game started.');
       this.gameState = GAME_STATE.PLAYING;
 
@@ -2718,17 +2729,30 @@
       const nwStr = '$' + nw;
       if (dom.tbNetWorth.textContent !== nwStr) dom.tbNetWorth.textContent = nwStr;
 
-      // Resources pills
+      // Resources pills — sig is keyed on currentPlayer.index so we can tell
+      // a turn-rotation rebuild ("everything changed") apart from a real
+      // resource gain/loss for the same player (where we want to .bump the
+      // changed pills).
       const resCfg = this.cfg.market.resources;
       const sigParts = resCfg.map(r => (cur.resources[r] || 0));
       const sig = sigParts.join(',');
-      if (this._lastResSig !== sig) {
-        this._lastResSig = sig;
+      const playerSig = cur.index + '|' + sig;
+      if (this._lastResPlayerSig !== playerSig) {
+        const lastSig = this._lastResPlayerSig || '';
+        const samePlayer = lastSig.startsWith(cur.index + '|');
+        const prevParts = samePlayer
+          ? lastSig.slice(String(cur.index).length + 1).split(',')
+          : null;
+        this._lastResPlayerSig = playerSig;
+        this._lastResSig = sig; // legacy field kept for safety
         dom.tbResources.innerHTML = '';
-        resCfg.forEach((r) => {
+        resCfg.forEach((r, idx) => {
           const qty = cur.resources[r] || 0;
           const pill = document.createElement('span');
           pill.className = 'res-pill';
+          if (prevParts && parseInt(prevParts[idx] || '0', 10) !== qty) {
+            pill.classList.add('bump');
+          }
           pill.innerHTML = `<span class="res-name">${r.slice(0, 3)}</span><span class="res-val">${qty}</span>`;
           dom.tbResources.appendChild(pill);
         });
@@ -2772,8 +2796,126 @@
         });
       }
 
+      // Money-change animations — fired AFTER the player list rebuild so the
+      // freshly-created rows can pick up the .flash-* class. Diffs cash per
+      // player against the previous tick; non-zero deltas pulse the topbar
+      // money cell (current player) plus the player-list row, and spawn a
+      // floating "+$X" / "-$X" indicator near each.
+      this._animateMoneyChanges();
+
       // Left sidebar: district info
       this._renderDistrictSidebar();
+    }
+
+    // ── Money change animations (DOM-driven) ──────────────────────────────
+    // Track cash per player across renders. On a delta:
+    //   • flash the topbar money value (current player)
+    //   • flash the player-list row
+    //   • spawn a floating "+$X" / "-$X" indicator that drifts up
+    //   • spawn a coin sparkle burst on a gain
+    // All animation targets are pure DOM elements; the canvas isn't touched.
+    _animateMoneyChanges() {
+      if (!this._moneyAnim) {
+        this._moneyAnim = { lastMoney: this.players.map(p => p.money) };
+        return;
+      }
+      const last = this._moneyAnim.lastMoney;
+      // Defensive: rosters can change between games; resize the array.
+      if (last.length !== this.players.length) {
+        this._moneyAnim.lastMoney = this.players.map(p => p.money);
+        return;
+      }
+      this.players.forEach((p, i) => {
+        const prev = last[i];
+        if (prev === undefined) {
+          last[i] = p.money;
+          return;
+        }
+        const delta = p.money - prev;
+        if (delta !== 0) {
+          this._fireMoneyAnim(p, i, delta);
+        }
+        last[i] = p.money;
+      });
+    }
+
+    _fireMoneyAnim(player, index, delta) {
+      const isCurrent = (index === this.currentPlayerIndex);
+      const cls  = delta > 0 ? 'gain' : 'loss';
+      const sign = delta > 0 ? '+' : '−'; // proper minus sign
+      const txt  = `${sign}$${Math.abs(delta)}`;
+
+      // Topbar money cell: only flashes for the current player (it shows that
+      // player's cash) but the player-list row flashes for everyone, so a
+      // landlord sees their toll income light up even while another player
+      // has the turn.
+      if (isCurrent && this.dom.tbMoney) {
+        const el = this.dom.tbMoney;
+        el.classList.remove('money-gain', 'money-loss');
+        // Force reflow so the animation restarts cleanly on rapid back-to-back deltas.
+        // eslint-disable-next-line no-unused-expressions
+        void el.offsetWidth;
+        el.classList.add(delta > 0 ? 'money-gain' : 'money-loss');
+
+        const r = el.getBoundingClientRect();
+        this._spawnFloatingDelta(txt, cls, r.left + r.width / 2, r.top - 2, true);
+
+        if (delta > 0) {
+          this._spawnCoinBurst(r.left + r.width / 2, r.top + r.height / 2);
+        }
+      }
+
+      // Player-list row flash + secondary delta indicator. The row may not
+      // exist yet on the very first frame (defensive null check).
+      if (this.dom.playerList) {
+        const row = this.dom.playerList.children[index];
+        if (row) {
+          row.classList.remove('flash-gain', 'flash-loss');
+          // eslint-disable-next-line no-unused-expressions
+          void row.offsetWidth;
+          row.classList.add(delta > 0 ? 'flash-gain' : 'flash-loss');
+
+          // Don't double-spawn a delta for the current player — the topbar
+          // one is already prominent. Off-turn deltas get the row indicator.
+          if (!isCurrent) {
+            const rr = row.getBoundingClientRect();
+            this._spawnFloatingDelta(txt, cls, rr.right - 28, rr.top + rr.height / 2, false);
+          }
+        }
+      }
+    }
+
+    /** Spawn an absolute-positioned "+$X" / "-$X" element that floats up and
+     *  fades out (animation handled by CSS). Auto-removed after ~1.6s. */
+    _spawnFloatingDelta(text, cls, x, y, big) {
+      const el = document.createElement('div');
+      el.className = 'money-delta ' + cls + (big ? ' big' : '');
+      el.textContent = text;
+      el.style.left = x + 'px';
+      el.style.top  = y + 'px';
+      document.body.appendChild(el);
+      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 1700);
+    }
+
+    /** Sparkle burst centered on (x, y) — used for cash gains. */
+    _spawnCoinBurst(x, y) {
+      const burst = document.createElement('div');
+      burst.className = 'coin-burst';
+      burst.style.left = x + 'px';
+      burst.style.top  = y + 'px';
+      const SPARKS = 8;
+      for (let i = 0; i < SPARKS; i++) {
+        const s = document.createElement('div');
+        s.className = 'spark';
+        const angle = (Math.PI * 2 * i) / SPARKS + (Math.random() - 0.5) * 0.4;
+        const dist  = 26 + Math.random() * 22;
+        s.style.setProperty('--dx', (Math.cos(angle) * dist).toFixed(1) + 'px');
+        s.style.setProperty('--dy', (Math.sin(angle) * dist - 6).toFixed(1) + 'px');
+        s.style.animationDelay = (Math.random() * 0.05).toFixed(3) + 's';
+        burst.appendChild(s);
+      }
+      document.body.appendChild(burst);
+      setTimeout(() => { if (burst.parentNode) burst.parentNode.removeChild(burst); }, 950);
     }
 
     /** Populate the left sidebar with per-district stats. */
