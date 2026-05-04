@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!-- GameFramework/games/HappyPup/index.html -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Happy Pup &mdash; GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1d2335;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: 'Trebuchet MS', system-ui, sans-serif;
+      color: #fff;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 800px;
+      height: 500px;
+    }
+
+    #gameCanvas {
+      display: block;
+      border: 2px solid rgba(255, 200, 120, 0.35);
+      border-radius: 6px;
+      box-shadow: 0 0 40px rgba(255, 180, 120, 0.25), inset 0 0 24px rgba(0,0,0,0.4);
+      background: #87ceeb;
+    }
+
+    #hint {
+      position: absolute;
+      bottom: -34px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 12px;
+      letter-spacing: 1px;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="hint">A / D &mdash; run &nbsp;&middot;&nbsp; SPACE &mdash; jump &nbsp;&middot;&nbsp; ENTER &mdash; start</div>
+  </div>
+
+  <!-- Game config (sprite names only, no asset paths) -->
+  <script src="config.js"></script>
+
+  <!-- GameFramework -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- Sprites -->
+  <script src="sprites/dog.js"></script>
+  <script src="sprites/people.js"></script>
+  <script src="sprites/scenery.js"></script>
+
+  <!-- Game logic -->
+  <script src="HappyPupGame.js"></script>
+</body>
+</html>
