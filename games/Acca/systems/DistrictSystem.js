@@ -114,9 +114,15 @@
     /** Collect taxes for the player whose turn just ended (Planning §9.2). */
     collectTaxes(player) {
       let total = 0;
+      const propBonus = (this.cfg && this.cfg.property && this.cfg.property.mayorBonus) || 0;
       this.districts.forEach(d => {
         if (d.mayorIndex !== player.index) return;
-        const earned = Math.round(d.population * d.taxRate * this.cfg.district.taxBase);
+        // Base population tax + flat mayor bonus per district. The flat bonus
+        // (cfg.property.mayorBonus, default 50) was previously configured but
+        // never wired in; iter 14 of the autonomous playtest activated it so
+        // mayoring is meaningful even in low-population districts.
+        const taxEarned = Math.round(d.population * d.taxRate * this.cfg.district.taxBase);
+        const earned = taxEarned + propBonus;
         if (earned <= 0) return;
         player.money += earned;
         total += earned;

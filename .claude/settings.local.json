@@ -17,7 +17,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} district\\\\n\" \"http://127.0.0.1:3046/systems/DistrictSystem.js\")",
       "Bash(node framework/build.js)",
       "Bash(node --check framework/systems/ModelSystem.js)",
-      "Bash(xxd /c/Users/Ham/Documents/Claude/Projects/Games/GameFramework/framework/GameFramework.js)"
+      "Bash(xxd /c/Users/Ham/Documents/Claude/Projects/Games/GameFramework/framework/GameFramework.js)",
+      "WebFetch(domain:localhost)"
     ]
   }
 }

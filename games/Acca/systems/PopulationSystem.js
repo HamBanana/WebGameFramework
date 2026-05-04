@@ -80,11 +80,14 @@
       const c = this.cfg.population;
       const dCfg = this.cfg.district || {};
       const happy01 = r.happiness / 100;
-      // Happiness now scales births more aggressively (P4 — make happiness
-      // visibly drive population growth). The multiplier is a designer-tunable
-      // knob in cfg.district.happinessGrowthMultiplier.
+      // Carrying capacity: growth slows as population approaches the cap so
+      // districts don't balloon into the hundreds of thousands without mayor
+      // intervention. Cap = cells in district × 50 (designer-tunable).
+      const cap = Math.max(r.cells.length * 50, 100);
+      const pressureFactor = Math.max(0, 1 - r.population / cap);
       const growthMul = dCfg.happinessGrowthMultiplier || 1;
-      const births = Math.round(r.population * c.birthRate * happy01 * growthMul);
+      const births = Math.round(r.population * c.birthRate * happy01 * growthMul * pressureFactor);
+      // Deaths ignore pressure (death rate is independent of carrying capacity).
       const deaths = Math.round(r.population * c.deathRate * (1 - happy01));
       const delta  = births - deaths;
       r.birthsThisTurn = births;

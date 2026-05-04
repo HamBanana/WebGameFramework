@@ -57,18 +57,24 @@
   "startingResources": {
     "wood": 0,
     "steel": 0,
-    "electricity": 0,
+    "electricity": 3,
     "water": 0,
-    "food": 0,
+    "food": 3,
     "coal": 0,
-    "oil": 0
+    "oil": 1
   },
   "win": {
     "type": "NetWorthOrLastStanding",
-    "target": 50000,
+    "target": 5000,
+    "turnCap": 300,
     "tiebreaker": "TotalValue"
   },
   "mode": "competitive",
+  "catchUp": {
+    "enabled": true,
+    "threshold": 0.55,
+    "amount": 120
+  },
   "cooperative": {
     "targetMultiplier": 2.5,
     "threatLimit": 30,
@@ -148,6 +154,12 @@
     "houseRentRate": 0.25,
     "houseTaxIfMayor": 60,
     "housePopContribution": 4,
+    "houseOwnerIncome": 18,
+    "tollOwnerIncome": 8,
+    "teleporterOwnerIncome": 12,
+    "policeOwnerIncome": 30,
+    "vaultOwnerIncome": 10,
+    "vaultInterestRate": 0.01,
     "factoryBaseRate": 1,
     "factoryHouseBonus": 0.25,
     "factoryResource": "food",
@@ -232,6 +244,7 @@
   "chance": {
     "repeatGuard": 3,
     "shuffleEvery": 12,
+    "nearMissProb": 0.25,
     "pool": [
       {
         "id": "stock_crash",

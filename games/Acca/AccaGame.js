@@ -1056,6 +1056,20 @@
 
     _handleLanding() {
       const cell = this.player.currentCell;
+      // Chance "near-miss": if the landing cell is adjacent to a chance cell
+      // and isn't itself a chance cell, fire a low-probability chance event.
+      // Keeps the chance pool engaged on small maps where direct chance-cell
+      // landings are rare. (2026-05-04 iter 13.)
+      if (cell.type !== 'chance' && this.game.chanceSys) {
+        const adj = [cell.up, cell.down, cell.left, cell.right].filter(Boolean);
+        const nearChance = adj.some(n => n.type === 'chance');
+        const cfg = this.game.cfg.chance || {};
+        const nearMissProb = cfg.nearMissProb || 0;
+        if (nearChance && Math.random() < nearMissProb) {
+          this._handleChance();
+          return;
+        }
+      }
       switch (cell.type) {
         case 'bank':
           this.player.addMoney(200);
@@ -1189,30 +1203,42 @@
       this.stage = TURN_STAGE.LAND_PROMPT;
 
       // Sort the catalog by cost ascending so the cheapest builds are at the
-      // top (S21). Unaffordable options stay in the list but render greyed
-      // out so the player can see what they're missing (B17).
+      // top (S21). When the player can't afford the cheapest build, show
+      // *only* the Skip option with a clear "you can't afford anything"
+      // subtitle (iter 15 of the autonomous playtest — the all-disabled-rows
+      // state was the dominant late-game UX path on a small map and required
+      // 7 keypresses to clear). When the player can afford at least the
+      // cheapest, show every catalog entry — affordable ones tappable, the
+      // rest greyed out — so the player still sees the upgrade horizon.
       const sorted = cfg.catalog.slice().sort((a, b) => a.cost - b.cost);
-      const opts = sorted.map(entry => {
-        const can = p.money >= entry.cost;
-        return {
-          label: can
-            ? `Build ${entry.label} ($${entry.cost})`
-            : `Build ${entry.label} ($${entry.cost})  — need $${entry.cost - p.money}`,
-          _disabled: !can,
-          action: () => {
-            if (!can) { this._showBuildMenu(cell); return; }
-            p.addMoney(-entry.cost);
-            game.structures.build(cell, entry.type, p.index);
-            game.log(`${p.name} built a ${entry.label} in ${cell.district}.`);
-            game.checkMayor(p, cell.district);
-            this.enter(TURN_STAGE.END_TURN);
-          },
-        };
-      });
+      const cheapest = sorted[0] ? sorted[0].cost : 0;
+      const canAffordAnything = sorted.some(e => p.money >= e.cost);
+
+      const opts = [];
+      if (canAffordAnything) {
+        sorted.forEach(entry => {
+          const can = p.money >= entry.cost;
+          opts.push({
+            label: can
+              ? `Build ${entry.label} ($${entry.cost})`
+              : `Build ${entry.label} ($${entry.cost})  — need $${entry.cost - p.money}`,
+            _disabled: !can,
+            action: () => {
+              if (!can) { this._showBuildMenu(cell); return; }
+              p.addMoney(-entry.cost);
+              game.structures.build(cell, entry.type, p.index);
+              game.log(`${p.name} built a ${entry.label} in ${cell.district}.`);
+              game.checkMayor(p, cell.district);
+              this.enter(TURN_STAGE.END_TURN);
+            },
+          });
+        });
+      }
       opts.push({ label: 'Skip', action: () => this.enter(TURN_STAGE.END_TURN) });
 
-      const cheapest = sorted[0] ? sorted[0].cost : 0;
-      const subtitle = `Cash: $${p.money}  ·  Cheapest: $${cheapest}`;
+      const subtitle = canAffordAnything
+        ? `Cash: $${p.money}  ·  Cheapest: $${cheapest}`
+        : `Cash: $${p.money}  ·  Cheapest build: $${cheapest}  — can't afford anything yet`;
       this.menu.show(`Empty plot in ${cell.district}`, opts, subtitle);
     }
 
@@ -1380,9 +1406,19 @@
         nw += s.currentValue;
         if (s.type === 'vault') nw += (s.storedMoney || 0);
       });
+      // Resources count toward net worth at the *liquidation* (sell-spread)
+      // value, not the buy-side base price. Reasoning, from the 2026-05-04
+      // 10-iteration playtest: with passiveYield = 1 elec + 1 food per turn
+      // plus 3-of-resource grants on power_plant/mine/well visits, a player
+      // who never builds can passively reach the $5000 NW target purely from
+      // resource hoarding (iteration 10 demonstrated all four players hitting
+      // $4,830–$5,000 NW with zero structures owned). Valuing at sell-spread
+      // closes that exploit while still letting deliberate stockpiling
+      // contribute to NW.
       const prices = this.cfg.market.basePrices;
+      const spread = (this.cfg.market && this.cfg.market.sellSpread) || 1;
       Object.entries(p.resources).forEach(([res, qty]) => {
-        nw += (prices[res] || 0) * qty;
+        nw += (prices[res] || 0) * spread * qty;
       });
       return Math.round(nw);
     }
@@ -1643,6 +1679,16 @@
       // showed to be effectively unreachable.
       const live = this.players.filter(p => !p.isBankrupt);
       const lastStanding = (live.length === 1) ? live[0] : null;
+
+      // Turn-cap: if a cap is configured and we've hit it, declare the
+      // highest-net-worth player the winner rather than letting the game idle.
+      const cap = w.turnCap || 0;
+      if (cap > 0 && this.turnCounter >= cap && live.length > 0) {
+        const sorted = live.slice().sort((a, b) => this.netWorth(b) - this.netWorth(a));
+        this.log(`Turn cap (${cap}) reached — ${sorted[0].name} wins by net worth!`);
+        return sorted[0];
+      }
+
       switch (w.type) {
         case 'MoneyOnHand':
           return this.players.find(p => p.money >= w.target) || lastStanding;
@@ -1656,7 +1702,18 @@
         case 'NetWorthOrLastStanding':
         default: {
           const target = w.target || 50000;
-          const byWealth = this.players.find(p => !p.isBankrupt && this.netWorth(p) >= target);
+          // To win by net worth, the player must have engaged with the game's
+          // structure-and-property loop at least once (own ≥ 1 structure
+          // including auctions and chance-event grants). Closes the
+          // never-build exploit identified in 2026-05-04 iteration 10, where
+          // a passive player walking onto resource cells could clear the NW
+          // target purely from inventory hoarding. Last-Standing path is
+          // unaffected — bankruptcy still ends the game normally.
+          const byWealth = this.players.find(p =>
+            !p.isBankrupt &&
+            this.netWorth(p) >= target &&
+            (p.ownedStructures && p.ownedStructures.length > 0)
+          );
           return byWealth || lastStanding;
         }
       }
@@ -1750,10 +1807,38 @@
       // 2. Mayor tax collection (only for the active player).
       if (this.districtSys) this.districtSys.collectTaxes(player);
 
-      // 3. Contextual prompts (G7) — surface non-obvious affordances at the
+      // 3. Catch-up bonus — if the active player is the last-place player
+      //    AND is significantly behind the leader (default: < 50% of leader
+      //    NW), grant a small cash bonus. Keeps games competitive when
+      //    early luck or a bad chance event leaves a player too far back to
+      //    recover. (iter 16-20 of the autonomous playtest — adds comeback
+      //    fun without warping the leader's strategy.)
+      this._runCatchUpBonus(player);
+
+      // 4. Contextual prompts (G7) — surface non-obvious affordances at the
       //    top of the turn so casual players actually notice the trade,
       //    market, and mayor menus.
       this._runContextualPrompts(player);
+    }
+
+    _runCatchUpBonus(player) {
+      const cfg = this.cfg.catchUp || {};
+      if (!cfg.enabled) return;
+      const live = this.players.filter(p => !p.isBankrupt);
+      if (live.length < 2) return;
+      const sorted = live.slice().sort((a, b) => this.netWorth(b) - this.netWorth(a));
+      const leader = sorted[0];
+      const last = sorted[sorted.length - 1];
+      if (player !== last) return;
+      if (player === leader) return;
+      const leaderNW = this.netWorth(leader);
+      const myNW = this.netWorth(player);
+      const ratio = leaderNW > 0 ? myNW / leaderNW : 1;
+      const threshold = cfg.threshold || 0.5;
+      if (ratio >= threshold) return;
+      const bonus = cfg.amount || 100;
+      player.addMoney(bonus);
+      this.log(`${player.name} receives a $${bonus} catch-up bonus (last place, ${Math.round(ratio * 100)}% of leader).`);
     }
 
     /** G7 — emit log/notification lines that nudge the player toward
@@ -1876,6 +1961,15 @@
      *  Now invoked at TURN_START rather than at end-of-turn. */
     _runProduction(player) {
       const cfg = this.cfg.structures;
+
+      // Basic resource stipend: sustains one shop + one house without requiring
+      // resource-cell visits every turn. Set in cfg.market.passiveYield.
+      const yield1 = this.cfg.market.passiveYield || 0;
+      if (yield1 > 0) {
+        player.resources.electricity = (player.resources.electricity || 0) + yield1;
+        player.resources.food        = (player.resources.food        || 0) + yield1;
+      }
+
       player.ownedStructures.forEach(s => {
         if (s.sabotagedUntilTurn > this.turnCounter) return; // idle from sabotage
         if ((s.idleUntilTurn || -1) > this.turnCounter) return; // idle from upkeep shortage
@@ -1900,14 +1994,38 @@
         }
         if (s.type === 'house') {
           // Houses passively contribute residents to their district population
+          // and earn a small per-turn rent from the resident family. Without
+          // this rent, houses were strictly worse than shops and never got
+          // built voluntarily (2026-05-04 iter 8 / iter 11 diversified runs).
           if (this.districtSys && s.cell.district) {
             const d = this.districtSys.get(s.cell.district);
             if (d) d.population += cfg.housePopContribution;
           }
+          player.money += cfg.houseOwnerIncome || 18;
         }
         if (s.type === 'shop') {
           // Tiny passive owner income.
           player.money += 20;
+        }
+        if (s.type === 'toll_gate') {
+          // Small per-turn maintenance income from the owner's own customers.
+          player.money += cfg.tollOwnerIncome || 8;
+        }
+        if (s.type === 'teleporter') {
+          player.money += cfg.teleporterOwnerIncome || 12;
+        }
+        if (s.type === 'police_station') {
+          // Police generate ticket revenue and provide protection.
+          player.money += cfg.policeOwnerIncome || 30;
+        }
+        if (s.type === 'vault') {
+          // Vault interest on stored money (1% per turn) plus base bookkeeping
+          // fee, so the structure earns even when not actively used.
+          const stored = s.storedMoney || 0;
+          const interestRate = cfg.vaultInterestRate || 0.01;
+          const interest = Math.round(stored * interestRate);
+          if (interest > 0) s.storedMoney = stored + interest;
+          player.money += cfg.vaultOwnerIncome || 10;
         }
       });
     }
@@ -1962,18 +2080,11 @@
           summary.push(`-${fromStock} ${res}`);
           return;
         }
-        // Shortfall — pay market price (drives cash potentially negative,
-        // resolved by _resolveDebt). Idle one structure of the affected type
-        // and ding district happiness (playtest #G8).
-        const unitPrice = prices[res] || 0;
-        const cost = short * unitPrice;
-        if (cost > 0) {
-          player.addMoney(-cost);
-          summary.push(`-${fromStock} ${res} (+$${cost} bought)`);
-          this.log(`${player.name} bought ${short} ${res} at market for $${cost} (upkeep shortfall).`);
-        } else {
-          summary.push(`-${fromStock} ${res}`);
-        }
+        // Shortfall — idle one structure of the affected type (no forced market
+        // buy; forcing cash-negative purchases killed the economy in playtests).
+        // The structure produces nothing next turn; district happiness is dinged.
+        summary.push(`-${fromStock} ${res} (${short} short — structure idled)`);
+        this.log(`${player.name} short on ${res} (need ${required}, have ${have}); structure idled.`);
         // Find one structure of the affected type to idle (cosmetic — flips
         // production off for next turn) and apply happiness penalty.
         let idleType = null;
