@@ -19,13 +19,13 @@
     "rightWall": 768
   },
   "board": {
-    "map": "maps/denmark.json",
+    "map": "maps/default.json",
     "cellSize": 64,
     "originX": 32,
     "originY": 32
   },
   "camera": {
-    "zoomedInCellsAcross": 12,
+    "zoomedInCellsAcross": 6,
     "zoomOutPadding": 80,
     "lerp": 0.12,
     "betweenTurnsHold": 0.6
