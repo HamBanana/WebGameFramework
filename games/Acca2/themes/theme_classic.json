@@ -1,0 +1,15 @@
+{
+  "id": "theme_classic",
+  "label": "Classic",
+  "colors": {
+    "panelBg": "rgba(0, 0, 0, 0.65)",
+    "panelBorder": "#2a4060",
+    "accent": "#5a8ed1",
+    "accentLight": "#9fc8ff",
+    "text": "#e6edf5",
+    "textDim": "#9aa5b1",
+    "highlight": "#ffe978",
+    "topbarFrom": "#1c92e8",
+    "topbarTo":   "#1879c4"
+  }
+}
