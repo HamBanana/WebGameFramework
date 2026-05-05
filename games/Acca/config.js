@@ -1,7 +1,10 @@
-// games/Acca/config.js
-// Game-specific configuration for Acca v0.1
+// GameFramework/games/Acca/config.js
+// Game-specific configuration for Acca — the canonical contract for every
+// designer-tunable number. Schema mirrors Planning §16_DataModels.md.
+
 (function (GF) {
   'use strict';
+
   GF.GAME_CONFIG = {
   "engine": {
     "width": 768,
@@ -49,7 +52,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 2,
+  "numberOfPlayers": 4,
   "startingMoney": 1500,
   "startingResources": {
     "wood": 0,
@@ -80,7 +83,7 @@
     "threatPerLowHappiness": 1
   },
   "property": {
-    "basePrice": 200,
+    "basePrice": 300,
     "baseRent": 30,
     "baseRentRate": 0.15,
     "mayorBonus": 50,
@@ -540,4 +543,26 @@
       "ArrowRight",
       "KeyD"
     ],
-    "conf
+    "confirm": [
+      "Enter",
+      "Space"
+    ],
+    "cancel": [
+      "Escape",
+      "Backspace"
+    ],
+    "endTurn": [
+      "KeyE"
+    ]
+  },
+  "debug": {
+    "enabled": true,
+    "toggleKey": "F1"
+  }
+};
+
+  window.addEventListener('GF:ready', function () {
+    GF.applyLauncherConfig('Acca');
+  }, { once: true });
+
+})(window.GF = window.GF || {});

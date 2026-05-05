@@ -2,77 +2,59 @@
 
 Location: `games/Acca/Planning/`
 
-This folder is the design/architecture bible for **Acca** (v0.1), a modular city-building board game built on top of `GameFramework`. The intent is that anyone (or any future Claude session) can read this set of files and (a) understand the codebase as it stands, and (b) extend or rebuild it without reverse-engineering intent from JS files.
-
-Acca is a city-building board game (top-down, 2–4 players, hot-seat). Players move around a connected grid, buy buildable cells, build income-producing structures (shops, houses, factories, vaults, …), corner districts to become Mayor, manipulate a 7-resource market, and trade or sabotage each other to victory.
+This folder is the design/planning bible for **Acca**, a top-down board game built on top of `GameFramework`. The intent is that anyone (or any future Claude session) can read this set of files and produce a fully functional implementation of the game without having to reverse-engineer intent from code.
 
 The planning set is split into self-contained documents. Read them in order for a top-down view, or jump straight to a topic.
 
 ## Reading order
 
-| #   | Document                                  | Purpose |
-|-----|-------------------------------------------|---------|
-| 00  | `00_Index.md`                             | This file — entry point, glossary, conventions, architecture overview. |
-| 01  | `01_GameOverview.md`                      | Vision, pillars, target experience, scope of Acca. |
-| 02  | `02_Architecture.md`                      | How Acca sits on top of GameFramework: modules, ownership, runtime flow. |
-| 03  | `03_BoardAndCells.md`                     | Cell types, neighbor wiring, districts, map JSON spec. |
-| 04  | `04_PlayerAndTurn.md`                     | Turn state machine, controls, Player entity, dice, movement. |
-| 05  | `05_StructuresAndBuildings.md`            | The seven structure types, build flow, owner/visitor effects, upkeep. |
-| 06  | `06_ResourcesAndMarket.md`                | The 7 resources, production, market dynamics, pricing. |
-| 07  | `07_Companies.md`                         | Companies are unimplemented; the doc records the design sketch for future addition. |
-| 08  | `08_Population.md`                        | Population dynamics, happiness, employment, migration. |
-| 09  | `09_DistrictsAndMayors.md`                | District control, Mayor role, taxes, mayor controls (festival, grant). |
-| 10  | `10_ChanceEvents.md`                      | Chance pool, event categories, weighting, hooks. |
-| 11  | `11_TradingAndSabotage.md`                | Trades, hostile takeovers, sabotage. |
-| 12  | `12_UI_HUD.md`                            | DOM topbar/sidebars, canvas overlays, menus, notifications. |
-| 13  | `13_AudioVisualFeedback.md`               | Sound, particles, money animations, camera, theming. |
-| 14  | `14_SpritesAndAssets.md`                  | Sprite name registry and animation contracts. |
-| 15  | `15_WinConditionsAndMultiplayer.md`       | Win types, competitive vs cooperative, end-game flow. |
-| 16  | `16_DataModels.md`                        | Canonical schemas: `GAME_CONFIG`, map JSON, save snapshot. |
-| 17  | `17_FileStructure.md`                     | Where each file lives under `games/Acca/`. |
-| 18  | `18_ImplementationRoadmap.md`             | Current implementation state and the next phases of work. |
-| 19  | `19_OpenQuestions.md`                     | Unresolved design questions and parked debates. |
-| 20  | `20_Changes.md`                           | Running log of behavior/balance changes. |
-| —   | `API_Reference.md`                        | Per-file class/method reference for every source file under `games/Acca/`. |
-
-
-## Key design decisions
-
-These are the top-level architectural choices that shape the codebase. Each subsequent doc elaborates where relevant.
-
-- **Module split.** `AccaGame.js` is a slim orchestrator (~330 lines). All logic lives in focused modules under `core/`, `managers/`, `render/`, `ui/`, and `systems/`, plus `sprites/`, `utils/`, `themes/`, and `maps/`.
-- **No Property entity, no Business entity.** A buildable cell *is* the host for a single `PlayerStructure`. There is no two-level "property holds many businesses" hierarchy; one cell hosts one structure.
-- **No Company entity.** Players act directly. Industry bonuses and multi-company orchestration are not implemented (see `07_Companies.md`).
-- **DOM HUD.** The topbar, district sidebar, players panel, and notifications panel are real DOM elements styled from `styles/*.css`. The board, die, and menu modal are canvas-rendered.
-- **Default win condition is `NetWorthOrLastStanding`.** Ships with this hybrid default; four other condition types are configurable.
-- **Spotlight + camera lerp.** Camera is owned by `CameraManager` and supports a "spotlight" effect (dimmed screen, glowing hole, pulsing halo) used to draw attention to a specific cell during prompts.
-- **Cooperative threat track.** A counter (`game.cooperativeThreat`) accumulates each turn and from low-happiness districts; when it hits the limit, the table loses cooperatively. Off by default (`mode: "competitive"`).
-- **Catch-up bonus.** A trailing player below `catchUp.threshold` of the leader's net worth receives `catchUp.amount` cash at the start of their turn.
-- **Resource sell-spread in net-worth.** `netWorth()` values resources at `basePrice × sellSpread` (~90%), closing the "never-build" exploit where net-worth tracked buy price exactly.
+| #  | Document | Purpose |
+|----|----------|---------|
+| 00 | `00_Index.md` | This file — entry point, glossary, conventions. |
+| 01 | `01_GameOverview.md` | Vision, pillars, target experience, scope of v1. |
+| 02 | `02_Architecture.md` | How Acca sits on top of GameFramework: modules, ownership, runtime flow. |
+| 03 | `03_BoardAndCells.md` | Cell types, neighbors, regions, board layout & map JSON spec. |
+| 04 | `04_PlayerAndTurn.md` | Turn state machine, controls, player state, dice. |
+| 05 | `05_PropertiesAndBusinesses.md` | Property purchase, businesses, upgrades, upkeep, and player structures (shops, toll gates, teleporters, houses, factories, police stations, vaults). |
+| 06 | `06_ResourcesAndMarket.md` | The 7 resources, production, market dynamics, pricing. |
+| 07 | `07_Companies.md` | Company creation, industry bonuses, multiple companies. |
+| 08 | `08_Population.md` | Population dynamics, happiness, employment, migration. |
+| 09 | `09_DistrictsAndMayors.md` | District control, Mayor role, taxes, mayor loss. |
+| 10 | `10_ChanceEvents.md` | Chance pool, event categories, weighting. |
+| 11 | `11_TradingAndSabotage.md` | Trades, hostile takeovers, sabotage. |
+| 12 | `12_UI_HUD.md` | HUD layout, menus, dialog/notification design. |
+| 13 | `13_AudioVisualFeedback.md` | Sound effects, music, animations, particles. |
+| 14 | `14_SpritesAndAssets.md` | Sprite name registry, animation contracts, tile art. |
+| 15 | `15_WinConditionsAndMultiplayer.md` | Competitive vs. cooperative, win triggers, end-game. |
+| 16 | `16_DataModels.md` | Canonical schemas: map JSON, save game, configs. |
+| 17 | `17_FileStructure.md` | Where each new file goes inside `games/Acca/`. |
+| 18 | `18_ImplementationRoadmap.md` | Phased implementation plan with concrete tickets. |
+| 19 | `19_OpenQuestions.md` | Unresolved design questions, parked debates, future ideas. |
 
 ## Conventions used in these docs
 
-- **File path bullet** — every time a doc names a piece of code that should exist, it includes the path it would live at, e.g. `games/Acca/managers/EconomyManager.js`. Matches the rule: *"Always include paths to where a given file belongs in the file structure."*
-- **Sprite names, never paths** — when a doc references art, it uses the sprite name (e.g. `cell_property`, `token_red`). Asset paths only appear in `framework/sprites/*`. Matches the framework rule: *"FRAMEWORK_CONFIG must not include full asset paths."*
-- **Config-first** — anything a designer would tune (prices, happiness curves, chance weights) is described as a key under `GF.GAME_CONFIG` in `games/Acca/config.js`, not hard-coded.
-- **Modular & extensible** — every subsystem is a class with a small, named API. Cross-module communication goes through the framework's `EventBus` (`engine.events`), not direct method calls.
-- **No HTML files added.** The only HTML files in `games/Acca/` are `index.html` and `MapCreator/index.html`. Layout that isn't provided by those goes through DOM nodes already declared in `index.html` plus the canvas.
+- **File path bullet** — every time a planning doc names a piece of code that should exist, it includes the path it would live at, e.g. `games/Acca/systems/PopulationManager.js`. This keeps the planning aligned with the user's rule: *"Always include paths to where a given file belongs in the file structure."*
+- **Sprite names, never paths** — when a doc references art, it uses the sprite name (e.g. `cell_property`, `token_red`). Asset paths only appear in `framework/sprites/*` and are out of scope here. This matches the framework rule: *"FRAMEWORK_CONFIG must not include full asset paths."*
+- **Config-first** — anything that designers would tune (prices, happiness curves, chance weights) is described as a key under `GAME_CONFIG` in `games/Acca/config.js`, not hard-coded.
+- **Modular & extensible** — each subsystem is described as a class with a small, named API. New systems plug in via the framework's EventBus rather than reaching into each other.
+- **No HTML files** — the only HTML files in `games/Acca/` are the existing `index.html` and `MapCreator/index.html`. New planning never asks for additional HTML; layouts are canvas-rendered.
 
 ## Glossary
 
-- **Cell** — one tile on the board. Has type, optional district, neighbors. See `core/Cell.js`.
-- **Structure** (a.k.a. **PlayerStructure**) — a built object owned by a player on a buildable cell. Encompasses "properties + businesses" in one entity. See `core/PlayerStructure.js`.
-- **Buildable cell** — a cell of type `buildable` (or `empty`). The only cell type on which a `PlayerStructure` may be built.
-- **District** — a named group of cells. `cell.district` holds the district's name. Owning a strict majority of buildable cells in a district makes the player Mayor. Managed by `systems/DistrictSystem.js`.
-- **Mayor** — the player who owns a strict majority of buildable cells in a district. Earns taxes, can adjust tax rate, hold festivals, issue investment grants.
-- **Turn stage** — a phase inside a player's turn (`TURN_START` → `ROLL` → `MOVE` → `LANDING` → `LAND_PROMPT` → `END_TURN` → `BETWEEN`). Defined in `core/Constants.js`.
-- **GF** — the framework namespace exposed on `window.GF` by `framework/GameFramework.bundle.js`. `GF.Acca` is the game's namespace.
-- **Catalog** — `cfg.structures.catalog` lists the structure types players can build, with cost.
+- **Cell** — one tile on the board. Has type, optional district/region, neighbors.
+- **Property** — a buyable cell that hosts a player's businesses.
+- **Business** — an income/resource-producing structure built inside a property.
+- **Player structure** — a standalone buyable cell with its own built-in mechanic (shop, toll gate, teleporter, house, factory, police station, vault). Coexists with properties on the board; see `05_PropertiesAndBusinesses.md` §5.9.
+- **District** — a named group of squares. `cell.district` holds the district id. Wholly owning all buildable squares grants Mayorship. Managed by `DistrictSystem`.
+- **Region** — a higher-level grouping of districts (future feature, not yet implemented).
+- **Mayor** — the player who owns every buildable square in a district; collects taxes.
+- **Company** — a player-owned grouping of properties. Players may run multiple companies.
+- **Turn stage** — a phase inside a player's turn (TurnStart → Roll → Move → ConfirmLand → Landing → LandPrompt → EndTurn).
+- **GF** — the framework namespace exposed on `window.GF` by `framework/GameFramework.bundle.js`.
 
 ## How to extend the planning
 
 1. Drop a new `NN_TopicName.md` into this folder.
 2. Add a row to the table above.
 3. Update `19_OpenQuestions.md` if the new topic raises any.
-4. Cross-reference: link from related docs (e.g. a new doc on "Auctions" should be linked from `05_StructuresAndBuildings.md`).
-5. If the topic introduces new code, also update `17_FileStructure.md` and `API_Reference.md`.
+4. Cross-reference: link from related docs (e.g. a new doc on "Auctions" should be linked from `05_PropertiesAndBusinesses.md`).

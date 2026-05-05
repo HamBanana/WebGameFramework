@@ -1,72 +1,100 @@
 # 06 — Resources and Market
 
+This doc operationalizes the existing `Resource_Outline.txt`. Storage is unlimited (per the resource outline: *"Players have infinite storage capacity"*).
+
 ## 6.1 Resource catalog
 
-Defined under `cfg.market.resources` and seeded in `cfg.startingResources`. ships with seven resources:
+Defined in `cfg.market.resources` and `cfg.market.basePrices`:
 
-| Resource      | Base price ($) | Starting qty | Notes |
-|---------------|----------------|--------------|-------|
-| `wood`        | 25             | 0            | Cheap building material; minor industry use. |
-| `steel`       | 50             | 0            | Mid-tier industrial output (mine subType `iron`). |
-| `electricity` | 35             | 3            | Powers shops, houses, police, teleporter, factory. |
-| `water`       | 20             | 0            | Population upkeep + districts gain happiness with surplus. |
-| `food`        | 30             | 3            | Population upkeep; default factory output. |
-| `coal`        | 40             | 0            | Industrial input (mine subType `coal`). |
-| `oil`         | 80             | 1            | Sabotage reagent (1 oil per attempt) + scales mayor's migration capacity. |
-
-These are the only resources traded on the market; structures' upkeep references the `food` / `electricity` / `oil` subset.
+| Resource | Base price | Tier | Notes |
+|----------|-----------|------|-------|
+| `wood` | 25 | early | Construction & furniture. |
+| `water` | 20 | early | Population, farms, services. |
+| `food` | 30 | early | Population growth, services. |
+| `coal` | 40 | mid | Industrial fuel, transitional. |
+| `electricity` | 35 | mid | Universal upkeep. |
+| `steel` | 50 | mid–late | Big builds and upgrades. |
+| `oil` | 80 | late | Advanced factories, transport, migration mechanic (see 08). |
 
 ## 6.2 Sources
 
-- **Passive yield** — every owned structure ticks `cfg.market.passiveYield` (default 1) of any matching specialty resource each turn (gated by district specialty).
-- **Resource cells** — landing on a `power_plant`, `well`, or `mine` cell yields the cell's resource as a small bonus.
-- **Factory** — the most reliable source. Output = `factoryBaseRate × (1 + houseBonus × housesInDistrict)` of the district's `specialty` (or `cfg.structures.factoryResource`, default `food`, when no specialty is set).
-- **Chance events** — `oil_strike`, `industrial_surge`, `coal_seam`, `energy_surplus`, `rainy_season`, `drought` etc. add or remove resources (see `10_ChanceEvents.md`).
-- **Market** — `MarketSystem.buy(player, resource, qty)` lets the player buy at the current price.
+Per `Resource_Outline.txt`:
+
+- **Owned cells** with type → resource: forest→wood, mine(coal)→coal, mine(iron)→steel, oil_rig→oil, well→water, farm→food, power_plant→electricity.
+- **Owned businesses** producing the resource (see 5.5 catalog).
+- **Markets** — buy at current market price.
+- **Trades** between players.
+- **Chance events** — see `10_ChanceEvents.md`.
 
 ## 6.3 Production cadence
 
-`EconomyManager.runStartOfTurn(player)` walks the player's `ownedStructures` and applies the type-specific yield. Order of operations:
+Production runs at end-of-turn for the owner whose turn just ended (see 4.3 step 1). For each business:
 
-1. **Passive yield** — district specialty bonus where applicable.
-2. **Shops** — visit-based cash income: `currentValue × shopVisitRate × structuresInDistrictBonus`.
-3. **Houses** — owner cash income (`houseOwnerIncome` 18) plus population-driven rent if any visitor passed last turn.
-4. **Factories** — output the specialty resource (or fallback `food`).
-5. **Toll/teleporter/police/vault** — small fixed owner income.
-6. **Vault interest** — `storedMoney × vaultInterestRate` (1% per turn) added to `storedMoney`.
+```
+if business.idle: skip
+else:
+  for each resource r in business.upkeep: deduct r from owner.resources
+  if any r underflowed: business.idleReason = 'no_resources'; rollback this business; skip
+  produce business.productionRate into owner.resources (or money if money producer)
+```
 
-End-of-turn (`runEndOfTurn`) applies upkeep (food/electricity/oil consumption — see §5.8) and then `marketSys.drift()` updates prices.
+This per-owner cadence (rather than global) means a player's economy advances when they take a turn. Designers can swap to global by setting `cfg.production.cadence = 'global'`.
 
 ## 6.4 Market system
 
-`games/Acca/systems/MarketSystem.js`. The market is a simple rolling supply/demand model.
+`games/Acca/systems/MarketSystem.js`:
 
 ```js
 class MarketSystem {
-  constructor(cfg, eventBus) { /* prices, supplyMA, demandMA from cfg.market */ }
+  prices;      // { [resource]: number }   — current price
+  basePrices;  // immutable starting prices
+  supplyMA;    // { [resource]: number }   — moving average of supply (sells)
+  demandMA;    // { [resource]: number }   — moving average of demand (buys)
 
-  priceOf(resource);                 // current buy price
-  sellPriceOf(resource);             // current price × cfg.market.sellSpread (0.9)
-  buy(player, resource, qty);        // {ok, totalCost, reason?}
-  sell(player, resource, qty);       // {ok, totalProceeds, reason?}
-  drift();                           // call once per turn end
-  serialize() / deserialize(data);
+  buy(player, resource, qty);
+  sell(player, resource, qty);
+  drift();     // called once per global turn; nudges prices toward equilibrium
+  priceOf(resource);
 }
 ```
 
-Drift logic:
+### 6.4.1 Pricing model
 
-- For each resource each `drift()` call:
-  - `ratio = (1 + demandMA) / (1 + supplyMA)`.
-  - `target = clamp(basePrice × ratio, basePrice × priceFloorMul, basePrice × priceCeilMul)`.
-    - Defaults: floor = 0.4×, ceil = 2.5×.
-  - `next = max(1, round(current + (target - current) × driftRate))` (driftRate = 0.2).
-- After the price update, `supplyMA[r] *= 0.85` and `demandMA[r] *= 0.85` so old transactions stop dominating.
-- Buy/sell themselves smooth toward the new tick: `MA[r] = α × qty + (1 - α) × MA[r]` with `α = movingAvgAlpha` (= 0.3).
-- Emits `market:priceChanged({resource, oldPrice, newPrice, delta, ratio})` whenever a price actually changes. `AccaGame` only logs the change to the in-game notifications when the relative change ≥ 25%.
+- Each transaction updates a moving average: `supplyMA = α·last + (1-α)·supplyMA`, with α from config (default 0.3).
+- At drift time:
+  ```
+  ratio = (1 + demandMA) / (1 + supplyMA)
+  target = clamp(basePrice * ratio, basePrice * 0.4, basePrice * 2.5)
+  price = lerp(price, target, cfg.market.driftRate)   // default 0.2
+  ```
+- Rounding to whole money. Min price never below 1.
+- Emits `market:priceChanged` whenever |Δprice| ≥ 1.
 
-Buy/sell helpers:
+### 6.4.2 Buy / Sell
 
-- `buy()` — checks affordability; deducts `qty × priceOf(resource)`; bumps `demandMA[resource]`; adds resource to player's pile. Emits `market:bought`.
-- `sell()` — checks player has the resource; pays out `qty × sellPriceOf(resource)`; bumps `supplyMA[resource]`. Emits `market:sold`.
-- Both write back through `serialize()` so saves capture the price st
+- `buy(player, resource, qty)` — price is current `priceOf(r)` × qty. Refuses if player.money < total. Increments demandMA.
+- `sell(player, resource, qty)` — price is current price × qty × `cfg.market.sellSpread` (default 0.9). Increments supplyMA.
+
+### 6.4.3 Market cell vs. inventory
+
+Players can trade with the market only when standing on a `market` cell (or visiting via the `MANAGE` menu — designer choice; v1 default: market cell only, MANAGE shows view-only prices).
+
+## 6.5 Regional specialization
+
+Per the resource outline: *"Each region specializes in certain resources, encouraging trade and strategic control of key areas."* Operationalized as:
+
+- A region can declare a `specialty` resource in the map JSON (`region.specialty`).
+- Producers in that region produce +`cfg.market.specialtyBonus` units of that resource per turn (default +1).
+- Consumers in that region consume +`cfg.market.specialtyDiscount` fewer units of upkeep when the upkeep is the specialty (default 0; opt-in for designers).
+
+This rewards Mayor control of resource-rich regions.
+
+## 6.6 Resource UI
+
+In the HUD top bar (matching `Planning/defaultinterface.png`): a row of seven resource icons + counts for the active player. Hover/focus shows current market price and per-turn delta. Each icon is a sprite registered with the SpriteSystem under `res_wood`, `res_steel`, etc. — see `14_SpritesAndAssets.md`.
+
+## 6.7 Tradable contracts (post-v1)
+
+Captured here so v1 design doesn't paint into a corner:
+
+- Long-term supply contracts ("X delivers 5 wood/turn for 5 turns at fixed price") would extend `MarketSystem` with a contract ledger. v1 keeps it spot-only.

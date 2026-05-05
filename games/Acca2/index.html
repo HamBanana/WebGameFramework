@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Acca v2 – GameFramework</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <link rel="stylesheet" href="styles/topbar.css">
+  <link rel="stylesheet" href="styles/sidebars.css">
+</head>
+<body>
+  <div id="gameContainer">
+    <div id="topbar">
+      <div class="tb-cell">
+        <div class="tb-label">Turn</div>
+        <div class="tb-value" id="tb-turn">1</div>
+      </div>
+      <div class="tb-cell">
+        <div class="tb-label">Name</div>
+        <div class="tb-value tb-name-wrap">
+          <span class="tb-name-text" id="tb-name">—</span>
+          <span class="tb-bankrupt-badge" id="tb-bankrupt-badge" style="display:none;">Bankrupt</span>
+        </div>
+      </div>
+      <div class="tb-cell">
+        <div class="tb-label">Money on hand</div>
+        <div class="tb-value" id="tb-money">$0</div>
+      </div>
+      <div class="tb-cell">
+        <div class="tb-label">Net worth</div>
+        <div class="tb-value" id="tb-networth">$0</div>
+      </div>
+      <div class="tb-cell" id="tb-resources" style="grid-column: 5;"></div>
+    </div>
+
+    <div id="districtSidebar">
+      <div class="panel">
+        <div class="panel-title">Districts</div>
+        <div id="districtList"></div>
+      </div>
+    </div>
+
+    <div id="mapWrap">
+      <canvas id="gameCanvas" width="768" height="528"></canvas>
+    </div>
+
+    <div id="sidebar">
+      <div class="panel">
+        <div class="panel-title">Notifications</div>
+        <div id="notifications"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Players</div>
+        <div id="playerList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <script src="utils/format.js"></script>
+  <script src="utils/validate.js"></script>
+
+  <script src="sprites/tokens.js"></script>
+  <script src="sprites/die.js"></script>
+  <script src="sprites/cells.js"></script>
+  <script src="sprites/cells_extra.js"></script>
+  <script src="sprites/structures.js"></script>
+  <script src="sprites/resources.js"></script>
+  <script src="sprites/businesses.js"></script>
+  <script src="sprites/ui_icons.js"></script>
+
+  <script src="systems/MarketSystem.js"></script>
+  <script src="systems/DistrictSystem.js"></script>
+  <script src="systems/PopulationSystem.js"></script>
+  <script src="systems/ChanceSystem.js"></script>
+  <script src="systems/TradeSystem.js"></script>
+  <script src="systems/AccaSave.js"></script>
+
+  <script src="core/Constants.js"></script>
+  <script src="core/Cell.js"></script>
+  <script src="core/PlayerStructure.js"></script>
+  <script src="core/Player.js"></script>
+  <script src="core/DieController.js"></script>
+  <script src="core/Menu.js"></script>
+  <script src="core/MovementController.js"></script>
+
+  <script src="managers/BoardLoader.js"></script>
+  <script src="managers/StructureManager.js"></script>
+  <script src="managers/EconomyManager.js"></script>
+  <script src="managers/CameraManager.js"></script>
+  <script src="managers/WinConditionChecker.js"></script>
+  <script src="managers/TurnManager.js"></script>
+
+  <script src="render/BoardRenderer.js"></script>
+  <script src="render/OverlayRenderer.js"></script>
+
+  <script src="ui/MoneyAnimations.js"></script>
+  <script src="ui/HUDRenderer.js"></script>
+
+  <script src="AccaGame.js"></script>
+</body>
+</html>

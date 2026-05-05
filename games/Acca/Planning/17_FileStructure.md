@@ -1,95 +1,116 @@
 # 17 — File Structure
 
-This chapter is the canonical layout under `games/Acca/`. Every file has a one-line description plus its status. When a new file is added, update this chapter and `API_Reference.md`.
+This is the target tree for `games/Acca/` once the v1 plan is implemented. Items marked **(exists)** are already in the repo. Items marked **(NEW)** are added by the implementation phases.
 
 ```
 games/Acca/
-├── index.html                          (exists)  Page scaffold: DOM HUD + canvas + script loader.
-├── game.json                           (exists)  Launcher metadata + per-launch config options.
-├── launch.js                           (exists)  Standalone Node dev server (port 3000 default).
-├── config.js                           (exists)  Defines GF.GAME_CONFIG.
-├── AccaGame.js                         (exists)  Top-level orchestrator (state machine, glue).
 │
-├── core/
-│   ├── Constants.js                    (exists)  GAME_STATE and TURN_STAGE enums.
-│   ├── Cell.js                         (exists)  Cell entity.
-│   ├── PlayerStructure.js              (exists)  Built structure on a cell.
-│   ├── Player.js                       (exists)  Player entity.
-│   ├── DieController.js                (exists)  Animated die with roll(duration, onDone).
-│   ├── Menu.js                         (exists)  Generic up/down arrow-key modal menu.
-│   └── MovementController.js           (exists)  Per-step arrow movement during MOVE.
+├── index.html                          (exists)   — host page; loads framework + Acca scripts
+├── launch.js                           (exists)   — picks up settings from launcher
+├── config.js                           (exists)   — GAME_CONFIG; expanded per 16_DataModels
+├── game.json                           (exists)   — launcher metadata
+├── AccaGame.js                         (exists)   — slimmed: only top-level state machine
+├── Gameplan.txt                        (exists)
+├── Resource_Outline.txt                (exists)
 │
-├── managers/
-│   ├── BoardLoader.js                  (exists)  Map JSON → cells + cell graph.
-│   ├── StructureManager.js             (exists)  Build, owner-options, visitor-effect, pass-through.
-│   ├── EconomyManager.js               (exists)  Start/end-of-turn ticks, debt, bankruptcy.
-│   ├── CameraManager.js                (exists)  Lerp camera + spotlight.
-│   ├── WinConditionChecker.js          (exists)  check() → winner | null; helpers.
-│   └── TurnManager.js                  (exists)  Turn state machine; hosts every menu.
+├── Planning/                                        — this folder, design docs only
 │
-├── render/
-│   ├── BoardRenderer.js                (exists)  Canvas world: tints, cells, owners, tokens, spotlight.
-│   └── OverlayRenderer.js              (exists)  Background, die, modal, start menu, game-over.
+├── entities/                            (NEW)
+│   ├── Cell.js                          (NEW)     — extracted from AccaGame
+│   ├── Player.js                        (NEW)
+│   ├── Property.js                      (NEW)
+│   ├── Business.js                      (NEW)
+│   ├── Company.js                       (NEW)
+│   └── Region.js                        (NEW)
 │
-├── ui/
-│   ├── HUDRenderer.js                  (exists)  DOM panels (topbar, sidebars, notifications).
-│   └── MoneyAnimations.js              (exists)  Cash-delta flash + floating "+$X" + coin burst.
+├── systems/                             (NEW)
+│   ├── Board.js                         (NEW)     — neighbor wiring, board rendering
+│   ├── MapLoader.js                     (NEW)
+│   ├── TurnManager.js                   (NEW)     — extracted from AccaGame
+│   ├── MovementController.js            (NEW)
+│   ├── DieController.js                 (NEW)
+│   ├── PopulationSystem.js              (NEW)
+│   ├── RegionSystem.js                  (NEW)
+│   ├── MarketSystem.js                  (NEW)
+│   ├── ChanceSystem.js                  (NEW)
+│   ├── TradeSystem.js                   (NEW)
+│   ├── ScenarioSystem.js                (NEW)
+│   └── AccaSave.js                      (NEW)
 │
-├── systems/
-│   ├── DistrictSystem.js               (exists)  Districts, mayor election, festival, grant.
-│   ├── MarketSystem.js                 (exists)  Resource prices + drift.
-│   ├── PopulationSystem.js             (exists)  Per-district happiness, growth, migration.
-│   ├── TradeSystem.js                  (exists)  Trades, takeover, sabotage.
-│   ├── ChanceSystem.js                 (exists)  Pool draw + 8 effect handlers + die override.
-│   └── AccaSave.js                     (exists)  Snapshot to localStorage.
+├── ui/                                  (NEW)
+│   ├── Menu.js                          (NEW)     — extracted; arrow-list helper
+│   ├── HUD.js                           (NEW)
+│   ├── Notifications.js                 (NEW)
+│   ├── modals/
+│   │   ├── ManageModal.js               (NEW)
+│   │   ├── TradeModal.js                (NEW)
+│   │   ├── MarketModal.js               (NEW)
+│   │   ├── ChanceModal.js               (NEW)
+│   │   ├── PropertyDetailModal.js       (NEW)
+│   │   └── PlayerPicker.js              (NEW)
+│   └── widgets/
+│       ├── Slider.js                    (NEW)
+│       ├── Stepper.js                   (NEW)
+│       └── ResourceStrip.js             (NEW)
+│
+├── utils/                               (NEW)
+│   ├── validate.js                      (NEW)     — validateMap / validateConfig / validateSave
+│   └── format.js                        (NEW)     — money/percent/region helpers
 │
 ├── sprites/
-│   ├── tokens.js                       (exists)  Player tokens.
-│   ├── die.js                          (exists)  Die sprite + rolling animation.
-│   ├── cells.js                        (exists)  Bank, chance, market, buildable, empty.
-│   ├── cells_extra.js                  (exists)  Resource cells (power_plant, well, mine).
-│   ├── structures.js                   (exists)  Player structures (shop, toll, etc.).
-│   ├── resources.js                    (exists)  Resource icons.
-│   ├── businesses.js                   (exists)  Legacy business iconography (kept for compat).
-│   └── ui_icons.js                     (exists)  Misc UI glyphs.
-│
-├── utils/
-│   ├── format.js                       (exists)  money(), percent(), delta(), truncate(), roundTo().
-│   └── validate.js                     (exists)  validateMap(), validateConfig(), validateSave().
-│
-├── styles/
-│   ├── theme.css                       (exists)  Root color/typography variables.
-│   ├── topbar.css                      (exists)  Top-bar grid + resource pills.
-│   └── sidebars.css                    (exists)  Left district sidebar + right notifications/players.
-│
-├── themes/
-│   ├── theme_classic.json              (exists)  Classic palette.
-│   └── theme_warm.json                 (exists)  Warm palette variant.
+│   ├── cells.js                         (exists)
+│   ├── tokens.js                        (exists)
+│   ├── die.js                           (exists)
+│   ├── businesses.js                    (NEW)
+│   ├── resources.js                     (NEW)
+│   └── ui_icons.js                      (NEW)
 │
 ├── maps/
-│   ├── default.json                    (exists)  Starter map.
-│   └── denmark.json                    (exists)  Larger map used in 500-turn playtest.
+│   ├── default.json                     (exists; bumped to schema v2)
+│   └── oil_rush.json                    (NEW)
 │
-├── MapCreator/
-│   ├── index.html                      (exists)  Editor page.
-│   └── launch.js                       (exists)  Standalone editor dev server.
+├── scenarios/                           (NEW)
+│   └── oil_rush.json                    (NEW)
 │
-├── 20260504_PLAYTEST_REPORT.md         (exists)  Most recent playtest record.
+├── themes/                              (NEW)
+│   ├── theme_classic.json               (NEW)
+│   └── theme_warm.json                  (NEW)
 │
-└── Planning/
-    ├── 00_Index.md                     (NEW)
-    ├── 01_GameOverview.md              (NEW)
-    ├── 02_Architecture.md              (NEW)
-    ├── 03_BoardAndCells.md             (NEW)
-    ├── 04_PlayerAndTurn.md             (NEW)
-    ├── 05_StructuresAndBuildings.md    (NEW)
-    ├── 06_ResourcesAndMarket.md        (NEW)
-    ├── 07_Companies.md                 (NEW — delta record only)
-    ├── 08_Population.md                (NEW)
-    ├── 09_DistrictsAndMayors.md        (NEW)
-    ├── 10_ChanceEvents.md              (NEW)
-    ├── 11_TradingAndSabotage.md        (NEW)
-    ├── 12_UI_HUD.md                    (NEW)
-    ├── 13_AudioVisualFeedback.md       (NEW)
-    ├── 14_SpritesAndAssets.md          (NEW)
-    �
+└── MapCreator/
+    ├── index.html                       (exists)
+    └── launch.js                        (exists; extended for schema v2)
+```
+
+## 17.1 Loading order in `index.html`
+
+Maintains the existing pattern — additions follow it:
+
+1. `framework/GameFramework.bundle.js`
+2. `games/Acca/config.js`
+3. `games/Acca/utils/*.js`
+4. `games/Acca/sprites/*.js`
+5. `games/Acca/entities/*.js`
+6. `games/Acca/systems/*.js`
+7. `games/Acca/ui/widgets/*.js`
+8. `games/Acca/ui/modals/*.js`
+9. `games/Acca/ui/*.js` (HUD, Notifications, Menu)
+10. `games/Acca/AccaGame.js` (last — instantiates and starts)
+
+If/when build tooling lands, `framework/build.js` should optionally bundle the above into a single `games/Acca/Acca.bundle.js`. v1 may run unbundled to keep iteration fast.
+
+## 17.2 Module conventions
+
+- Each module is an IIFE on `window.GF` (consistent with the existing `AccaGame.js` pattern).
+- Public surface goes on `GF.Acca.<Name>`. Private helpers stay inside the IIFE.
+- Modules accept their dependencies (engine, sprites, eventBus) via constructor arguments — they do not reach into `GF` for runtime services.
+- Every module exposes a small `update(dt)` and (where relevant) `draw(ctx)`. AccaGame is the orchestrator.
+
+## 17.3 Test harness (post-v1, captured here)
+
+A `games/Acca/__tests__/` folder will host tiny harnesses (Node-runnable) for pure logic systems:
+- MarketSystem pricing math.
+- PopulationSystem happiness/migration math.
+- RegionSystem mayor detection.
+- ChanceSystem draw weighting.
+
+These tests do not run against the canvas — they instantiate the systems with stub inputs and assert outputs.

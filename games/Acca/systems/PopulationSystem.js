@@ -1,4 +1,4 @@
-// games/Acca2/systems/PopulationSystem.js — Planning §8.
+// games/Acca/systems/PopulationSystem.js — Planning §8.
 // Per-turn: happiness drift toward target → births/deaths → migration → employment.
 
 (function (GF) {
@@ -12,18 +12,24 @@
       this.districts = districtSystem;
     }
 
+    /** End-of-turn tick — applies to every district. */
     tick(turn, players) {
       const list = this.districts.list();
+      // 1. Happiness drift
       list.forEach(r => this._stepHappiness(r, turn, players));
+      // 2. Growth/decline
       list.forEach(r => this._stepGrowth(r));
+      // 3. Migration
       this._stepMigration(list, players);
     }
 
     _stepHappiness(r, turn, players) {
       const c = this.cfg.population;
+      // Tax penalty: each percentage point above comfort = -1 happiness factor
       const taxOver = Math.max(0, r.taxRate - c.taxComfortRate);
       const taxFactor = -Math.round(taxOver * 100);
 
+      // Employment ratio
       const jobs = this._jobsInRegion(r);
       const empRatio = r.population > 0 ? jobs / r.population : 0;
       let empFactor;
@@ -32,9 +38,11 @@
       else if (empRatio <= 0.2) empFactor = -3;
       else empFactor = 0;
 
+      // Service: count owned shops & vaults in region (loose proxy for "service")
       const services = r.cells.reduce((sum, cell) =>
         sum + ((cell.structure && (cell.structure.type === 'shop' || cell.structure.type === 'vault')) ? 1 : 0), 0);
 
+      // Idle businesses: structures whose owner is bankrupt (loose proxy)
       const idle = r.cells.reduce((sum, cell) => {
         const s = cell.structure;
         if (!s || s.ownerIndex < 0) return sum;
@@ -43,6 +51,7 @@
       }, 0);
       const idleFactor = -idle * c.happiness.idleBusinessPenalty;
 
+      // Food / water shortage check (uses mayor's resources, like a stockpile)
       let foodShortage = 0, waterShortage = 0;
       if (r.mayorIndex >= 0 && players[r.mayorIndex]) {
         const mayor = players[r.mayorIndex];
@@ -52,6 +61,7 @@
         if ((mayor.resources.water || 0) < waterNeeded) waterShortage = -10;
       }
 
+      // Festival bonus
       const festivalActive = (r.festivalUntilTurn >= turn) ? 5 : 0;
 
       const target = Math.max(0, Math.min(100,
@@ -70,10 +80,14 @@
       const c = this.cfg.population;
       const dCfg = this.cfg.district || {};
       const happy01 = r.happiness / 100;
+      // Carrying capacity: growth slows as population approaches the cap so
+      // districts don't balloon into the hundreds of thousands without mayor
+      // intervention. Cap = cells in district × 50 (designer-tunable).
       const cap = Math.max(r.cells.length * 50, 100);
       const pressureFactor = Math.max(0, 1 - r.population / cap);
       const growthMul = dCfg.happinessGrowthMultiplier || 1;
       const births = Math.round(r.population * c.birthRate * happy01 * growthMul * pressureFactor);
+      // Deaths ignore pressure (death rate is independent of carrying capacity).
       const deaths = Math.round(r.population * c.deathRate * (1 - happy01));
       const delta  = births - deaths;
       r.birthsThisTurn = births;
@@ -94,12 +108,15 @@
       sources.forEach(src => {
         const movers = Math.floor(src.population * c.migrationRate);
         if (movers <= 0) return;
+        // Oil cost — paid out of mayor's stockpile, scales movement down if short
         let allowed = movers;
+        if (r => r.mayorIndex >= 0) { /* compute below per dest */ }
 
         let remaining = allowed;
         dests.forEach(dst => {
           const share = Math.round(allowed * (dst.happiness / totalDestHappiness));
           let move = Math.min(share, remaining);
+          // Oil cost from destination mayor (if any)
           if (dst.mayorIndex >= 0 && players[dst.mayorIndex]) {
             const mayor = players[dst.mayorIndex];
             const oilNeed = Math.ceil(move / c.oilPerMigrationUnit);
@@ -125,6 +142,7 @@
       });
     }
 
+    /** Sum of jobs offered by structures in district. */
     _jobsInRegion(r) {
       const sCfg = this.cfg.structures;
       let jobs = 0;

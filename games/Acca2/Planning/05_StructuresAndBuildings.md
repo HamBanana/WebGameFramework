@@ -1,9 +1,10 @@
 # 05 — Structures and Buildings
 
+> **Δ v1.** This chapter replaces v1's `05_PropertiesAndBusinesses.md`. v2 removes the *Property* and *Business* entities and treats every owned object as a single `PlayerStructure` on a `buildable` cell. Owner effects, visitor effects, upkeep, and rent are all properties of the structure type — no nested catalog.
 
 ## 5.1 PlayerStructure entity
 
-`games/Acca/core/PlayerStructure.js` — `class PlayerStructure`.
+`games/Acca2/core/PlayerStructure.js` — `class PlayerStructure`.
 
 ```js
 class PlayerStructure {
@@ -129,6 +130,7 @@ When `EconomyManager.runEndOfTurn` finds `player.money < 0`:
 3. **Structures** — sell at half `currentValue` cheapest-first.
 4. If after all that `netWorth(player) ≤ 0`, set `isBankrupt = true`. Bankrupt players are skipped on `_advanceToNextPlayer`.
 
+> **Δ v1.** v1 had a more elaborate ladder (sell businesses → sell properties at bank-buyback rate → declare bankrupt). v2 collapses to vault → resources → structures, all cheapest-first. The bank-buyback rate (`property.bankBuybackRate = 0.5`) survives as the sell-half multiplier.
 
 ## 5.10 UI for structure management
 
@@ -136,9 +138,10 @@ When `EconomyManager.runEndOfTurn` finds `player.money < 0`:
 - **Manage from anywhere:** From the Start-of-turn menu, "Manage → Properties" opens the **Portfolio** menu — paginated list of every structure the player owns. Selecting one spotlights its cell on the board (`cameraManager.spotlightOnCell`) and shows the same owner-options menu inline.
 - **Mayor controls (per district):** Manage → Mayor → choose district → tax-rate slider, festival, investment grant. See `09_DistrictsAndMayors.md`.
 
+## 5.11 Δ v1 roundup for this chapter
 
 - Properties and Businesses are gone; one PlayerStructure per cell.
-- The `tierUpgradeCost` table is dormant — there's no per-tier player level gate on building structures. Anything in the catalog can be built whenever the player can afford it.
+- The `tierUpgradeCost` table is dormant — there's no per-tier player level gate on building structures in v2. Anything in the catalog can be built whenever the player can afford it.
 - `cfg.property.takeoverMultiplier = 5` and `maxTakeoversPerTurn = 1` survived intact. `cfg.property.basePrice` (200) is reserved (used by some legacy paths and by the `Property Price` config in `game.json`).
-- Vault levels with capacity caps are supported.
-- Idle-on-shortage is a soft penalty: a structure missing upkeep resources idles rather than being destroyed.
+- v2 introduces vault levels with capacity caps, distinct from anything in v1.
+- v2 introduces idle-on-shortage as a soft penalty; v1 had no equivalent.

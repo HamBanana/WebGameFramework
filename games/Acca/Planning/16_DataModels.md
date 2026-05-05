@@ -1,154 +1,186 @@
 # 16 — Data Models
 
-This chapter is the canonical schema reference for every persisted or shared shape in Acca. When the schema changes, this file is updated first; modules that consume the data follow.
+This doc is the canonical schema reference. When code and this doc disagree, the doc wins until it's updated.
 
-## 16.1 `cfg` — the contents of `GAME_CONFIG`
+## 16.1 `cfg` (the contents of `GAME_CONFIG`)
 
-`games/Acca/config.js` builds the full config object. Top-level keys (every key documented elsewhere; this is the index):
-
-```jsonc
-GF.GAME_CONFIG = {
-  "engine":        { "width", "height", "canvasId", "backgroundColor" },
-  "physics":       { "gravity", "floorY", "leftWall", "rightWall" },
-  "board":         { "map", "cellSize", "originX", "originY" },
-  "camera":        { "zoomedInCellsAcross", "zoomOutPadding", "lerp", "betweenTurnsHold" },
-  "players":       [{ "name", "sprite", "color" }, ... up to 4],
-  "numberOfPlayers": 2,
-  "startingMoney": 1500,
-  "startingResources": { "wood": 0, ..., "oil": 1 },
-
-  "win":           { "type", "target", "turnCap", "tiebreaker" },
-  "mode":          "competitive" | "cooperative",
-  "catchUp":       { "enabled", "threshold", "amount" },
-  "cooperative":   { "targetMultiplier", "threatLimit", "threatPerTurn",
-                     "threatPerPlague", "threatPerLowHappiness" },
-
-  "property":      { "basePrice", "baseRent", "baseRentRate", "mayorBonus",
-                     "sabotageRebate", "bankBuybackRate", "takeoverMultiplier",
-                     "maxTakeoversPerTurn", "tierUpgradeCost": { "2"..."5" } },
-
-  "structures": {
-    "catalog":  [{ "type", "label", "cost" }, ...],         // 7 entries
-    "sprites":  { "shop": "cell_shop", ... },
-    "shopBaseCap", "shopCapPerStructure", "shopVisitRate", "shopInvestStep",
-    "tollIncrement", "teleportFee",
-    "houseRentRate", "houseTaxIfMayor", "housePopContribution", "houseOwnerIncome",
-    "tollOwnerIncome", "teleporterOwnerIncome", "policeOwnerIncome", "vaultOwnerIncome",
-    "vaultInterestRate",
-    "factoryBaseRate", "factoryHouseBonus", "factoryResource", "factoryJobs",
-    "shopJobs",
-    "policeProtectionTier",
-    "vaultLevels": [
-      { "level": 1, "buildCost": 1000, "capacity": 5000 },
-      ... up to level 5
-    ],
-    "upkeep": { "houseFood", "shopElectricity", "houseElectricity",
-                "factoryOil", "policeElectricity", "tollElectricity",
-                "teleporterElectricity", "vaultElectricity", "shortagePenalty" }
-  },
-
-  "market": {
-    "resources":        ["wood", "steel", "electricity", "water", "food", "coal", "oil"],
-    "basePrices":       { "wood": 25, ..., "oil": 80 },
-    "sellSpread":       0.9,
-    "driftRate":        0.2,
-    "movingAvgAlpha":   0.3,
-    "priceFloorMul":    0.4,
-    "priceCeilMul":     2.5,
-    "specialtyBonus":   1,
-    "specialtyDiscount": 0,
-    "passiveYield":     1
-  },
-
-  "population": {
-    "birthRate", "deathRate", "happinessLerp",
-    "migrationRate", "migrationFloor",
-    "foodPerCapita", "waterPerCapita",
-    "taxComfortRate", "oilPerMigrationUnit",
-    "happiness": { "idleBusinessPenalty" }
-  },
-
-  "district": {
-    "taxBase", "maxTaxRate", "defaultTaxRate", "defaultPopulation",
-    "festivalCost", "festivalDuration", "festivalHappiness",
-    "grantCost", "grantPopulation",
-    "grantCooldown", "festivalCooldown",
-    "happinessGrowthMultiplier"
-  },
-
-  "chance": {
-    "repeatGuard":   3,
-    "shuffleEvery":  12,
-    "nearMissProb":  0.25,
-    "pool":          [{ /* event schema — see 10.3 */ }, ...]
-  },
-
-  "sabotage":     { "cost", "oilCost", "duration", "cooldown",
-                    "revealAttacker", "rentReductionMul" },
-  "trade":        { "maxImbalanceRatio", "allowImbalanced" },
-  "turn":         { "rollDuration", "moveStepDelay" },
-  "audio":        { "sfxVolume", "uiVolume", "musicVolume" },
-  "accessibility": { "colorBlindFriendly" },
-  "theme":        { "id", "overrides" },
-  "maps":         ["maps/default.json", ...],
-  "scenarios":    [],
-  "controls":     { "up", "down", "left", "right", "confirm", "cancel", "endTurn" },
-  "debug":        { "enabled", "toggleKey" }
-};
-```
-
-The launcher `game.json` injects overrides (Players, Starting Money, Win Target, Property Price) via `GF.applyLauncherConfig('Acca')`.
-
-## 16.2 Map JSON
-
-See `03_BoardAndCells.md` §3.4 for the full schema. Authoritative shape:
-
-```jsonc
+```js
 {
-  "version": 2,
-  "name":    "string",
-  "size":    { "rows": int, "cols": int, "cellSize": int },
-  "spawnCellId":    int | null,
-  "nextCellId":     int,
-  "nextDistrictId": int,
-  "districts": [{ "id", "name", "color", "specialty", "basePopulation", "defaultTaxRate", "cellCount" }],
-  "cells":     [{ "id", "x", "y", "type", "subType", "district", "districtId", "structureType", "value" }],
-  "connections": [{ "from", "to", "direction": "both" | "forward" }]
+  engine: { width, height, canvasId, backgroundColor },
+  physics: { gravity, floorY, leftWall, rightWall },
+
+  board: {
+    map,            // path to default map JSON
+    cellSize,       // px
+    originX, originY,
+  },
+
+  players: [
+    { name, sprite, color }, …   // up to 6 entries; first N used
+  ],
+  numberOfPlayers,               // 2..N; UI-adjustable
+  startingMoney,                 // $
+  startingResources: { wood:0, … },
+
+  win: { type, target, tiebreaker? },
+
+  property: {
+    basePrice,
+    baseRent,
+    baseRentRate,            // multiplier on basePrice for rent calc
+    mayorBonus,
+    sabotageRebate,
+    bankBuybackRate,         // 0..1
+    takeoverMultiplier,
+    maxTakeoversPerTurn,
+    tierUpgradeCost: { 2:300, 3:600, 4:1000, 5:1600 },
+  },
+
+  market: {
+    resources: ['wood', …],
+    basePrices: { wood:25, … },
+    sellSpread,              // 0..1
+    driftRate,               // 0..1
+    movingAvgAlpha,          // 0..1
+    specialtyBonus,          // +n production
+    specialtyDiscount,       // -n upkeep
+  },
+
+  population: {
+    birthRate,
+    deathRate,
+    happinessLerp,
+    migrationRate,
+    migrationFloor,          // happiness threshold
+    foodPerCapita,
+    waterPerCapita,
+    taxComfortRate,
+    happiness: {
+      idleBusinessPenalty,
+    },
+    oilPerMigrationUnit,
+  },
+
+  district: {
+    // A district is a named group of squares. Wholly owning one grants Mayorship.
+    taxBase,
+    maxTaxRate,
+    defaultTaxRate,
+    defaultPopulation,
+    festivalCost,
+    festivalDuration,
+    festivalHappiness,
+    grantPopulation,
+    grantCost,
+    grantCooldown,
+    festivalCooldown,
+  },
+
+  industries: { types: [...], bonus: { … }, changeCost, newCompanyCost },
+
+  businesses: {
+    catalog: {
+      shop: { buildCost, buildResources, upkeep, production, employees, levels: { 1:..., 2:..., 3:... } },
+      …
+    },
+    cellTypeRestrictions: { lumber_mill: ['forest'], … },
+  },
+
+  chance: [ {id, label, category, weight, effect, value, scope, message, duration}, … ],
+
+  sabotage: { cost, duration, cooldown, revealAttacker },
+
+  trade:    { maxImbalanceRatio },
+
+  cooperative: { targetMultiplier, threatLimit },
+
+  turn: { rollDuration, moveStepDelay },
+
+  controls: { up:[…], down:[…], left:[…], right:[…], confirm:[…], cancel:[…], endTurn:[…], quickSave:[…], quickLoad:[…] },
+
+  audio: { sfxVolume, uiVolume, musicVolume },
+
+  accessibility: { colorBlindFriendly },
+
+  theme: { id: 'theme_classic', overrides: { … } },
+
+  maps: ['maps/default.json', 'maps/oil_rush.json'],   // selectable on title
+  scenarios: ['scenarios/oil_rush.json'],
 }
 ```
 
-Validation: `utils/validate.js → validateMap(json) → { ok, errors[] }`.
+This config block lives in `games/Acca/config.js`. Keep keys flat where reasonable so designers can scan it.
+
+## 16.2 Map JSON
+
+See `03_BoardAndCells.md §3.4`. Schema version is `2`. `MapLoader.js` rejects older versions with a clear error pointing to the migration helper.
 
 ## 16.3 Save game shape
 
-`systems/AccaSave.js` produces and consumes this snapshot. Storage: `localStorage["acca_save_v1"]`.
+`framework/systems/SaveSystem.js` handles persistence. Acca's payload (`AccaSave.js`):
 
 ```jsonc
 {
-  "version":            1,
-  "mapId":              "string (file name of the active map)",
-  "turnCounter":        int,
-  "currentPlayerIndex": int,
-  "cooperativeThreat":  int,
-
+  "version": 1,
+  "mapId": "default",
+  "rngSeed": 1234567,
+  "turnCounter": 12,
+  "currentPlayerIndex": 1,
   "players": [
     {
       "index": 0,
-      "name":  "Player 1",
+      "name": "Player 1",
       "color": "#ff6b6b",
       "spriteName": "token_red",
-      "money": 1500,
-      "level": 0,
+      "money": 1240,
+      "level": 2,
       "isBankrupt": false,
-      "resources": { "wood": 0, ... },
-      "currentCellId": 0,
-      "districtsMayoredOf": ["Downtown", ...],
-      "ownedStructureCellIds": [12, 17, 21]
+      "resources": { "wood":3, "steel":0, "electricity":1, "water":2, "food":0, "coal":0, "oil":0 },
+      "currentCellId": "c14",
+      "ownedCellIds": ["c4","c5"],
+      "companies": [
+        { "id":"coA","name":"Hamco","industry":"general","propertyIds":["c4","c5"] }
+      ],
+      "districtsMayoredOf": []
     }
   ],
-
   "cells": [
     {
-      "id": 12,
-      "structure": {
-        "type":             "shop",
+      "id":"c4",
+      "ownerIndex":0,
+      "tier":2,
+      "sabotagedUntilTurn":-1,
+      "businesses":[
+        { "type":"shop","level":1,"employees":2,"idleReason":null }
+      ]
+    }
+  ],
+  "districts": [
+    { "id":"District A","population":48,"happiness":52,"taxRate":0.10,"mayorIndex":-1,
+      "festivalUntilTurn":-1,"grantCooldownUntil":-1,"festivalCooldownUntil":-1 }
+  ],
+  "market": {
+    "prices": { "wood":24, "steel":52, "electricity":35, "water":21, "food":29, "coal":40, "oil":81 },
+    "supplyMA": { … },
+    "demandMA": { … }
+  },
+  "chance": { "recentlyDrawn":["festival","stock_crash"] },
+  "log": [ … last 6 messages … ]
+}
+```
+
+`AccaSave.serialize(game)` and `AccaSave.deserialize(payload, game)` are the two entry points. Loading mid-turn returns to `TURN_START` of the saved player to keep the state machine simple.
+
+## 16.4 Event payload schema
+
+See `02_Architecture.md §2.3` for the canonical list. Payloads should use the entity *references* in-game (not just ids) so listeners don't have to look up — except in save/load where everything is serialized to ids.
+
+## 16.5 Validation helpers
+
+`games/Acca/utils/validate.js` (NEW) exposes:
+
+- `validateMap(json)` → `{ ok, errors }`.
+- `validateConfig(cfg)` → `{ ok, errors }`.
+- `validateSave(json)` → `{ ok, errors }`.
+
+Each is invoked at boot or load time and emits errors via `console.error`. Production builds may downgrade validation to a single boot-time check for performance.

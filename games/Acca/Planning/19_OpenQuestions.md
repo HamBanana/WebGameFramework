@@ -1,116 +1,80 @@
 # 19 — Open Questions
 
-Design decisions that have been deliberately parked. Each item carries candidate answers and a current recommendation; revisit when the relevant subsystem is reworked.
+Questions either inherited from `Gameplan.txt §6` or raised by this planning pass. Each item is parked here with one or more candidate answers; final decision belongs to the design owner.
 
-## 19.1 Should `nearMissProb` chance events fire when passing adjacent to a chance cell?
+## 19.1 Tax balance under high population
 
-`cfg.chance.nearMissProb` is set (= 0.25) but no code consumes it.
+> *How can we balance the tax system to avoid punishing players for high population growth?*
 
-- **A.** Wire it: when MovementController steps over a cell adjacent to a chance cell, roll `nearMissProb` for a second-tier "minor chance" pool.
-- **B.** Drop it from config to avoid the misleading dead key.
-- **C.** Repurpose: every step adjacent to a chance cell adds 1 to `cooperativeThreat`.
+Candidate answers:
 
-**Rec.** B for now; revisit if chance feels under-used in playtest. Wiring it (A) is a small change but introduces a "minor chance pool" concept that needs its own balance.
+- **A.** Cap tax income per region (`cfg.region.taxIncomeCap`) so very large populations stop scaling.
+- **B.** Make tax happiness penalty depend on the *target* tax rate vs. `taxComfortRate` (already in 08), so high taxes hurt regardless of population.
+- **C.** Reframe: large populations don't *need* to be over-taxed because employment fills more businesses → more income from production. This is implicit in the v1 design and may be sufficient.
 
-## 19.2 Multiple roads at intersections
+Recommendation: ship v1 with C, watch playtests, add (A) only if needed.
 
-`MovementController` keeps `roads[]` and `roadIdx` as a stub. Players can't actually pick between paths at intersections — the controller commits to whatever cardinal direction they press.
+## 19.2 Migration capitalization
 
-- **A.** Implement: when a step has multiple equally-valid neighbors in the chosen direction, show a tiny picker.
-- **B.** Implement: highlight the projected step and require confirm.
-- **C.** Leave it — most maps are simple enough that the cardinal greedy works.
+> *Should migration between regions allow opposing players to capitalize on incoming populations?*
 
-**Rec.** C unless playtest shows confused players on dense maps. (A) is a relatively small change in `core/MovementController.js`.
+The 08 plan says yes — incoming residents go to *any* region with happiness ≥ floor, including those mayored by other players. This is intentional: it rewards keeping your region happy, even if you're not the population's source. Counter-argument: it may feel unfair if the destination is randomly your worst rival. Mitigation: open the `MANAGE` modal so a current Mayor can pre-empt by raising/lowering tax rate before the next end-of-turn step.
 
-## 19.3 Auction on losing mayorship
+Outstanding: should the migrating player at least see *which* destination got the residents? v1: yes (notification names the region and its mayor).
 
-When a mayor loses majority, taxes simply stop. No auction.
+## 19.3 Endgame property auctions
 
-- **A.** Add an auction round across the table when a mayor falls.
-- **B.** Grant a one-turn protection on the prior mayor (right of return).
-- **C.** Leave it.
+> *How will properties and businesses handle endgame scenarios (e.g., auctions for final properties)?*
 
-**Rec.** C — auctions in hot-seat games slow play. Playtest first.
+Two related sub-questions:
+
+- **Bankruptcy auctions.** v1 routes bankrupted properties back to the bank at `bankBuybackRate × improvedValue` (see 5.7). This is simpler than a multi-bidder auction and avoids an extra UI flow. Add bidding only if playtests find the bank-buyback feels flat.
+- **End-of-game tie scenarios.** When two players cross a money/value threshold on the same end-of-turn, the active player wins (see 15.1). Document this clearly in the game-over screen.
 
 ## 19.4 Hot-seat trade UX
 
-Trade is built around preset offers. The full builder works but is fiddly with arrow keys.
+> Trading in hot-seat games means physically passing input. How tolerable is this?
 
-- **A.** Add a "swap columns" hot-key for quick reciprocal offers.
-- **B.** Add a "split equally" preset.
-- **C.** Leave it.
+Options to make it less awkward:
 
-**Rec.** A — small UX gain.
+- Auto-pause game music and dim the screen when waiting for the responder.
+- Display a giant "Player B's turn to respond" overlay that the active player can press a key to dismiss.
+- Bake in a mock "AI auto-decline" toggle for solo testing.
 
-## 19.5 Resource cell auto-yield vs. structure-only
+v1: ship the giant overlay; AI is post-v1.
 
-Resource cells (`power_plant`, `well`, `mine`) currently yield only on landing. They're not buildable, so they don't compound.
+## 19.5 Resource cell auto-yield vs. business-only
 
-- **A.** Make them buildable (player can place a "rig" structure to claim the yield).
-- **B.** Leave them as "free" cells — landing is the only interaction.
-- **C.** Treat them as auto-yielding to whoever owns the surrounding structures.
+When a player owns a `forest` cell but builds no `lumber_mill`, should they still passively get +1 wood per turn?
 
-**Rec.** B for Acca; A for v3 if the resource economy becomes too thin.
+- **A.** Yes — owning the cell is enough; business amplifies the yield. Encourages claiming resource cells early.
+- **B.** No — must build the business. Encourages investment.
+
+Recommendation: A, with a small base yield (`cfg.resource.passiveYield = 1`). Scales with tier so high-tier resource cells produce 2–3 even without a business.
 
 ## 19.6 Sabotage attribution
 
-`cfg.sabotage.revealAttacker = false` keeps the attacker hidden. This makes the leader paranoid; it also prevents social retaliation, which is sometimes the point.
+> Should the sabotaged player learn who attacked?
 
-- **A.** Always reveal.
-- **B.** Reveal only if a police station was nearby and "investigated".
-- **C.** Leave it hidden by default; per-scenario toggle.
+`cfg.sabotage.revealAttacker` defaults to `false`. Designer-tunable. Hidden attribution adds cold-war style paranoia; revealed attribution invites direct retaliation. Both are valid for different scenarios.
 
-**Rec.** C — keep the option, ship default-off.
+## 19.7 Multiple companies, one region
 
-## 19.7 One mayor across multiple districts
+Can a player own two companies that both hold properties in the same region? The 07 plan allows `Reassign` only inside one region — but doesn't prohibit creating a second company in the same region from scratch. Effect: bonus stacking via two specialised companies in one region. Decision deferred — start permissive and tune if it breaks balance.
 
-A single player can mayor every district. There's no soft cap.
+## 19.8 Bot players (AI) priority
 
-- **A.** Soft cap: tax efficiency drops above N districts mayored.
-- **B.** Hard cap (e.g. 3).
-- **C.** Leave it.
+Out of v1, but flagged so we don't paint it into a corner:
 
-**Rec.** C — the catch-up bonus already pulls trailing players up.
+- AI should access only public information (board, prices, public events) plus its own private state.
+- AI decisions plug in via a strategy interface on `Player` (`makeTurnDecision()`, `respondToTrade(proposal)`). Adding AI later requires no change to the systems.
 
-## 19.8 AI opponents
+## 19.9 Save format compatibility
 
-There are no AI players. Playtest uses console hot-seat drivers (per project instructions).
+If `cfg.businesses.catalog` changes between save versions (a business is renamed or removed), how does load behave?
 
-- **A.** Add a heuristic AI in `games/Acca/ai/Heuristic.js` (greedy: roll → land → build/skip → trade-if-clearly-positive).
-- **B.** Add a "random" baseline AI that picks the first menu option.
-- **C.** Leave hot-seat-only.
-
-**Rec.** B as a near-term scaffold for testing; A as a fuller feature.
-
-## 19.9 Save format compatibility across maps
-
-`AccaSave` snapshots cell ids by index. If a map is edited between save and load, the cell graph drifts. There's a `mapId` field but no version-bump mechanism.
-
-- **A.** Refuse to load when `mapId` mismatches.
-- **B.** Refuse to load when the map's cell-id set no longer matches.
-- **C.** Treat saves as transient (single session only).
-
-**Rec.** B — fail loudly when the map structure drifts.
+- v1 plan: load fails loudly with a migration message. We do not silently mutate save data.
 
 ## 19.10 Camera + larger maps
 
-`zoomedInCellsAcross = 6` works for the default map. On `denmark.json` (larger), the zoomed-in view sometimes hides relevant context.
-
-- **A.** Adapt zoom level based on density (more cells visible on dense maps).
-- **B.** Add a manual zoom toggle (Z / X keys).
-- **C.** Leave it — boards shouldn't get bigger than ~50 cells.
-
-**Rec.** B as a quick win.
-
-## 19.11 Region grouping above districts
-
-A "region" tier above districts (grouping of districts) is not currently implemented.
-
-- **A.** Add `Region` entity + `region` field on District. Useful for very large maps.
-- **B.** Skip — districts are enough.
-
-**Rec.** B for Acca. Reconsider when boards get larger than 100 cells.
-
-## 19.12 Tradable contracts
-
-Per `06_
+The current canvas is 1024×576. Maps larger than that need a camera — the framework has `Camera.js`. Mid-implementation question: when does the camera start scrolling vs. zooming-out to fit? Default proposal: try-fit with `maxZoomOut = 0.6×`; below that, scroll-follow.

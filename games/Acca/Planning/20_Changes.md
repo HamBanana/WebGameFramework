@@ -1,3 +1,2 @@
-# 20 — Changes
+Changes needed in Acca:
 
-A running

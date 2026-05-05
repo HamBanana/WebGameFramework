@@ -2,86 +2,70 @@
 
 ## 11.1 Goals
 
-- **Trading** is the lever for cooperation: two players negotiate an exchange of cash, resources, and structures.
-- **Hostile takeover** is the lever for late-game pressure: a player pays a multiple of a structure's value to seize it.
-- **Sabotage** is the lever for asymmetric attack: a player burns a small amount of money + 1 oil to cripple a target structure for several turns.
+Acca's player-to-player tension comes from three optional mechanics, all surfaced through the **Trade** option of `TURN_START`:
 
-All three live in `games/Acca/systems/TradeSystem.js`.
+1. **Trade** — voluntary, agreed exchange.
+2. **Hostile takeover** — buy a property out from under another player at a multiplier.
+3. **Sabotage** — temporarily disable an opponent's property.
+
+System: `games/Acca/systems/TradeSystem.js`.
 
 ## 11.2 Trade flow
 
-`tradeSys.executeTrade(playerA, playerB, proposal)` is atomic — if any step fails, no state changes.
+A trade is a *proposal* and an *acceptance*:
 
-```js
-proposal = {
-  give:    { money?: number, resources?: { wood: 2, ... }, structures?: [structureRef, ...] },
-  receive: { money?: number, resources?: { ...           }, structures?: [structureRef, ...] }
-}
-```
+1. Active player A picks a target player B.
+2. The Trade modal shows two columns: "What I give" / "What I receive". Each column accepts:
+   - Cash (numeric stepper).
+   - Resource counts (per resource, max = current holding).
+   - Property cards (selectable from owned).
+3. A submits the proposal.
+4. B sees the proposal modal with three options: `Accept`, `Counter`, `Decline`. The active player loop pauses (game state = `PAUSED`) while B decides.
+5. On Accept: assets swap atomically; emit `property:soldTo` for any properties; RegionSystem recomputes mayors.
+6. On Counter: round-trip — A sees B's revised offer with the same three options.
+7. On Decline: modal closes, A returns to `TURN_START`.
 
-Pre-flight checks:
+A counter-offer does not consume B's turn. Trade is free of any intrinsic cost.
 
-1. `give` and `receive` are well-formed.
-2. Each side actually owns what they're offering (cash, resources ≥ qty, structures owned).
-3. **Imbalance ratio** — total dollar value of one side ≤ `cfg.trade.maxImbalanceRatio` (= 5) × the other side, unless `cfg.trade.allowImbalanced` (= false) is set. This is the anti-collusion guard against giveaway trades.
-4. Returns `{ ok: false, reason }` on any failure.
+In hot-seat play, B physically takes the keyboard. The framework is single-player at the input layer, so the modal grabs focus and shows "Player B: respond on the keyboard."
 
-On success:
+## 11.3 Hostile takeover
 
-- Cash deltas applied first.
-- Resources moved.
-- Structures re-pointed (`cell.structure.ownerIndex` updated; arrays moved).
-- Mayor recompute fires for any affected district.
-- Returns `{ ok: true }`.
+A player may forcibly purchase any single property they don't own, at a price multiplier of `cfg.property.takeoverMultiplier` (default ×2.0) of `improvedValue`.
 
-## 11.3 UI
+- Available only on the player's own turn, from `MANAGE`.
+- Limited to one takeover per turn (config: `cfg.property.maxTakeoversPerTurn`, default 1).
+- The targeted property's owner is paid in full immediately.
+- Any business on the property transfers (the takeover buys the asset, not just the lot).
+- Fires a 3-turn cooldown on the target player taking another takeover *back* on the attacker (prevents ping-pong). Tracked on player.
 
-Trade is opened from the start-of-turn menu (Trade) or as a follow-up to landing on another player's structure.
+Emits `property:soldTo` with `via: 'takeover'` so HUD/audio can flag it.
 
-`TurnManager` builds a simple "preset offer" list for hot-seat speed:
+## 11.4 Sabotage
 
-- "Give $200 for 5 of any resource."
-- "Give the structure X for $Y."
-- "Free swap: my resource X for your resource Y."
-- "Custom" — open the full trade builder with two columns (give / receive) and resource quantity steppers.
+Sabotage temporarily disables a target property:
 
-The custom builder validates against `tradeSys.executeTrade` on every change so the player sees red-lit options when they're invalid.
+- Cost: `cfg.sabotage.cost` (default $300) plus 1 oil.
+- Effect: the target property is marked `sabotagedUntilTurn = currentTurn + cfg.sabotage.duration` (default 3). All businesses on it become idle for the duration. Rent collection by the owner halves.
+- Discovery: at end of turn after sabotage triggers, the target gets a notification ("Your property was sabotaged"), but the attacker's identity is hidden by default. `cfg.sabotage.revealAttacker = true` reveals it (designer-tunable).
+- Limit: one sabotage per attacker per `cfg.sabotage.cooldown` turns (default 4).
 
-## 11.4 Hostile takeover
+Emits `business:sabotaged` and a particle effect on the property.
 
-`tradeSys.canTakeover(attacker, structure)` returns `{ok, reason?, cost?}`. Rules:
+## 11.5 UI patterns
 
-- Structure must be owned by another (non-bankrupt) player.
-- Attacker has not already taken over a structure this turn (see `cfg.property.maxTakeoversPerTurn` = 1, tracked in `TradeSystem.state` per attacker).
-- `cost = structure.currentValue × cfg.property.takeoverMultiplier` (× 5).
-- Attacker has the cash.
+- All three actions share a base `PlayerPicker` widget that lists other players with their summary stats.
+- Trade and takeover share a `PropertyPicker` that filters to the appropriate player's holdings.
+- Sabotage uses a `PropertyPicker` filtered to the *target's* holdings.
+- All confirmation dialogs show the projected money outcome ("After this trade you will have $1,240").
 
-`tradeSys.takeover(attacker, structure, players, turn)`:
+## 11.6 Anti-collusion guard
 
-- Deducts `cost` from attacker.
-- Pays `cost` to the previous owner.
-- Re-points `structure.ownerIndex` and updates `ownedStructures` arrays.
-- Resets `currentValue` to `baseValue` (the takeover does not preserve invested upgrades — the previous owner retains the cash equivalent).
-- Increments `state.get(attackerIndex).takeoversThisTurn`.
-- `districtSys.recomputeMayor` fires for the affected district.
+Hot-seat games can't enforce against collusion. v1 takes one preventive step: a trade is rejected if the value imbalance exceeds `cfg.trade.maxImbalanceRatio` (default 5×) — i.e., obviously lopsided trades require an explicit "Allow" toggle in `Options`. This protects the design intent without becoming paternalistic.
 
-`TurnManager` exposes Takeover from the visitor-effect menu (when the visitor lands on a foreign-owned structure).
+## 11.7 Edge cases
 
-## 11.5 Sabotage
-
-`tradeSys.canSabotage(attacker, structure, turn)` returns `{ok, reason?, cost?}`. Rules:
-
-- Structure must be owned by another player.
-- Attacker has 1 oil and `cfg.sabotage.cost` ($300) cash.
-- Attacker is not on cooldown (`state.get(attackerIndex).sabotageCooldownUntil > turn`).
-- Target is **not protected** by an active police station within `cfg.structures.policeProtectionTier` (= 1) cells.
-
-`tradeSys.sabotage(attacker, structure, players, turn)`:
-
-- Deducts $300 + 1 oil from attacker.
-- Sets `structure.sabotagedUntilTurn = turn + cfg.sabotage.duration` (3).
-- Sets `state.get(attackerIndex).sabotageCooldownUntil = turn + cfg.sabotage.cooldown` (4).
-- Emits `business:sabotaged({ structure, attacker })`. `AccaGame` logs it to the in-game notifications.
-- `cfg.sabotage.revealAttacker` (= false) controls whether the message names the attacker. The default hides the attacker by default.
-
-While sabotaged, the structure produces no owner income,
+- A trade cannot include a property that is currently sabotaged (the asset is encumbered until the sabotage clears).
+- A trade cannot reduce a player below $0 (validated before swap).
+- A takeover that would bankrupt the *attacker* fails.
+- Sabotaging a property whose owner is the active player is forbidden.

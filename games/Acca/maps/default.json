@@ -1,103 +1,652 @@
 {
   "version": 2,
   "name": "default",
-  "size": { "rows": 13, "cols": 13, "cellSize": 64 },
+  "size": {
+    "rows": 13,
+    "cols": 13,
+    "cellSize": 64
+  },
   "spawnCellId": null,
   "nextCellId": 189,
   "nextDistrictId": 8,
   "districts": [
-    { "id": 0, "name": "District A", "color": "#e74c3c", "specialty": "wood",        "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 3 },
-    { "id": 1, "name": "District B", "color": "#e67e22", "specialty": "food",        "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 3 },
-    { "id": 2, "name": "District C", "color": "#f1c40f", "specialty": "electricity", "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 3 },
-    { "id": 3, "name": "District D", "color": "#2ecc71", "specialty": "water",       "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 3 },
-    { "id": 4, "name": "District E", "color": "#1abc9c", "specialty": "steel",       "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 5 },
-    { "id": 5, "name": "District F", "color": "#3498db", "specialty": "oil",         "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 5 },
-    { "id": 6, "name": "District G", "color": "#9b59b6", "specialty": "coal",        "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 5 },
-    { "id": 7, "name": "District H", "color": "#e91e63", "specialty": "food",        "basePopulation": 30, "defaultTaxRate": 0.1, "taxRate": 0.1, "cellCount": 5 }
+    {
+      "id": 0,
+      "name": "District A",
+      "color": "#e74c3c",
+      "specialty": "wood",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 3
+    },
+    {
+      "id": 1,
+      "name": "District B",
+      "color": "#e67e22",
+      "specialty": "food",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 3
+    },
+    {
+      "id": 2,
+      "name": "District C",
+      "color": "#f1c40f",
+      "specialty": "electricity",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 3
+    },
+    {
+      "id": 3,
+      "name": "District D",
+      "color": "#2ecc71",
+      "specialty": "water",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 3
+    },
+    {
+      "id": 4,
+      "name": "District E",
+      "color": "#1abc9c",
+      "specialty": "steel",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 5
+    },
+    {
+      "id": 5,
+      "name": "District F",
+      "color": "#3498db",
+      "specialty": "oil",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 5
+    },
+    {
+      "id": 6,
+      "name": "District G",
+      "color": "#9b59b6",
+      "specialty": "coal",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 5
+    },
+    {
+      "id": 7,
+      "name": "District H",
+      "color": "#e91e63",
+      "specialty": "food",
+      "basePopulation": 30,
+      "defaultTaxRate": 0.1,
+      "taxRate": 0.1,
+      "cellCount": 5
+    }
   ],
   "cells": [
-    { "id": 142, "x": 384, "y":  320, "type": "market",      "district": null,         "districtId": null, "value": 200 },
-    { "id": 144, "x": 320, "y":  256, "type": "empty",       "district": "District B", "districtId": 1,    "value": 200 },
-    { "id": 145, "x": 256, "y":  256, "type": "empty",       "district": "District B", "districtId": 1,    "value": 200 },
-    { "id": 147, "x": 384, "y":  384, "type": "mine",        "subType": "oil",         "district": null,   "districtId": null, "value": 200 },
-    { "id": 149, "x": 384, "y":  256, "type": "bank",        "district": null,         "districtId": null, "value": 200 },
-    { "id": 150, "x": 192, "y":  256, "type": "empty",       "district": "District B", "districtId": 1,    "value": 200 },
-    { "id": 151, "x": 512, "y":  256, "type": "empty",       "district": "District C", "districtId": 2,    "value": 200 },
-    { "id": 152, "x": 448, "y":  256, "type": "empty",       "district": "District C", "districtId": 2,    "value": 200 },
-    { "id": 153, "x": 576, "y":  256, "type": "empty",       "district": "District C", "districtId": 2,    "value": 200 },
-    { "id": 154, "x": 384, "y":  192, "type": "power_plant", "district": null,         "districtId": null, "value": 200 },
-    { "id": 155, "x": 384, "y":  128, "type": "empty",       "district": "District A", "districtId": 0,    "value": 200 },
-    { "id": 162, "x": 384, "y": -128, "type": "empty",       "district": "District E", "districtId": 4,    "value": 200 },
-    { "id": 163, "x": 320, "y": -128, "type": "empty",       "district": "District E", "districtId": 4,    "value": 200 },
-    { "id": 164, "x": 256, "y": -128, "type": "empty",       "district": "District E", "districtId": 4,    "value": 200 },
-    { "id": 165, "x": 448, "y": -128, "type": "empty",       "district": "District E", "districtId": 4,    "value": 200 },
-    { "id": 166, "x": 512, "y": -128, "type": "empty",       "district": "District E", "districtId": 4,    "value": 200 },
-    { "id": 167, "x": 768, "y":  256, "type": "empty",       "district": "District G", "districtId": 6,    "value": 200 },
-    { "id": 168, "x": 768, "y":  192, "type": "empty",       "district": "District G", "districtId": 6,    "value": 200 },
-    { "id": 169, "x": 768, "y":  128, "type": "empty",       "district": "District G", "districtId": 6,    "value": 200 },
-    { "id": 170, "x": 768, "y":  320, "type": "empty",       "district": "District G", "districtId": 6,    "value": 200 },
-    { "id": 171, "x": 768, "y":  384, "type": "empty",       "district": "District G", "districtId": 6,    "value": 200 },
-    { "id": 172, "x": 384, "y":  640, "type": "empty",       "district": "District H", "districtId": 7,    "value": 200 },
-    { "id": 173, "x": 320, "y":  640, "type": "empty",       "district": "District H", "districtId": 7,    "value": 200 },
-    { "id": 174, "x": 256, "y":  640, "type": "empty",       "district": "District H", "districtId": 7,    "value": 200 },
-    { "id": 175, "x": 512, "y":  640, "type": "empty",       "district": "District H", "districtId": 7,    "value": 200 },
-    { "id": 176, "x": 448, "y":  640, "type": "empty",       "district": "District H", "districtId": 7,    "value": 200 },
-    { "id": 177, "x":   0, "y":  256, "type": "empty",       "district": "District F", "districtId": 5,    "value": 200 },
-    { "id": 178, "x":   0, "y":  192, "type": "empty",       "district": "District F", "districtId": 5,    "value": 200 },
-    { "id": 179, "x":   0, "y":  128, "type": "empty",       "district": "District F", "districtId": 5,    "value": 200 },
-    { "id": 180, "x":   0, "y":  320, "type": "empty",       "district": "District F", "districtId": 5,    "value": 200 },
-    { "id": 181, "x":   0, "y":  384, "type": "empty",       "district": "District F", "districtId": 5,    "value": 200 },
-    { "id": 182, "x": 640, "y":    0, "type": "chance",      "district": null,         "districtId": null, "value": 200 },
-    { "id": 183, "x": 128, "y":    0, "type": "chance",      "district": null,         "districtId": null, "value": 200 },
-    { "id": 184, "x": 128, "y":  512, "type": "chance",      "district": null,         "districtId": null, "value": 200 },
-    { "id": 185, "x": 640, "y":  512, "type": "chance",      "district": null,         "districtId": null, "value": 200 },
-    { "id": 186, "x": 384, "y":   64, "type": "empty",       "district": "District A", "districtId": 0,    "value": 200 },
-    { "id": 188, "x": 384, "y":  448, "type": "empty",       "district": "District D", "districtId": 3,    "value": 200 }
+    {
+      "id": 142,
+      "x": 384,
+      "y": 320,
+      "type": "market",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 144,
+      "x": 320,
+      "y": 256,
+      "type": "empty",
+      "district": "District B",
+      "districtId": 1,
+      "value": 200
+    },
+    {
+      "id": 145,
+      "x": 256,
+      "y": 256,
+      "type": "empty",
+      "district": "District B",
+      "districtId": 1,
+      "value": 200
+    },
+    {
+      "id": 147,
+      "x": 384,
+      "y": 384,
+      "type": "mine",
+      "subType": "oil",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 149,
+      "x": 384,
+      "y": 256,
+      "type": "bank",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 150,
+      "x": 192,
+      "y": 256,
+      "type": "empty",
+      "district": "District B",
+      "districtId": 1,
+      "value": 200
+    },
+    {
+      "id": 151,
+      "x": 512,
+      "y": 256,
+      "type": "empty",
+      "district": "District C",
+      "districtId": 2,
+      "value": 200
+    },
+    {
+      "id": 152,
+      "x": 448,
+      "y": 256,
+      "type": "empty",
+      "district": "District C",
+      "districtId": 2,
+      "value": 200
+    },
+    {
+      "id": 153,
+      "x": 576,
+      "y": 256,
+      "type": "empty",
+      "district": "District C",
+      "districtId": 2,
+      "value": 200
+    },
+    {
+      "id": 154,
+      "x": 384,
+      "y": 192,
+      "type": "power_plant",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 155,
+      "x": 384,
+      "y": 128,
+      "type": "empty",
+      "district": "District A",
+      "districtId": 0,
+      "value": 200
+    },
+    {
+      "id": 162,
+      "x": 384,
+      "y": -128,
+      "type": "empty",
+      "district": "District E",
+      "districtId": 4,
+      "value": 200
+    },
+    {
+      "id": 163,
+      "x": 320,
+      "y": -128,
+      "type": "empty",
+      "district": "District E",
+      "districtId": 4,
+      "value": 200
+    },
+    {
+      "id": 164,
+      "x": 256,
+      "y": -128,
+      "type": "empty",
+      "district": "District E",
+      "districtId": 4,
+      "value": 200
+    },
+    {
+      "id": 165,
+      "x": 448,
+      "y": -128,
+      "type": "empty",
+      "district": "District E",
+      "districtId": 4,
+      "value": 200
+    },
+    {
+      "id": 166,
+      "x": 512,
+      "y": -128,
+      "type": "empty",
+      "district": "District E",
+      "districtId": 4,
+      "value": 200
+    },
+    {
+      "id": 167,
+      "x": 768,
+      "y": 256,
+      "type": "empty",
+      "district": "District G",
+      "districtId": 6,
+      "value": 200
+    },
+    {
+      "id": 168,
+      "x": 768,
+      "y": 192,
+      "type": "empty",
+      "district": "District G",
+      "districtId": 6,
+      "value": 200
+    },
+    {
+      "id": 169,
+      "x": 768,
+      "y": 128,
+      "type": "empty",
+      "district": "District G",
+      "districtId": 6,
+      "value": 200
+    },
+    {
+      "id": 170,
+      "x": 768,
+      "y": 320,
+      "type": "empty",
+      "district": "District G",
+      "districtId": 6,
+      "value": 200
+    },
+    {
+      "id": 171,
+      "x": 768,
+      "y": 384,
+      "type": "empty",
+      "district": "District G",
+      "districtId": 6,
+      "value": 200
+    },
+    {
+      "id": 172,
+      "x": 384,
+      "y": 640,
+      "type": "empty",
+      "district": "District H",
+      "districtId": 7,
+      "value": 200
+    },
+    {
+      "id": 173,
+      "x": 320,
+      "y": 640,
+      "type": "empty",
+      "district": "District H",
+      "districtId": 7,
+      "value": 200
+    },
+    {
+      "id": 174,
+      "x": 256,
+      "y": 640,
+      "type": "empty",
+      "district": "District H",
+      "districtId": 7,
+      "value": 200
+    },
+    {
+      "id": 175,
+      "x": 512,
+      "y": 640,
+      "type": "empty",
+      "district": "District H",
+      "districtId": 7,
+      "value": 200
+    },
+    {
+      "id": 176,
+      "x": 448,
+      "y": 640,
+      "type": "empty",
+      "district": "District H",
+      "districtId": 7,
+      "value": 200
+    },
+    {
+      "id": 177,
+      "x": 0,
+      "y": 256,
+      "type": "empty",
+      "district": "District F",
+      "districtId": 5,
+      "value": 200
+    },
+    {
+      "id": 178,
+      "x": 0,
+      "y": 192,
+      "type": "empty",
+      "district": "District F",
+      "districtId": 5,
+      "value": 200
+    },
+    {
+      "id": 179,
+      "x": 0,
+      "y": 128,
+      "type": "empty",
+      "district": "District F",
+      "districtId": 5,
+      "value": 200
+    },
+    {
+      "id": 180,
+      "x": 0,
+      "y": 320,
+      "type": "empty",
+      "district": "District F",
+      "districtId": 5,
+      "value": 200
+    },
+    {
+      "id": 181,
+      "x": 0,
+      "y": 384,
+      "type": "empty",
+      "district": "District F",
+      "districtId": 5,
+      "value": 200
+    },
+    {
+      "id": 182,
+      "x": 640,
+      "y": 0,
+      "type": "chance",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 183,
+      "x": 128,
+      "y": 0,
+      "type": "chance",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 184,
+      "x": 128,
+      "y": 512,
+      "type": "chance",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 185,
+      "x": 640,
+      "y": 512,
+      "type": "chance",
+      "district": null,
+      "districtId": null,
+      "value": 200
+    },
+    {
+      "id": 186,
+      "x": 384,
+      "y": 64,
+      "type": "empty",
+      "district": "District A",
+      "districtId": 0,
+      "value": 200
+    },
+    {
+      "id": 188,
+      "x": 384,
+      "y": 448,
+      "type": "empty",
+      "district": "District D",
+      "districtId": 3,
+      "value": 200
+    }
   ],
   "connections": [
-    { "from": 145, "to": 144, "direction": "both" },
-    { "from": 147, "to": 142, "direction": "both" },
-    { "from": 149, "to": 142, "direction": "both" },
-    { "from": 149, "to": 144, "direction": "both" },
-    { "from": 150, "to": 145, "direction": "both" },
-    { "from": 152, "to": 149, "direction": "both" },
-    { "from": 152, "to": 151, "direction": "both" },
-    { "from": 153, "to": 151, "direction": "both" },
-    { "from": 154, "to": 149, "direction": "both" },
-    { "from": 155, "to": 154, "direction": "both" },
-    { "from": 163, "to": 162, "direction": "both" },
-    { "from": 164, "to": 163, "direction": "both" },
-    { "from": 165, "to": 162, "direction": "both" },
-    { "from": 166, "to": 165, "direction": "both" },
-    { "from": 168, "to": 167, "direction": "both" },
-    { "from": 169, "to": 168, "direction": "both" },
-    { "from": 170, "to": 167, "direction": "both" },
-    { "from": 171, "to": 170, "direction": "both" },
-    { "from": 173, "to": 172, "direction": "both" },
-    { "from": 174, "to": 173, "direction": "both" },
-    { "from": 176, "to": 172, "direction": "both" },
-    { "from": 176, "to": 175, "direction": "both" },
-    { "from": 153, "to": 169, "direction": "both" },
-    { "from": 153, "to": 171, "direction": "both" },
-    { "from": 178, "to": 177, "direction": "both" },
-    { "from": 179, "to": 178, "direction": "both" },
-    { "from": 180, "to": 177, "direction": "both" },
-    { "from": 181, "to": 180, "direction": "both" },
-    { "from": 179, "to": 150, "direction": "both" },
-    { "from": 181, "to": 150, "direction": "both" },
-    { "from": 186, "to": 155, "direction": "both" },
-    { "from": 183, "to": 164, "direction": "forward" },
-    { "from": 171, "to": 185, "direction": "forward" },
-    { "from": 185, "to": 175, "direction": "forward" },
-    { "from": 164, "to": 186, "direction": "both" },
-    { "from": 166, "to": 186, "direction": "both" },
-    { "from": 188, "to": 147, "direction": "both" },
-    { "from": 188, "to": 174, "direction": "both" },
-    { "from": 188, "to": 175, "direction": "both" },
-    { "from": 179, "to": 183, "direction": "forward" },
-    { "from": 166, "to": 182, "direction": "forward" },
-    { "from": 182, "to": 169, "direction": "forward" },
-    { "from": 174, "to": 184, "direction": "forward" },
-    { "from": 184, "to": 181, "direction": "forward" }
+    {
+      "from": 145,
+      "to": 144,
+      "direction": "both"
+    },
+    {
+      "from": 147,
+      "to": 142,
+      "direction": "both"
+    },
+    {
+      "from": 149,
+      "to": 142,
+      "direction": "both"
+    },
+    {
+      "from": 149,
+      "to": 144,
+      "direction": "both"
+    },
+    {
+      "from": 150,
+      "to": 145,
+      "direction": "both"
+    },
+    {
+      "from": 152,
+      "to": 149,
+      "direction": "both"
+    },
+    {
+      "from": 152,
+      "to": 151,
+      "direction": "both"
+    },
+    {
+      "from": 153,
+      "to": 151,
+      "direction": "both"
+    },
+    {
+      "from": 154,
+      "to": 149,
+      "direction": "both"
+    },
+    {
+      "from": 155,
+      "to": 154,
+      "direction": "both"
+    },
+    {
+      "from": 163,
+      "to": 162,
+      "direction": "both"
+    },
+    {
+      "from": 164,
+      "to": 163,
+      "direction": "both"
+    },
+    {
+      "from": 165,
+      "to": 162,
+      "direction": "both"
+    },
+    {
+      "from": 166,
+      "to": 165,
+      "direction": "both"
+    },
+    {
+      "from": 168,
+      "to": 167,
+      "direction": "both"
+    },
+    {
+      "from": 169,
+      "to": 168,
+      "direction": "both"
+    },
+    {
+      "from": 170,
+      "to": 167,
+      "direction": "both"
+    },
+    {
+      "from": 171,
+      "to": 170,
+      "direction": "both"
+    },
+    {
+      "from": 173,
+      "to": 172,
+      "direction": "both"
+    },
+    {
+      "from": 174,
+      "to": 173,
+      "direction": "both"
+    },
+    {
+      "from": 176,
+      "to": 172,
+      "direction": "both"
+    },
+    {
+      "from": 176,
+      "to": 175,
+      "direction": "both"
+    },
+    {
+      "from": 153,
+      "to": 169,
+      "direction": "both"
+    },
+    {
+      "from": 153,
+      "to": 171,
+      "direction": "both"
+    },
+    {
+      "from": 178,
+      "to": 177,
+      "direction": "both"
+    },
+    {
+      "from": 179,
+      "to": 178,
+      "direction": "both"
+    },
+    {
+      "from": 180,
+      "to": 177,
+      "direction": "both"
+    },
+    {
+      "from": 181,
+      "to": 180,
+      "direction": "both"
+    },
+    {
+      "from": 179,
+      "to": 150,
+      "direction": "both"
+    },
+    {
+      "from": 181,
+      "to": 150,
+      "direction": "both"
+    },
+    {
+      "from": 186,
+      "to": 155,
+      "direction": "both"
+    },
+    {
+      "from": 183,
+      "to": 164,
+      "direction": "forward"
+    },
+    {
+      "from": 171,
+      "to": 185,
+      "direction": "forward"
+    },
+    {
+      "from": 185,
+      "to": 175,
+      "direction": "forward"
+    },
+    {
+      "from": 164,
+      "to": 186,
+      "direction": "both"
+    },
+    {
+      "from": 166,
+      "to": 186,
+      "direction": "both"
+    },
+    {
+      "from": 188,
+      "to": 147,
+      "direction": "both"
+    },
+    {
+      "from": 188,
+      "to": 174,
+      "direction": "both"
+    },
+    {
+      "from": 188,
+      "to": 175,
+      "direction": "both"
+    },
+    {
+      "from": 179,
+      "to": 183,
+      "direction": "forward"
+    },
+    {
+      "from": 166,
+      "to": 182,
+      "direction": "forward"
+    },
+    {
+      "from": 182,
+      "to": 169,
+      "direction": "forward"
+    },
+    {
+      "from": 174,
+      "to": 184,
+      "direction": "forward"
+    },
+    {
+      "from": 184,
+      "to": 181,
+      "direction": "forward"
+    }
   ]
 }
