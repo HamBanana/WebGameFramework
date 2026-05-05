@@ -1,113 +1,125 @@
 # 09 — Districts and Mayors
 
-## Terminology
+## 9.1 Terminology
 
-- **District** — a named group of squares on the board. `cell.district` holds the district id string (e.g. `"District A"`). Managed by `games/Acca/systems/DistrictSystem.js`.
-- **Region** — a higher-level grouping of districts (future feature, not yet implemented).
+- **District** — a named, configurable group of cells. Identified by name (string) in `cell.district`. Maintained by `games/Acca2/systems/DistrictSystem.js`.
+- **Buildable cell** — a cell where a `PlayerStructure` may be built. Cells of type `buildable` and `empty` are buildable; resource cells, bank, market, and chance are not.
+- **Mayor** — the player owning a *strict majority* of a district's buildable cells.
 
----
+> **Δ v1.** v1 used "region" interchangeably and originally proposed *all* purchasable cells (resources included) as the mayoring set. v2 standardises on "district" and counts only `buildable`/`empty` cells.
 
-## 9.1 Mayor election
+## 9.2 Mayor election
 
-A player becomes Mayor of a district when they own **every buildable square** in that district. Non-buildable cells (bank, chance) do not count.
+`DistrictSystem.recomputeMayor(districtId)` runs every time a structure is built, traded, taken over, or removed. The rule:
 
-Detection lives in `games/Acca/systems/DistrictSystem.js`. It is triggered by `property:bought` and `property:soldTo` via `recomputeMayor(districtId)`:
-
-```js
-const district = districtSys.get(districtId);
-const buildable = district.cells.filter(c => c.type === 'buildable');
-const owners = new Set(buildable.map(c => c.structure?.ownerIndex ?? -1));
-if (owners.size === 1 && !owners.has(-1)) {
-  newMayor = owners.values().next().value;
-} else {
-  newMayor = -1;
-}
-if (newMayor !== district.mayorIndex) {
-  emit('district:mayorChanged', { district, oldMayor, newMayor });
-  district.mayorIndex = newMayor;
-}
+```
+buildableCells   = district.cells.filter(c => isBuildable(c))
+ownerCounts      = countBy(c => c.structure?.ownerIndex)
+total            = buildableCells.length
+strictMajority   = floor(total / 2) + 1
+mayorIndex       = entry of ownerCounts where count ≥ strictMajority, else -1
 ```
 
-## 9.2 Tax collection
+If `mayorIndex` differs from the current `district.mayorIndex`, the system:
 
-End-of-turn tick step 3 (see 4.3) calls `DistrictSystem.collectTaxes(currentPlayer)`:
+1. Updates `district.mayorIndex`.
+2. Removes the district id from the previous mayor's `districtsMayoredOf`.
+3. Adds the district id to the new mayor's `districtsMayoredOf`.
+4. Emits `district:mayorChanged({ district, oldMayor, newMayor })`.
 
-```js
-for district in districtsControlledBy(currentPlayer):
-  earned = round(district.population * district.taxRate * cfg.district.taxBase)
-  player.addMoney(earned)
-  emit('district:taxesPaid', { district, mayor: player, amount: earned })
+`AccaGame` listens for that event to log it.
+
+## 9.3 Tax collection
+
+At start-of-turn, `EconomyManager.runStartOfTurn` calls `districtSys.collectTaxes(player)`. For each district the player mayors:
+
+```
+amount = ceil(district.population × district.taxRate × cfg.district.taxBase)
 ```
 
-`cfg.district.taxBase` is a small per-capita amount (default 0.5) so a district with 100 people and 10% tax rate yields $5 per turn, but at 30% tax with 200 people, $30 per turn — incentivizing growth at moderate happiness.
+`taxBase` is a global multiplier (= 1) used to scale all taxes uniformly. The amount is added to the mayor's cash and `district:taxesPaid({district, mayor, amount})` is emitted.
 
-Taxes are paid only on the mayor's own turn end, not globally.
+A mayor's bonus on owning a structure within their district is `cfg.property.mayorBonus` ($50) — this is layered on top of `houseTaxIfMayor` ($60), making mayoring a profitable district worth real cash per turn.
 
-## 9.3 Mayor controls
+## 9.4 Mayor controls
 
-Available in the `MANAGE` modal under "Mayor controls" (only visible if the player mayors at least one district):
+`TurnManager`'s "Manage → Mayor" submenu, per district:
 
-- **Tax rate slider** — `0 .. cfg.district.maxTaxRate` (default 0.5). Live happiness target preview shown.
-- **Festival** — pay $200 from the player's cash, district happiness +10 for 3 turns. One festival per district, cooldown 5 turns. Hooks `cfg.district.festivalCost` and `cfg.district.festivalDuration`.
-- **Investment grant** — pay $300 to immediately add `cfg.district.grantPopulation` (default 5) to the population. Cooldown 5 turns.
+- **Tax rate slider** — `districtSys.setTaxRate(player, districtId, rate)` (rate clamped 0..`cfg.district.maxTaxRate` = 0.5). Emits `district:taxRateChanged`.
+- **Hold festival** — `districtSys.holdFestival(player, districtId, turn)`. Costs `cfg.district.festivalCost` ($200), boosts happiness by `festivalHappiness` (+10) for `festivalDuration` (3 turns). Cooldown `festivalCooldown` (5 turns).
+- **Investment grant** — `districtSys.investmentGrant(player, districtId, turn)`. Costs `cfg.district.grantCost` ($300), adds `cfg.district.grantPopulation` (+5) instantly. Cooldown `grantCooldown` (5 turns).
 
-## 9.4 Losing mayorship
+Each helper returns `{ ok: bool, reason?: string, cost?: number }`. `TurnManager` displays the failure reason as a one-shot toast/log entry.
 
-Mayor status is lost when the trigger in 9.1 reverts: another player takes a buildable square in the district (purchase, trade, takeover) or a square is lost during bankruptcy.
+## 9.5 Losing mayorship
 
-When mayorship changes:
+A mayor loses the district when another player owns more buildable cells (e.g. via takeover) — the next `recomputeMayor` resolves to a different mayor or no mayor. There is no grace period and no auction mechanic in v2.
 
-- `district.mayorIndex` updates.
-- All active festivals/grants persist on the district (they're district-scoped, not player-scoped).
-- Tax rate set by the previous mayor stays until the new mayor changes it (or, if district returns to "no mayor", the tax rate resets to the map default).
-- Emit `district:mayorChanged`.
+> **Δ v1.** v1 considered an "auction on losing mayorship" mechanic. v2 doesn't ship it; tracked under `19_OpenQuestions.md`.
 
-## 9.5 Migration interaction
+## 9.6 Migration interaction
 
-Migration (see 08) automatically punishes mayors that overtax. The mayor's UI must surface the migration risk so the punishment is visible *before* the player presses confirm:
+The mayor of a *destination* district pays 1 oil per `cfg.population.oilPerMigrationUnit` (= 50) residents migrating in. If the mayor lacks oil, migration throttles. See `08_Population.md` §8.5.
 
-- "Projected migration: 8 residents leaving next turn." (computed from current happiness target).
+## 9.7 Multiple districts, single mayor
 
-## 9.6 Multiple districts, single mayor
+A player may mayor multiple districts simultaneously. Each district is an independent mayor record. Tax-rate, festival, and grant are all per-district.
 
-A player can mayor multiple districts simultaneously. The left sidebar lists each district with current happiness, population, tax rate, and mayor. The Mayor menu in `TurnManager._showMayorMenu` lists each district the current player controls.
+The HUD chronicles district counts in two places:
 
-## 9.7 No-mayor districts
+- **Top bar / Players panel** — beside each player, a small badge with the count of districts mayored.
+- **District sidebar** — each district row shows its mayor's color/initial. Player rows in the player panel may show "Mayor of N districts".
 
-Districts without a mayor still tick population/happiness, but:
+## 9.8 No-mayor districts
 
-- No taxes are collected (the tax line item just doesn't fire).
-- The map's default `taxRate` is used for happiness calculations.
+If no player has a strict majority, `district.mayorIndex = -1`. In that case:
 
-## 9.8 District data model
+- Taxes are not collected.
+- Festival and grant are unavailable (helpers reject).
+- Migration into the district is uncapped by oil.
+- Population still grows/declines based on happiness.
+
+## 9.9 District data model
+
+(See `03_BoardAndCells.md` §3.3 for the full schema and `16_DataModels.md` for the JSON shape.)
 
 ```js
-// games/Acca/systems/DistrictSystem.js
 class District {
-  id;                      // string — matches cell.district values
-  color;                   // hex string for tinting and sidebar
-  cells;                   // array of Cell references
-  mayorIndex;              // -1 if no mayor
-  taxRate;                 // 0..cfg.district.maxTaxRate
-  population;
-  happiness;               // 0..100
-  festivalUntilTurn;
-  grantCooldownUntil;
-  festivalCooldownUntil;
-  birthsThisTurn;
-  deathsThisTurn;
-  migratedIn;
-  migratedOut;
-  specialty;               // resource id or null (from map JSON)
+  id;               // name string
+  color;            // hex
+  cells;            // Cell references
+  mayorIndex;       // -1 if none
+  taxRate;          // 0..maxTaxRate
+  population; happiness;
+  festivalUntilTurn; festivalCooldownUntil; grantCooldownUntil;
+  birthsThisTurn; deathsThisTurn; migratedIn; migratedOut;
+  specialty;        // resource id or null
 }
 ```
 
-## 9.9 Events emitted by DistrictSystem
+`DistrictSystem` exposes:
 
-| Event | Payload |
-|-------|---------|
-| `district:mayorChanged` | `{ district, oldMayor, newMayor }` |
-| `district:taxesPaid` | `{ district, mayor, amount }` |
-| `district:taxRateChanged` | `{ district, mayor }` |
-| `district:festival` | `{ district, mayor }` |
-| `district:grant` | `{ district, mayor }` |
+- `init(cells, districtsMeta)` — build districts from map data.
+- `recomputeMayor(districtId)` — recompute one district.
+- `recomputeAll()` — recompute every district (used after save load).
+- `collectTaxes(player)` — start-of-turn helper.
+- `setTaxRate / holdFestival / investmentGrant`.
+- `serialize() / deserialize(data)`.
+
+## 9.10 Events emitted by DistrictSystem
+
+| Event                      | Payload                                          | When                                         |
+|----------------------------|--------------------------------------------------|----------------------------------------------|
+| `district:mayorChanged`    | `{ district, oldMayor, newMayor }`               | After a recompute changes the mayor index.   |
+| `district:taxesPaid`       | `{ district, mayor, amount }`                    | At start-of-turn tax collection.             |
+| `district:taxRateChanged`  | `{ district, mayor }`                            | After `setTaxRate` succeeds.                 |
+| `district:festival`        | `{ district, mayor }`                            | After `holdFestival` succeeds.               |
+| `district:grant`           | `{ district, mayor }`                            | After `investmentGrant` succeeds.            |
+
+## 9.11 Δ v1 roundup for this chapter
+
+- "District" replaces "region".
+- Mayor is a strict majority (>50%) of buildable cells, not "all property cells."
+- Festival/grant cooldowns formalised (5 turns each).
+- Mayor's oil burns to scale migration.
+- Auction on loss not implemented.

@@ -1,109 +1,158 @@
 # 12 — UI / HUD
 
-The reference for the default layout is `Planning/defaultinterface.png`. This doc translates that into a concrete plan that can be implemented against `framework/systems/UISystem.js`.
-
 ## 12.1 Layout regions
 
-Canvas size: 1024 × 576 (from `cfg.engine`).
+The page (`games/Acca2/index.html`) declares a simple grid of DOM regions plus a single `<canvas>` for the board:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ TOP BAR  — name | money | net worth | resources strip                        │  ~48px
-├──────────────────┬───────────────────────────────┬──────────────────────────┤
-│  DISTRICTS       │                               │  PLAYERS PANEL           │
-│  SIDEBAR (left)  │       MAP VIEW (canvas)        │  (per-player summary)    │
-│  · district name │                               ├──────────────────────────┤
-│  · pop / hap     │                               │  LOG / EVENTS            │
-│  · tax / mayor   │                               │                          │
-└──────────────────┴───────────────────────────────┴──────────────────────────┘
+│                                  TOPBAR (DOM)                                │
+│  Turn │ Name [bankrupt?] │ Money on hand │ Net worth │ Resources             │
+├───────────────────────┬────────────────────────────────┬─────────────────────┤
+│   DISTRICT SIDEBAR    │                                │   RIGHT SIDEBAR     │
+│        (DOM)          │      <canvas id="gameCanvas">  │      (DOM)          │
+│  Districts list:      │           BOARD + DIE          │  Notifications      │
+│  name, mayor, pop,    │       + MENU MODAL OVERLAY     │  (last 12 events)   │
+│  happiness, tax rate  │       + SPOTLIGHT              │                     │
+│                       │                                │  Players panel      │
+│                       │                                │  (one row each)     │
+└───────────────────────┴────────────────────────────────┴─────────────────────┘
 ```
 
-The current `_drawHUD` already implements a similar structure; this plan formalises it and adds the top-bar resource strip.
+Styling lives in three CSS files under `games/Acca2/styles/`:
 
-## 12.2 Top bar (per `Planning/defaultinterface.png`)
+- `theme.css` — root variables (colors, fonts, layout dimensions).
+- `topbar.css` — the top bar grid and resource-pill styling.
+- `sidebars.css` — left district sidebar, right notifications + players panel.
 
-Four cells, each with a sliced background:
+> **Δ v1.** v1 was canvas-only. v2 mixes DOM (HUD) and canvas (board, menu modal, die). The board area is the only canvas surface; everything labelled "DOM" above is real `<div>`s updated by `ui/HUDRenderer.js`.
 
-1. **Name** — current player name, color-tinted background.
-2. **Money on hand** — `$1,234`.
-3. **Net worth** — `totalValue` (cash + property + business + resources).
-4. **Resources strip** — seven icons (`res_wood`, `res_steel`, `res_electricity`, `res_water`, `res_food`, `res_coal`, `res_oil`) with counts, in fixed order. Each item has a small price ticker beneath it driven by `MarketSystem`.
+## 12.2 Top bar
 
-The strip width must scale to canvas width without overlapping the right-side panels (i.e., the strip occupies the *active player's* row only; in 4-player games, every player still has a row in the **PLAYERS PANEL** with abbreviated stats).
+DOM nodes: `#tb-turn`, `#tb-name`, `#tb-bankrupt-badge`, `#tb-money`, `#tb-networth`, `#tb-resources`.
+
+| Cell             | Source                                    |
+|------------------|-------------------------------------------|
+| Turn             | `game.turnCounter`.                       |
+| Name             | `game.currentPlayer.name`. The bankrupt badge appears when `currentPlayer.isBankrupt`. |
+| Money on hand    | `game.currentPlayer.money`.               |
+| Net worth        | `game.netWorth(game.currentPlayer)`.      |
+| Resources        | One pill per resource; quantity from `currentPlayer.resources[resource]`. |
+
+`ui/MoneyAnimations.js` watches `currentPlayer.money` for changes and:
+
+- Adds a `gain` or `loss` flash class to the money cell.
+- Spawns a floating "+$X" or "−$X" indicator.
+- On gains, spawns a small coin-burst particle effect.
+
+All overlays auto-remove after ~1700 ms. The same effect runs on each row of the player list (with a smaller floating indicator).
 
 ## 12.3 Map view
 
-Center-of-screen rectangle bounded by board extents + 16px padding. Renders:
+`<canvas id="gameCanvas" width="768" height="528">` renders:
 
-- District tinting (semi-transparent rect behind each district's cells using `district.color`).
-- Cells (sprite-driven).
-- Owner ring (3px, `player.color`).
-- Business stack — small icons at top-right of each owned cell, max 5.
-- Movement highlights — pulsing yellow border on neighbors of `currentCell` during MOVE.
-- Player tokens — staggered.
+- Background gradient + diagonal stripes.
+- Board frame, district tints, roads, cell sprites, owner rings, tokens, spotlight overlay (see `03_BoardAndCells.md` §3.7).
+- Die in the bottom-right (during `ROLL` and `MOVE` stages).
+- Menu modal overlay (centered card with options).
+- Start-menu / Game-over screens.
+
+The canvas is resolution-fixed at 768×528 per `cfg.engine.{width,height}`. The browser scales the canvas to fit the `#mapWrap` slot in the grid.
 
 ## 12.4 Left sidebar — Districts
 
-A DOM panel (`#districtSidebar`) showing a scrollable list of all districts, updated each frame via `AccaGame._renderDistrictSidebar()`. Per district:
+`<div id="districtSidebar"> > .panel > #districtList`. Built by `HUDRenderer.render()` from `districtSys.list()`.
 
-- District name (colored border strip matching `district.color`).
-- Specialty resource tag.
-- Population and happiness (color-coded: green ≥ 70, yellow ≥ 40, orange ≥ 20, red below).
-- Tax rate and buildings owned/total.
-- Mayor name (colored dot + name, or "No mayor" in muted text).
+Each district row shows:
 
-## 12.5 Players panel (right side)
+- District name with mayor color/initial badge.
+- Population (with up/down arrow if it changed last tick).
+- Happiness mood (😊 / 😐 / 😠 emoji or equivalent class).
+- Tax rate (percentage).
+- Building count (`district.cells.filter(c => c.structure).length`).
 
-For each player (active player highlighted):
+The row highlights when the current player is mayor of that district. Renders only when the district's signature changes — see 12.10.
 
-- Color bar accent.
-- Token preview sprite.
-- Name + bankrupt badge.
-- Cash, total value, property count, districts mayored, level.
+## 12.5 Right sidebar
 
-For 4 players, panel rows scale to 56px each. Selecting a player (gamepad LB/RB) opens a read-only **Player Details** modal — useful for quickly evaluating opponents before a trade.
+Two panels stacked:
 
-## 12.5 Log
-
-Last 6 messages, latest highlighted white, older lines fading to gray. Already implemented; add: emoji-icon prefix per category to scan quickly (uses a sprite, not unicode).
+1. **Notifications** — last 12 entries from `game.eventLog`. Built fresh each frame the signature changes.
+2. **Players** — one row per player:
+   - Color dot.
+   - Name.
+   - Cash + net worth + structure count + districts mayored.
+   - Active highlight on `game.currentPlayer`.
+   - Bankrupt strikethrough on `isBankrupt`.
 
 ## 12.6 Modal menus
 
-Modals are vertically centered, 320–480px wide. Built with `Menu` + `UISystem.drawPanel`. Stacking is allowed (e.g., Manage → Property Detail → Build Business).
+The menu modal is canvas-rendered (`OverlayRenderer.drawMenuOverlay`). Shape:
 
-Modals types:
+- Translucent backdrop.
+- Centered card with title, optional subtitle, list of options (one highlighted), and a help line at the bottom.
+- Disabled options render dimmed; the highlight skips them.
 
-- **Generic Menu** — title + arrow-key list (already implemented).
-- **Picker** — list with thumbnail (player picker, property picker).
-- **Trade Window** — two-column layout with stepper inputs.
-- **Slider** — single horizontal slider for tax rate, prices.
-- **Confirmation** — yes/no with mock summary.
+The menu is driven by `core/Menu.js` (`A.Menu`):
 
-Each modal advertises its keys at the bottom: `↑↓ select   Enter confirm   Esc back`.
+```js
+menu.show(title, options, subtitle?, {
+  onIndexChange: (option, index) => { /* preview / spotlight */ },
+  onCancel:      () => { /* default = call the 'Back' option's action */ }
+});
+```
+
+`options` shape: `{ label, action, meta?, _disabled?: bool }`.
+
+`onIndexChange` is what enables previews — for example, the Portfolio menu spotlights the highlighted structure's cell, and the build menu highlights the structure type.
 
 ## 12.7 Notifications
 
-`games/Acca/ui/Notifications.js` shows a queue of timed cards in the top-right (below the top bar):
+Driven by `game.log(message)` and rendered into `#notifications` by `HUDRenderer`. The eventLog is capped at 500 entries (`AccaGame.log`) and the panel slices the last 12 for display.
 
-- Priority levels: `info`, `success`, `warning`, `danger`.
-- Default duration: 3.5s.
-- Pause on hover (mouse) or when modal is open.
-- Subscribes to events for: `chance:drawn`, `district:mayorChanged`, `business:sabotaged`, `population:migrated` (only big migrations), `market:priceChanged` (only when ≥ 25% delta).
+There's also an in-game **Game log** menu (Manage → Game log) that paginates through the full 500-entry log, 14 entries per page.
 
 ## 12.8 Title screen
 
-Already implemented at a basic level. Required additions:
+`OverlayRenderer.drawStartMenu`. Centred title, the four token previews from `cfg.players[]`, the player-count selector (← / →) showing `menuPlayerCount`, and a "Press ▶ to start" prompt.
 
-- Map selector (left/right cycles maps, fetched from `cfg.maps[]`).
-- Win condition selector.
-- Start button + Settings/Credits buttons.
+Confirm transitions to `_beginGame()`.
 
 ## 12.9 Game over screen
 
-Already drawn. Add: standings table.
+`OverlayRenderer.drawGameOver`. Dims the world view and overlays:
 
-## 12.10 Accessibility
+- Winner name in their color.
+- One-line stats (cash, net worth, structures, districts mayored).
+- "Press ▶ to return to menu."
 
-- All text uses readable sizes (≥ 12px monospace at default zoom).
-- All colors used to encode state (mayor color, owner color) are paired with iconography or text — no information is color-only.
-- Optional setting `cfg.accessibility.colorBlindFriendly = true` swaps to a tested palette. Hooks into HUD/Cell rendering via `cfg.players[i].color`.
+Confirm transitions back to `MENU`.
+
+## 12.10 Signature-cached DOM rendering
+
+The DOM HUD updates only when the *signature* (a hash of the relevant state) changes. `HUDRenderer.render()` is called every frame, but it short-circuits when nothing meaningful has changed.
+
+Pseudocode for one panel:
+
+```js
+const sig = `${player.money}|${player.isBankrupt}|${this.netWorth(player)}|...`;
+if (sig === this._sigPlayer) return;
+this._sigPlayer = sig;
+// ... rebuild DOM ...
+```
+
+`HUDRenderer.resetSignatures()` is called when starting a new game / returning to menu / after game over so the next frame fully repaints.
+
+## 12.11 Accessibility
+
+- `cfg.accessibility.colorBlindFriendly` toggles a higher-contrast palette (reserved — not yet wired into the CSS variables).
+- All interactive choices are keyboard-only; no mouse-required controls.
+- Resource icons render alongside their colored pill so color is not the only signal.
+- Bankrupt status is shown by both a strikethrough and a textual badge.
+
+## 12.12 Δ v1 roundup for this chapter
+
+- DOM HUD replaces v1's canvas HUD.
+- `MoneyAnimations` is new.
+- Menu's `onIndexChange` callback is new — drives spotlight previews.
+- The full game log (Manage → Game log) is new.

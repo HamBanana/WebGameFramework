@@ -1,10 +1,10 @@
 {
-  "id": "Acca",
-  "title": "Acca",
+  "id": "Acca2",
+  "title": "Acca v2",
   "icon": "🏙️",
   "color": "#4da6ff",
   "tags": ["BOARD GAME", "2–4 PLAYERS", "STRATEGY"],
-  "desc": "A city-building board game. Buy properties, corner regions, trade resources, and become the economic mayor.",
+  "desc": "A city-building board game (v2 — modular rewrite). Buy properties, corner regions, trade resources, and become the economic mayor.",
   "config": [
     {
       "key": "Players",
