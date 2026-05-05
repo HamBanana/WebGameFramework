@@ -76,7 +76,7 @@ A single player can mayor every district. There's no soft cap.
 
 There are no AI players. Playtest uses console hot-seat drivers (per project instructions).
 
-- **A.** Add a heuristic AI in `games/Acca2/ai/Heuristic.js` (greedy: roll → land → build/skip → trade-if-clearly-positive).
+- **A.** Add a heuristic AI in `games/Acca/ai/Heuristic.js` (greedy: roll → land → build/skip → trade-if-clearly-positive).
 - **B.** Add a "random" baseline AI that picks the first menu option.
 - **C.** Leave hot-seat-only.
 
@@ -108,14 +108,4 @@ v1 reserved a "region" tier above districts (group of districts). v2 doesn't hav
 
 - **A.** Add `Region` entity + `region` field on District. Useful for very large maps.
 - **B.** Skip — districts are enough.
-
-**Rec.** B for v2. Reconsider when boards get larger than 100 cells.
-
-## 19.12 Tradable contracts
-
-Per `06_ResourcesAndMarket.md` §6.8 — a player could lock a resource at a fixed price for N turns.
-
-- **A.** Implement; adds a financial-instrument layer to the market.
-- **B.** Skip; the imbalance ratio guard already lets two players negotiate a "fixed rate" trade.
-
-**Rec.** B — too much complexity for the win.
+

@@ -19,7 +19,7 @@
 
 Sketch of where the seams are:
 
-- New file: `games/Acca2/core/Company.js` exporting `A.Company`. Fields: `id`, `ownerIndex`, `name`, `industry`, `structures[]`, `bonus`.
+- New file: `games/Acca/core/Company.js` exporting `A.Company`. Fields: `id`, `ownerIndex`, `name`, `industry`, `structures[]`, `bonus`.
 - Player gains `companies[]` and `companyByStructure(structure) → Company`.
 - Cfg gains `cfg.industries.bonusKeys` (industry name → bonus spec).
 - TurnManager Manage menu gains a `Companies` submenu (rename, specialize, transfer structures).
@@ -38,21 +38,4 @@ Reserved JSON (mirrors what v1 used):
   "industries": {
     "bonusKeys": {
       "tech":      { "shopVisitRate": 0.05 },     // +5pp visit rate to all owned shops
-      "logistics": { "tollIncrement": 5 },         // +5 per pass to owned toll gates
-      "agri":      { "factoryHouseBonus": 0.05 },  // +5% per house to owned factories
-      "energy":    { "marketDiscount":   { "electricity": 0.05, "coal": 0.05 } },
-      "finance":   { "vaultInterestRate": 0.005 }
-    }
-  }
-}
-```
-
-## 7.5 Win-condition interaction (post-add)
-
-If Companies return, win conditions could be extended with a `CompanyValue ≥ target` mode (the highest-value company across the table wins). This is also tracked in `15_WinConditionsAndMultiplayer.md` as a parked extension.
-
-## 7.6 Δ v1 summary
-
-- v1: Player → Company → Property → Business hierarchy; industry bonuses tied to companies.
-- v2: Player → PlayerStructure (flat).
-- Reintroduction is a single new entity (`Company`) plus a config table; no other module needs to change behaviour.
+      "logistics": { "tollIncrement": 5 },         // +5 per pass

@@ -2,7 +2,7 @@
 
 ## 4.1 Player entity
 
-`games/Acca2/core/Player.js` — `class Player`.
+`games/Acca/core/Player.js` — `class Player`.
 
 ```js
 class Player {
@@ -39,7 +39,7 @@ Helpers:
 
 ## 4.2 Turn state machine
 
-Implemented in `games/Acca2/managers/TurnManager.js`. Stages enum lives in `core/Constants.js`:
+Implemented in `games/Acca/managers/TurnManager.js`. Stages enum lives in `core/Constants.js`:
 
 ```js
 A.TURN_STAGE = {
@@ -107,61 +107,3 @@ Bound in `cfg.controls`, applied in `AccaGame.constructor` via `engine.input.bin
 
 | Action     | Default keys                  | Effect |
 |------------|-------------------------------|--------|
-| `up`       | `ArrowUp`, `KeyW`             | Move token up (during MOVE); menu navigation. |
-| `down`     | `ArrowDown`, `KeyS`           | Move token down; menu navigation. |
-| `left`     | `ArrowLeft`, `KeyA`           | Move token left; in MENU, decrement player count; in market/portfolio, change selection. |
-| `right`    | `ArrowRight`, `KeyD`          | Move token right; in MENU, increment player count. |
-| `confirm`  | `Enter`, `Space`              | Activate menu option; start game from MENU; restart from GAME_OVER. |
-| `cancel`   | `Escape`, `Backspace`         | Close a menu (calls its `onCancel` hook). |
-| `endTurn`  | `KeyE`                        | Reserved. Currently no global handler — end-of-turn happens via the start menu's "Pass" or via terminal landing flows. |
-
-## 4.6 Die
-
-`games/Acca2/core/DieController.js`. Pure visual + state container — no rng exposed externally.
-
-- `roll(duration, onDone)` — picks a random 1..6, animates for `duration` seconds, then calls `onDone(value)`. `cfg.turn.rollDuration` default is 1.4s.
-- `setFace(value)` — set the visible face directly (used by `MovementController` to count down during MOVE).
-- `update(dt)` — advance animation; cycle through faces while rolling.
-
-`ChanceSystem` can register a die-override (`{min, max}`) that the next `TurnManager` ROLL stage consumes via `chanceSys.consumeDieOverride(playerIndex)`. The override clamps the rolled value into the override's range — implemented by re-randomising in the override's range, not by re-rolling the die animation.
-
-## 4.7 Movement
-
-`games/Acca2/core/MovementController.js`.
-
-Lifecycle:
-
-1. `TurnManager` calls `movement.begin(player, moves)` after the die settles.
-2. Each frame, `movement.update()` reads input and (if a step is queued) calls `stepTo(target)`.
-3. On every step:
-   - Toll-gate pass-through is applied via `StructureManager.passThroughEffect`.
-   - `cell:leave` and `cell:enter` events fire.
-4. On the final step, `movement.update()` emits `move:complete`. `TurnManager` listens for that on `engine.events` and transitions to `LANDING`.
-
-The `roads[]` / `roadIdx` fields are kept as a stub for API compatibility; v2 does not implement multi-road choice at intersections (open question — see `19_OpenQuestions.md`).
-
-## 4.8 Player setup flow (start of game)
-
-`AccaGame._beginGame()`:
-
-1. `boardLoader.load()` populates `game.cells[]` and the cell graph.
-2. `game._initPlayers()` picks the spawn cell (`mapData.spawnCellId` → first `bank` cell → `cells[0]`) and creates `n` players from `cfg.players[]`. Each gets `cfg.startingMoney` cash and `cfg.startingResources` quantities. Player tokens get a small render offset so they don't all stack.
-3. `districtSys.init(cells, mapData.districts)` builds the district map and seeds population from `cfg.district.defaultPopulation × max(1, cells/3)`.
-4. State is reset: `turnCounter=0`, `cooperativeThreat=0`, `eventLog=[]`, HUD signature cache cleared.
-5. Camera zooms out to board, then `turn.startTurn(currentPlayer)`.
-
-## 4.9 End-of-game flow
-
-`game._advanceToNextPlayer` calls `win.check()` after each turn. If a winner is returned:
-
-1. `game.winner = winner; game.gameState = GAME_OVER`.
-2. `OverlayRenderer.drawGameOver` paints the dimmed screen with the winner's colour, name, and stats.
-3. `confirm` returns to `MENU`; player count and HUD signatures reset.
-
-Win condition logic and tiebreakers live in `15_WinConditionsAndMultiplayer.md`.
-
-## 4.10 Δ v1 roundup for this chapter
-
-- Stage names match v1 (`TURN_START`, `ROLL`, `MOVE`, `LANDING`, `END_TURN`, `BETWEEN`) plus the v2 additions `CONFIRM_LAND` (reserved) and `LAND_PROMPT` (explicit menu state).
-- v1 planned per-stage events `turn:start`, `die:roll`. v2 currently does not emit them — TurnManager calls subsystems directly. They are easy to add when audio/particles need them.
-- `EndTurn` key (`KeyE`) is reserved but unused as a global; v1 had a global hot-key.

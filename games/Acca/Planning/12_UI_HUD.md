@@ -2,7 +2,7 @@
 
 ## 12.1 Layout regions
 
-The page (`games/Acca2/index.html`) declares a simple grid of DOM regions plus a single `<canvas>` for the board:
+The page (`games/Acca/index.html`) declares a simple grid of DOM regions plus a single `<canvas>` for the board:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -19,7 +19,7 @@ The page (`games/Acca2/index.html`) declares a simple grid of DOM regions plus a
 └───────────────────────┴────────────────────────────────┴─────────────────────┘
 ```
 
-Styling lives in three CSS files under `games/Acca2/styles/`:
+Styling lives in three CSS files under `games/Acca/styles/`:
 
 - `theme.css` — root variables (colors, fonts, layout dimensions).
 - `topbar.css` — the top bar grid and resource-pill styling.
@@ -106,53 +106,4 @@ menu.show(title, options, subtitle?, {
 
 `onIndexChange` is what enables previews — for example, the Portfolio menu spotlights the highlighted structure's cell, and the build menu highlights the structure type.
 
-## 12.7 Notifications
-
-Driven by `game.log(message)` and rendered into `#notifications` by `HUDRenderer`. The eventLog is capped at 500 entries (`AccaGame.log`) and the panel slices the last 12 for display.
-
-There's also an in-game **Game log** menu (Manage → Game log) that paginates through the full 500-entry log, 14 entries per page.
-
-## 12.8 Title screen
-
-`OverlayRenderer.drawStartMenu`. Centred title, the four token previews from `cfg.players[]`, the player-count selector (← / →) showing `menuPlayerCount`, and a "Press ▶ to start" prompt.
-
-Confirm transitions to `_beginGame()`.
-
-## 12.9 Game over screen
-
-`OverlayRenderer.drawGameOver`. Dims the world view and overlays:
-
-- Winner name in their color.
-- One-line stats (cash, net worth, structures, districts mayored).
-- "Press ▶ to return to menu."
-
-Confirm transitions back to `MENU`.
-
-## 12.10 Signature-cached DOM rendering
-
-The DOM HUD updates only when the *signature* (a hash of the relevant state) changes. `HUDRenderer.render()` is called every frame, but it short-circuits when nothing meaningful has changed.
-
-Pseudocode for one panel:
-
-```js
-const sig = `${player.money}|${player.isBankrupt}|${this.netWorth(player)}|...`;
-if (sig === this._sigPlayer) return;
-this._sigPlayer = sig;
-// ... rebuild DOM ...
-```
-
-`HUDRenderer.resetSignatures()` is called when starting a new game / returning to menu / after game over so the next frame fully repaints.
-
-## 12.11 Accessibility
-
-- `cfg.accessibility.colorBlindFriendly` toggles a higher-contrast palette (reserved — not yet wired into the CSS variables).
-- All interactive choices are keyboard-only; no mouse-required controls.
-- Resource icons render alongside their colored pill so color is not the only signal.
-- Bankrupt status is shown by both a strikethrough and a textual badge.
-
-## 12.12 Δ v1 roundup for this chapter
-
-- DOM HUD replaces v1's canvas HUD.
-- `MoneyAnimations` is new.
-- Menu's `onIndexChange` callback is new — drives spotlight previews.
-- The full game log (Manage → Game log) is new.
+#

@@ -1,10 +1,10 @@
-# Acca v2 — Planning Index
+# Acca — Planning Index
 
-Location: `games/Acca2/Planning/`
+Location: `games/Acca/Planning/`
 
-This folder is the design/architecture bible for **Acca v2**, the modular rewrite of Acca on top of `GameFramework`. The intent is that anyone (or any future Claude session) can read this set of files and (a) understand the v2 codebase as it stands, and (b) extend or rebuild it without reverse-engineering intent from JS files.
+This folder is the design/architecture bible for **Acca**, the modular rewrite of Acca on top of `GameFramework`. The intent is that anyone (or any future Claude session) can read this set of files and (a) understand the v2 codebase as it stands, and (b) extend or rebuild it without reverse-engineering intent from JS files.
 
-Acca v2 is a city-building board game (top-down, 2–4 players, hot-seat). Players move around a connected grid, buy buildable cells, build income-producing structures (shops, houses, factories, vaults, …), corner districts to become Mayor, manipulate a 7-resource market, and trade or sabotage each other to victory.
+Acca is a city-building board game (top-down, 2–4 players, hot-seat). Players move around a connected grid, buy buildable cells, build income-producing structures (shops, houses, factories, vaults, …), corner districts to become Mayor, manipulate a 7-resource market, and trade or sabotage each other to victory.
 
 The planning set is split into self-contained documents. Read them in order for a top-down view, or jump straight to a topic.
 
@@ -29,11 +29,11 @@ The planning set is split into self-contained documents. Read them in order for 
 | 14  | `14_SpritesAndAssets.md`                  | Sprite name registry and animation contracts. |
 | 15  | `15_WinConditionsAndMultiplayer.md`       | Win types, competitive vs cooperative, end-game flow. |
 | 16  | `16_DataModels.md`                        | Canonical schemas: `GAME_CONFIG`, map JSON, save snapshot. |
-| 17  | `17_FileStructure.md`                     | Where each file lives under `games/Acca2/`. |
+| 17  | `17_FileStructure.md`                     | Where each file lives under `games/Acca/`. |
 | 18  | `18_ImplementationRoadmap.md`             | Current implementation state and the next phases of work. |
 | 19  | `19_OpenQuestions.md`                     | Unresolved design questions and parked debates. |
 | 20  | `20_Changes.md`                           | Running log of behavior/balance changes vs Acca v1. |
-| —   | `API_Reference.md`                        | Per-file class/method reference for every source file under `games/Acca2/`. |
+| —   | `API_Reference.md`                        | Per-file class/method reference for every source file under `games/Acca/`. |
 
 ## What's different about v2 (top-level deltas vs Acca v1)
 
@@ -53,11 +53,11 @@ Detailed deltas are tagged inline as **"Δ v1"** boxes in each chapter.
 
 ## Conventions used in these docs
 
-- **File path bullet** — every time a doc names a piece of code that should exist, it includes the path it would live at, e.g. `games/Acca2/managers/EconomyManager.js`. Matches the user rule: *"Always include paths to where a given file belongs in the file structure."*
+- **File path bullet** — every time a doc names a piece of code that should exist, it includes the path it would live at, e.g. `games/Acca/managers/EconomyManager.js`. Matches the user rule: *"Always include paths to where a given file belongs in the file structure."*
 - **Sprite names, never paths** — when a doc references art, it uses the sprite name (e.g. `cell_property`, `token_red`). Asset paths only appear in `framework/sprites/*` and are out of scope here. Matches the framework rule: *"FRAMEWORK_CONFIG must not include full asset paths."*
-- **Config-first** — anything a designer would tune (prices, happiness curves, chance weights) is described as a key under `GF.GAME_CONFIG` in `games/Acca2/config.js`, not hard-coded.
+- **Config-first** — anything a designer would tune (prices, happiness curves, chance weights) is described as a key under `GF.GAME_CONFIG` in `games/Acca/config.js`, not hard-coded.
 - **Modular & extensible** — every subsystem is a class with a small, named API. Cross-module communication goes through the framework's `EventBus` (`engine.events`), not direct method calls.
-- **No HTML files added.** The only HTML files in `games/Acca2/` are the existing `index.html` and `MapCreator/index.html`. Layout that isn't provided by those goes through DOM nodes already declared in `index.html` plus the canvas.
+- **No HTML files added.** The only HTML files in `games/Acca/` are the existing `index.html` and `MapCreator/index.html`. Layout that isn't provided by those goes through DOM nodes already declared in `index.html` plus the canvas.
 - **Δ v1 boxes** call out specific changes from Acca v1.
 
 ## Glossary
@@ -71,10 +71,4 @@ Detailed deltas are tagged inline as **"Δ v1"** boxes in each chapter.
 - **GF** — the framework namespace exposed on `window.GF` by `framework/GameFramework.bundle.js`. `GF.Acca` is the v2 game's namespace.
 - **Catalog** — `cfg.structures.catalog` lists the structure types players can build, with cost.
 
-## How to extend the planning
-
-1. Drop a new `NN_TopicName.md` into this folder.
-2. Add a row to the table above.
-3. Update `19_OpenQuestions.md` if the new topic raises any.
-4. Cross-reference: link from related docs (e.g. a new doc on "Auctions" should be linked from `05_StructuresAndBuildings.md`).
-5. If the topic introduces new code, also update `17_FileStructure.md` and `API_Reference.md`.
+## How to 

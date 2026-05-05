@@ -2,7 +2,7 @@
 
 ## 9.1 Terminology
 
-- **District** — a named, configurable group of cells. Identified by name (string) in `cell.district`. Maintained by `games/Acca2/systems/DistrictSystem.js`.
+- **District** — a named, configurable group of cells. Identified by name (string) in `cell.district`. Maintained by `games/Acca/systems/DistrictSystem.js`.
 - **Buildable cell** — a cell where a `PlayerStructure` may be built. Cells of type `buildable` and `empty` are buildable; resource cells, bank, market, and chance are not.
 - **Mayor** — the player owning a *strict majority* of a district's buildable cells.
 
@@ -81,45 +81,4 @@ If no player has a strict majority, `district.mayorIndex = -1`. In that case:
 
 ## 9.9 District data model
 
-(See `03_BoardAndCells.md` §3.3 for the full schema and `16_DataModels.md` for the JSON shape.)
-
-```js
-class District {
-  id;               // name string
-  color;            // hex
-  cells;            // Cell references
-  mayorIndex;       // -1 if none
-  taxRate;          // 0..maxTaxRate
-  population; happiness;
-  festivalUntilTurn; festivalCooldownUntil; grantCooldownUntil;
-  birthsThisTurn; deathsThisTurn; migratedIn; migratedOut;
-  specialty;        // resource id or null
-}
-```
-
-`DistrictSystem` exposes:
-
-- `init(cells, districtsMeta)` — build districts from map data.
-- `recomputeMayor(districtId)` — recompute one district.
-- `recomputeAll()` — recompute every district (used after save load).
-- `collectTaxes(player)` — start-of-turn helper.
-- `setTaxRate / holdFestival / investmentGrant`.
-- `serialize() / deserialize(data)`.
-
-## 9.10 Events emitted by DistrictSystem
-
-| Event                      | Payload                                          | When                                         |
-|----------------------------|--------------------------------------------------|----------------------------------------------|
-| `district:mayorChanged`    | `{ district, oldMayor, newMayor }`               | After a recompute changes the mayor index.   |
-| `district:taxesPaid`       | `{ district, mayor, amount }`                    | At start-of-turn tax collection.             |
-| `district:taxRateChanged`  | `{ district, mayor }`                            | After `setTaxRate` succeeds.                 |
-| `district:festival`        | `{ district, mayor }`                            | After `holdFestival` succeeds.               |
-| `district:grant`           | `{ district, mayor }`                            | After `investmentGrant` succeeds.            |
-
-## 9.11 Δ v1 roundup for this chapter
-
-- "District" replaces "region".
-- Mayor is a strict majority (>50%) of buildable cells, not "all property cells."
-- Festival/grant cooldowns formalised (5 turns each).
-- Mayor's oil burns to scale migration.
-- Auction on loss not implemented.
+(See `03_Boar

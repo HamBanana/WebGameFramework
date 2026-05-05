@@ -1,9 +1,9 @@
 # 17 — File Structure
 
-This chapter is the canonical layout under `games/Acca2/`. Every file has a one-line description plus its status. When a new file is added, update this chapter and `API_Reference.md`.
+This chapter is the canonical layout under `games/Acca/`. Every file has a one-line description plus its status. When a new file is added, update this chapter and `API_Reference.md`.
 
 ```
-games/Acca2/
+games/Acca/
 ├── index.html                          (exists)  Page scaffold: DOM HUD + canvas + script loader.
 ├── game.json                           (exists)  Launcher metadata + per-launch config options.
 ├── launch.js                           (exists)  Standalone Node dev server (port 3000 default).
@@ -90,77 +90,4 @@ games/Acca2/
     ├── 10_ChanceEvents.md              (NEW)
     ├── 11_TradingAndSabotage.md        (NEW)
     ├── 12_UI_HUD.md                    (NEW)
-    ├── 13_AudioVisualFeedback.md       (NEW)
-    ├── 14_SpritesAndAssets.md          (NEW)
-    ├── 15_WinConditionsAndMultiplayer.md (NEW)
-    ├── 16_DataModels.md                (NEW)
-    ├── 17_FileStructure.md             (NEW — this file)
-    ├── 18_ImplementationRoadmap.md     (NEW)
-    ├── 19_OpenQuestions.md             (NEW)
-    ├── 20_Changes.md                   (NEW)
-    └── API_Reference.md                (NEW — per-file API breakdown)
-```
-
-## 17.1 Loading order in `index.html`
-
-The order matters because each file may attach to `GF.Acca`, and dependents need their prerequisites already attached. The actual order in `games/Acca2/index.html`:
-
-```
-1. styles/theme.css, topbar.css, sidebars.css       (CSS first; FOUC-free)
-2. config.js                                         (GF.GAME_CONFIG)
-3. ../../framework/GameFramework.bundle.js          (engine, sprite, input, etc.)
-4. utils/format.js, validate.js
-5. sprites/tokens.js, die.js, cells.js, cells_extra.js,
-   structures.js, resources.js, businesses.js, ui_icons.js
-6. systems/MarketSystem.js, DistrictSystem.js,
-   PopulationSystem.js, ChanceSystem.js, TradeSystem.js,
-   AccaSave.js
-7. core/Constants.js, Cell.js, PlayerStructure.js, Player.js,
-   DieController.js, Menu.js, MovementController.js
-8. managers/BoardLoader.js, StructureManager.js,
-   EconomyManager.js, CameraManager.js,
-   WinConditionChecker.js, TurnManager.js
-9. render/BoardRenderer.js, OverlayRenderer.js
-10. ui/MoneyAnimations.js, HUDRenderer.js
-11. AccaGame.js                                      (orchestrator, bootstrap)
-```
-
-The orchestrator must be last because its constructor instantiates everything in order.
-
-## 17.2 Module conventions
-
-Every module file under `games/Acca2/` follows this skeleton:
-
-```js
-// games/Acca2/<dir>/<File>.js
-// Brief description.
-(function (GF) {
-  'use strict';
-  const A = GF.Acca = GF.Acca || {};
-
-  class MyClass {
-    constructor(deps) { /* ... */ }
-    publicMethod() { /* ... */ }
-  }
-
-  A.MyClass = MyClass;
-})(window.GF = window.GF || {});
-```
-
-- IIFE with `(GF)` arg ensures `window.GF` exists.
-- The shared namespace `GF.Acca` (alias `A`) is the only export surface.
-- No `import` / `export` — v2 ships as classic `<script>` files. Treat the load order as the dependency graph.
-
-## 17.3 Test harness
-
-There is no automated test harness in v2. The playtest workflow uses the in-game console hot-seat driver described in the project instructions:
-
-> *"To play a given number of rounds efficiently, script a hot-seat driver in the page console (using `dispatchEvent` to feed synthetic key events into the existing `InputManager` — no game code modified). The driver: (a) selected `Roll` from the start menu, (b) DFS-searched for an N-step path that maximised landing on an empty buildable plot, (c) chose `Build Shop` when affordable and otherwise `Skip`, then `Pass turn`."*
-
-Playtest records live at `games/Acca2/20260504_PLAYTEST_REPORT.md` (and similar timestamped reports in `games/Acca/` for v1 lineage).
-
-## 17.4 Δ v1 roundup for this chapter
-
-- v1 lived in `games/Acca/` with a single `AccaGame.js`. v2 lives in `games/Acca2/` with the module split shown above.
-- v2 adds `styles/`, `themes/`, `render/`, `ui/`, and the manager split.
-- v2 keeps `MapCreator/` and the legacy `sprites/businesses.js` for backward compatibility with v1 art conventions.
+    ├── 1

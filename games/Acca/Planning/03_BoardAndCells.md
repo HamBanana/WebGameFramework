@@ -22,7 +22,7 @@ Cell type is set in the map JSON and never inferred from neighborhood.
 
 ## 3.2 Cell schema (in code)
 
-`games/Acca2/core/Cell.js`:
+`games/Acca/core/Cell.js`:
 
 ```js
 class Cell {
@@ -47,10 +47,10 @@ class Cell {
 
 ## 3.3 District schema
 
-A district is a named group of cells. Districts are identified by `cell.district` (the **name string**) and managed by `games/Acca2/systems/DistrictSystem.js`.
+A district is a named group of cells. Districts are identified by `cell.district` (the **name string**) and managed by `games/Acca/systems/DistrictSystem.js`.
 
 ```js
-// games/Acca2/systems/DistrictSystem.js — District class
+// games/Acca/systems/DistrictSystem.js — District class
 class District {
   id;                       // string — same as the name, used as map key
   color;                    // hex string for map tint and sidebar
@@ -74,7 +74,7 @@ class District {
 
 ## 3.4 Map JSON spec
 
-`games/Acca2/maps/default.json` and `games/Acca2/maps/denmark.json` already exist. The canonical schema:
+`games/Acca/maps/default.json` and `games/Acca/maps/denmark.json` already exist. The canonical schema:
 
 ```jsonc
 {
@@ -114,62 +114,4 @@ class District {
 ```
 
 Notes:
-
-- `direction` is `"both"` (bidirectional) or `"forward"` (one-way) to support special board layouts.
-- `value` is retained for backward compatibility but ignored at runtime; structure prices come from `cfg.structures.catalog`.
-- Cells reference districts by **both** name (string) and id (int). `DistrictSystem` keys by name; `MapCreator` uses id.
-- Connections are undirected when `"both"`. `BoardLoader` walks them once and builds `_neighbors[]` on each side.
-
-## 3.5 Validation
-
-`games/Acca2/utils/validate.js` exposes `validateMap(json)`. It checks:
-
-- Every `cell.district` (when set) references a `districts[].name`.
-- Every `connection.from` / `to` references a real cell.
-- The cell list and id space are consistent.
-- The connection graph reaches every cell from `spawnCellId` (warn on islands).
-
-Validation errors should fail loudly to the console rather than silently render a half-formed board. The validator is **not** currently wired into `BoardLoader.load()` — it's exposed for MapCreator and ad-hoc usage. Adding a `validate.assert()` call in `BoardLoader.load()` is the recommended next step (see `19_OpenQuestions.md`).
-
-## 3.6 Neighbor wiring
-
-Implemented in `managers/BoardLoader.js`:
-
-1. Build `cellById` from the cells list.
-2. Walk `connections`. For each, push the linked Cell onto each side's `_neighbors` (and only one side if `"forward"`).
-3. For each cell, choose a single Cell for each of `up/down/left/right` from `_neighbors` by best-cardinal angle (largest projection onto the axis).
-4. If no candidate found in a cardinal slot, leave it null. Movement input falls back to `_neighbors`.
-
-The cardinal slots feed `MovementController.adjacent` (which the player navigates with arrow keys); the unordered `_neighbors` list is the canonical edge set used by movement-pathing.
-
-## 3.7 Visual layering (BoardRenderer)
-
-Render order, back to front (see `render/BoardRenderer.drawWorld`):
-
-1. Background gradient + diagonal stripes (`OverlayRenderer.drawBackground`, *before* the world transform).
-2. Board frame panel (dark rectangle behind cells).
-3. District tints — semi-transparent color washes drawn beneath cells.
-4. Roads — asphalt edge, surface, dashed lane markings, one-way arrows.
-5. Cell sprites.
-6. Owner rings — player-colored rectangle around owned-structure cells.
-7. Toll-gate accrued indicator (`$X` floating label).
-8. Next-cell tooltips during MOVE stage.
-9. Player tokens (each with `moveOffset` for stacking when ≥2 share a cell).
-10. Spotlight overlay — dimmed full-screen fill + a glowing "hole" + pulsing halo (when `camera.spotlightCell` is set).
-
-Then the canvas is reset to screen space and:
-
-11. Die (`OverlayRenderer.drawDie`).
-12. Menu modal (`OverlayRenderer.drawMenuOverlay`).
-13. DOM HUD (`HUDRenderer.render`) — automatically composited over the canvas.
-
-## 3.8 MapCreator alignment
-
-`games/Acca2/MapCreator/` exports the same JSON shape described in 3.4. Any new cell-level field added here (`subType`, `structureType`, future region fields) must be exposed in MapCreator before it's consumed by the runtime, so authors aren't blocked.
-
-## 3.9 Δ v1 roundup for this chapter
-
-- v1 planned cells: `forest`, `oil_rig`, `well`, `farm`, `power_plant`. v2 ships: `well`, `mine` (with subtypes `coal`/`iron`), `power_plant`. The remaining types are deferred.
-- v1 used `region` everywhere; v2 uses `district` consistently and drops the `region.bonus` industry hook.
-- `cell.value` is no longer authoritative — structure cost is taken from `cfg.structures.catalog`.
-- v2 introduces `type: "structure"` for *map-pre-placed* structures (a cell that comes with a built shop, etc., before players start).
+

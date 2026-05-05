@@ -1,19 +1,19 @@
 # 14 — Sprites and Assets
 
-## 14.1 Existing Acca v2 sprite registries
+## 14.1 Existing Acca sprite registries
 
-Each file under `games/Acca2/sprites/` registers entries on `GF.sprites` (called by `AccaGame.constructor` via `sprites.registerSprites(GF.sprites)`).
+Each file under `games/Acca/sprites/` registers entries on `GF.sprites` (called by `AccaGame.constructor` via `sprites.registerSprites(GF.sprites)`).
 
 | File                                       | What it registers |
 |--------------------------------------------|-------------------|
-| `games/Acca2/sprites/tokens.js`            | `token_red`, `token_blue`, `token_green`, `token_yellow` (the four player tokens). |
-| `games/Acca2/sprites/die.js`               | `die` — multi-frame animator for the rolling state and the six face values. |
-| `games/Acca2/sprites/cells.js`             | `cell_start` (bank), `cell_chance`, `cell_market`, `cell_property` (buildable), `cell_normal` (empty). |
-| `games/Acca2/sprites/cells_extra.js`       | `cell_power_plant`, `cell_well`, `cell_mine` (resource cells). |
-| `games/Acca2/sprites/structures.js`        | `cell_shop`, `cell_toll_gate`, `cell_teleporter`, `cell_house`, `cell_factory`, `cell_police_station`, `cell_vault`. |
-| `games/Acca2/sprites/resources.js`         | Resource icon sprites (one per `cfg.market.resources`). |
-| `games/Acca2/sprites/businesses.js`        | Reserved for legacy "business" iconography from v1; in v2 the structures registry covers the same ground. |
-| `games/Acca2/sprites/ui_icons.js`          | Misc UI glyphs (mayor crown, sabotage marker, padlock for vault, etc.). |
+| `games/Acca/sprites/tokens.js`            | `token_red`, `token_blue`, `token_green`, `token_yellow` (the four player tokens). |
+| `games/Acca/sprites/die.js`               | `die` — multi-frame animator for the rolling state and the six face values. |
+| `games/Acca/sprites/cells.js`             | `cell_start` (bank), `cell_chance`, `cell_market`, `cell_property` (buildable), `cell_normal` (empty). |
+| `games/Acca/sprites/cells_extra.js`       | `cell_power_plant`, `cell_well`, `cell_mine` (resource cells). |
+| `games/Acca/sprites/structures.js`        | `cell_shop`, `cell_toll_gate`, `cell_teleporter`, `cell_house`, `cell_factory`, `cell_police_station`, `cell_vault`. |
+| `games/Acca/sprites/resources.js`         | Resource icon sprites (one per `cfg.market.resources`). |
+| `games/Acca/sprites/businesses.js`        | Reserved for legacy "business" iconography from v1; in v2 the structures registry covers the same ground. |
+| `games/Acca/sprites/ui_icons.js`          | Misc UI glyphs (mayor crown, sabotage marker, padlock for vault, etc.). |
 
 > **Δ v1.** v2 keeps the `businesses.js` file for backward compatibility; new structures go into `structures.js`.
 
@@ -58,25 +58,4 @@ Cells, structures, and tokens are mostly single-state. The die is the only built
 
 ## 14.4 Adding a new sprite
 
-1. Decide the name (`cell_*` for cells, `token_*` for tokens, etc.).
-2. Add an entry to the appropriate file under `sprites/`. The entry is a JS object that the framework's `SpriteSystem` understands — typically `{ kind: 'tile', size: 64, draw(ctx) { /* paint to context */ } }` for procedural sprites, or `{ kind: 'image', src: 'assets/...' }` for raster sprites loaded by the framework.
-3. Reference the name from config or directly from a renderer.
-4. Update `14.1` and `17_FileStructure.md` if you create a new sprite file.
-
-> **Convention.** `FRAMEWORK_CONFIG must not include full asset paths` — paths to image files belong only inside `framework/sprites/*` (for framework-shipped art) or inside the sprite-registration object itself (for game-shipped art under `games/Acca2/`). Game code references sprites by name, period.
-
-## 14.5 Asset folder convention
-
-If raster art is added later, it would live at:
-
-```
-games/Acca2/assets/sprites/...
-```
-
-…and be referenced from `sprites/*.js` by relative path. v2 currently ships with procedural sprites only (each sprite is a small canvas-painting routine), so no `assets/` folder exists yet.
-
-## 14.6 Δ v1 roundup for this chapter
-
-- Sprite naming convention is unchanged.
-- v2 separates `cells.js` (basic cells) from `cells_extra.js` (resource cells) and `structures.js` (player structures); v1 lumped them all into `cells.js`.
-- All sprites in v2 are procedural canvases. v1's plan referenced raster `Sprites/Claude` and `Sprites/Claudia` for character sprites; those exist in the framework but aren't currently used by Acca v2.
+1. Decide the name (`cel

@@ -1,10 +1,12 @@
 // games/Acca2/ui/MoneyAnimations.js
 // Watches per-player cash deltas across renders. On a non-zero delta:
-//   • flash the topbar money cell (current player only)
-//   • flash the player-list row
-//   • spawn a floating "+$X" / "-$X" indicator that drifts up
-//   • spawn a coin sparkle burst on a gain (current player only)
-// Pure DOM — never touches the canvas.
+//   • flash the topbar money cell (current player only) — CSS only
+//   • flash the player-list row — CSS only
+//   • spawn a floating "+$X" / "-$X" indicator above the player's token
+//   • spawn a coin sparkle burst on the token on a gain
+// The floating effects use _tokenScreenPos() to project the token's world
+// position through the camera transform into page coordinates, so they
+// track zoom and pan correctly. Pure DOM — never touches the canvas.
 
 (function (GF) {
   'use strict';
@@ -52,7 +54,7 @@
       const sign = delta > 0 ? '+' : '−';
       const txt  = `${sign}$${Math.abs(delta)}`;
 
-      // Topbar money cell (current player only).
+      // Topbar money cell flash (current player only) — CSS only, no position anchor.
       if (isCurrent && game.dom.tbMoney) {
         const el = game.dom.tbMoney;
         el.classList.remove('money-gain', 'money-loss');
@@ -60,16 +62,9 @@
         // eslint-disable-next-line no-unused-expressions
         void el.offsetWidth;
         el.classList.add(delta > 0 ? 'money-gain' : 'money-loss');
-
-        const r = el.getBoundingClientRect();
-        this._spawnFloating(txt, cls, r.left + r.width / 2, r.top - 2, true);
-
-        if (delta > 0) {
-          this._spawnCoinBurst(r.left + r.width / 2, r.top + r.height / 2);
-        }
       }
 
-      // Player-list row flash + secondary delta.
+      // Player-list row flash — CSS only, no position anchor.
       if (game.dom.playerList) {
         const row = game.dom.playerList.children[index];
         if (row) {
@@ -77,13 +72,37 @@
           // eslint-disable-next-line no-unused-expressions
           void row.offsetWidth;
           row.classList.add(delta > 0 ? 'flash-gain' : 'flash-loss');
-
-          if (!isCurrent) {
-            const rr = row.getBoundingClientRect();
-            this._spawnFloating(txt, cls, rr.right - 28, rr.top + rr.height / 2, false);
-          }
         }
       }
+
+      // Floating delta + coin burst anchored to the player token on the canvas.
+      const pos = this._tokenScreenPos(player);
+      if (pos) {
+        this._spawnFloating(txt, cls, pos.x, pos.y, isCurrent);
+        if (delta > 0) this._spawnCoinBurst(pos.x, pos.y);
+      }
+    }
+
+    /** Convert a player's token world position to page (screen) coordinates,
+     *  matching the camera transform used by BoardRenderer.drawWorld. */
+    _tokenScreenPos(player) {
+      const game = this.game;
+      if (!player.currentCell || !game._toPixel) return null;
+      const cam = game._camera;
+      const W   = game.cfg.engine.width;
+      const H   = game.cfg.engine.height;
+      const wp  = game._toPixel(player.currentCell);
+      // +8 y-offset matches the shift in BoardRenderer._drawTokens.
+      const wx  = wp.x + (player.moveOffset ? player.moveOffset.x : 0);
+      const wy  = wp.y + (player.moveOffset ? player.moveOffset.y : 0) + 8;
+      // World → canvas-local pixel (same transform as BoardRenderer.drawWorld).
+      const cx  = (wx - cam.cx) * cam.scale + W / 2;
+      const cy  = (wy - cam.cy) * cam.scale + H / 2;
+      // Canvas-local → page coordinates.
+      const canvasEl = game.engine && game.engine.canvas;
+      if (!canvasEl) return { x: cx, y: cy };
+      const rect = canvasEl.getBoundingClientRect();
+      return { x: rect.left + cx, y: rect.top + cy };
     }
 
     /** Absolute-positioned "+$X" / "-$X" element that floats up and fades.
@@ -118,6 +137,10 @@
       setTimeout(() => { if (burst.parentNode) burst.parentNode.removeChild(burst); }, 950);
     }
   }
+
+  /** How long (ms) the floating "+$X" element lives. AccaGame reads this to
+   *  know how long to hold the camera zoomed in after an end-of-turn delta. */
+  MoneyAnimations.FLOAT_LIFETIME_MS = 1700;
 
   A.MoneyAnimations = MoneyAnimations;
 

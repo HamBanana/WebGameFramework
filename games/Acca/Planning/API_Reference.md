@@ -1,6 +1,6 @@
-# API Reference — Acca v2
+# API Reference — Acca
 
-Per-file class / method reference for every source file under `games/Acca2/`. Generated from the v2 source as of 2026-05-04.
+Per-file class / method reference for every source file under `games/Acca/`. Generated from the v2 source as of 2026-05-04.
 
 Conventions:
 
@@ -12,18 +12,18 @@ Conventions:
 
 ## Top-level
 
-### `games/Acca2/index.html`
+### `games/Acca/index.html`
 
 The page scaffold. Declares the topbar (`#topbar`), district sidebar (`#districtSidebar`), canvas (`#gameCanvas`), and right sidebar (`#sidebar`) with notifications and player list panels. Links the three CSS files and loads scripts in the order specified in `17_FileStructure.md` §17.1.
 
-### `games/Acca2/game.json`
+### `games/Acca/game.json`
 
 Launcher metadata + per-launch config options.
 
 ```json
 {
   "id":    "Acca2",
-  "title": "Acca v2",
+  "title": "Acca",
   "icon":  "🏙️",
   "color": "#4da6ff",
   "tags":  ["BOARD GAME", "2–4 PLAYERS", "STRATEGY"],
@@ -37,7 +37,7 @@ Launcher metadata + per-launch config options.
 }
 ```
 
-### `games/Acca2/launch.js`
+### `games/Acca/launch.js`
 
 Standalone Node dev server. Serves the game directory at `/` and the framework directory at `/framework/`.
 
@@ -45,11 +45,11 @@ Standalone Node dev server. Serves the game directory at `/` and the framework d
 - `node launch.js 8080` — custom port.
 - Opens the browser automatically (`start` / `open` / `xdg-open`).
 
-### `games/Acca2/config.js`
+### `games/Acca/config.js`
 
 Defines `GF.GAME_CONFIG` — the entire game configuration object (see `16_DataModels.md` §16.1). Listens for `GF:ready` and calls `GF.applyLauncherConfig('Acca2')` to merge launcher overrides.
 
-### `games/Acca2/AccaGame.js`
+### `games/Acca/AccaGame.js`
 
 Top-level orchestrator. Exports `A.AccaGame`.
 
@@ -541,8 +541,4 @@ JSON shape in `16_DataModels.md` §16.2.
 ## Cross-reference
 
 - **Where is the turn flow?** `managers/TurnManager.js` — also documented in `04_PlayerAndTurn.md`.
-- **Where do prices come from?** `systems/MarketSystem.js` + `cfg.market.basePrices`.
-- **Where is the win condition?** `managers/WinConditionChecker.js` + `cfg.win`.
-- **Where is the save format?** `systems/AccaSave.js` — also documented in `16_DataModels.md` §16.3.
-- **Where do new structure types go?** Add to `cfg.structures.catalog`, register a sprite in `sprites/structures.js`, add owner/visitor branches to `managers/StructureManager.js`.
-- **Where do new chance events go?** Add to `cfg.chance.pool`. If they need a new effect handler, add it to `systems/ChanceSystem.js`.
+- **Where do prices come from?** `systems/

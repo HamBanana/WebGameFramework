@@ -8,14 +8,14 @@ Each district holds a population number that grows or shrinks every turn based o
 - Drives migration across districts (residents leave low-happiness districts and arrive in high-happiness ones).
 - Is gated by the mayor's available oil — long-distance migration consumes 1 oil per `oilPerMigrationUnit` (= 50) residents moved.
 
-The population tick is owned by `games/Acca2/systems/PopulationSystem.js` and called by `EconomyManager.runEndOfTurn` once per turn.
+The population tick is owned by `games/Acca/systems/PopulationSystem.js` and called by `EconomyManager.runEndOfTurn` once per turn.
 
 ## 8.2 Where population lives
 
 There is no per-citizen entity. Population is a scalar per district, on the `District` instance:
 
 ```js
-// games/Acca2/systems/DistrictSystem.js — District (excerpt)
+// games/Acca/systems/DistrictSystem.js — District (excerpt)
 class District {
   population;            // current size (≥ 0)
   happiness;             // 0..100, lerped toward target via cfg.population.happinessLerp
@@ -78,32 +78,4 @@ Each turn, employment is recomputed:
 - Houses contribute population (residents).
 - Employed-fraction = `min(jobs, residents) / residents`.
 
-Higher employment → small happiness bonus. Low employment → small happiness drag. The exact formula is configurable via `cfg.population.*`.
-
-## 8.7 Mayor / tax interplay
-
-A mayor-set tax rate above `cfg.population.taxComfortRate` (= 0.1 → 10%) reduces happiness linearly. Since mayor taxes scale with population × tax rate, the mayor faces an explicit trade-off: hike taxes for short-term cash but hurt growth, or set low taxes and grow the base.
-
-The mayor controls available:
-
-- **Tax rate slider** — set per district, 0 to `cfg.district.maxTaxRate` (= 0.5).
-- **Festival** — pay $200, +10 happiness for 3 turns. Cooldown 5 turns.
-- **Investment grant** — pay $300, +5 population immediately. Cooldown 5 turns.
-
-Both festival and grant are exposed under Manage → Mayor → district from the Start-of-turn menu.
-
-## 8.8 HUD surface
-
-Population is rendered in two places:
-
-- **District sidebar** (left): per-district row with name, mayor color/initial, population (with up/down arrow if it changed last tick), happiness mood emoji, tax rate, building count.
-- **Notifications panel** (right): one-line log entries for major migration events (e.g. *"Downtown lost 12 residents to Riverside."*).
-
-The DOM HUD updates only when a signature changes — so unchanged district rows don't re-render every frame.
-
-## 8.9 Δ v1 roundup for this chapter
-
-- v1 used "region" terminology. v2 uses "district" consistently.
-- v2 makes oil consumption gate migration explicitly (`cfg.population.oilPerMigrationUnit`). v1 referenced this as a future hook only.
-- `idleBusinessPenalty` is new — v1 had no soft penalty for idled buildings.
-- Festival/grant cooldowns are explicit (5 turns), not just "discretionary" as in v1's plan.
+Higher employment → small happiness bonus. Low employment → small happiness drag. The exact formula is configura

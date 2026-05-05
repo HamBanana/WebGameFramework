@@ -4,7 +4,7 @@
 
 ## 5.1 PlayerStructure entity
 
-`games/Acca2/core/PlayerStructure.js` — `class PlayerStructure`.
+`games/Acca/core/PlayerStructure.js` — `class PlayerStructure`.
 
 ```js
 class PlayerStructure {
@@ -136,12 +136,4 @@ When `EconomyManager.runEndOfTurn` finds `player.money < 0`:
 
 - **Land on own structure:** Owner-options menu drives the action (5.4).
 - **Manage from anywhere:** From the Start-of-turn menu, "Manage → Properties" opens the **Portfolio** menu — paginated list of every structure the player owns. Selecting one spotlights its cell on the board (`cameraManager.spotlightOnCell`) and shows the same owner-options menu inline.
-- **Mayor controls (per district):** Manage → Mayor → choose district → tax-rate slider, festival, investment grant. See `09_DistrictsAndMayors.md`.
-
-## 5.11 Δ v1 roundup for this chapter
-
-- Properties and Businesses are gone; one PlayerStructure per cell.
-- The `tierUpgradeCost` table is dormant — there's no per-tier player level gate on building structures in v2. Anything in the catalog can be built whenever the player can afford it.
-- `cfg.property.takeoverMultiplier = 5` and `maxTakeoversPerTurn = 1` survived intact. `cfg.property.basePrice` (200) is reserved (used by some legacy paths and by the `Property Price` config in `game.json`).
-- v2 introduces vault levels with capacity caps, distinct from anything in v1.
-- v2 introduces idle-on-shortage as a soft penalty; v1 had no equivalent.
+- **Mayor controls (pe

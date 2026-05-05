@@ -1,10 +1,10 @@
 # 16 — Data Models
 
-This chapter is the canonical schema reference for every persisted or shared shape in Acca v2. When the schema changes, this file is updated first; modules that consume the data follow.
+This chapter is the canonical schema reference for every persisted or shared shape in Acca. When the schema changes, this file is updated first; modules that consume the data follow.
 
 ## 16.1 `cfg` — the contents of `GAME_CONFIG`
 
-`games/Acca2/config.js` builds the full config object. Top-level keys (every key documented elsewhere; this is the index):
+`games/Acca/config.js` builds the full config object. Top-level keys (every key documented elsewhere; this is the index):
 
 ```jsonc
 GF.GAME_CONFIG = {
@@ -143,80 +143,3 @@ Validation: `utils/validate.js → validateMap(json) → { ok, errors[] }`.
       "resources": { "wood": 0, ... },
       "currentCellId": 0,
       "districtsMayoredOf": ["Downtown", ...],
-      "ownedStructureCellIds": [12, 17, 21]
-    }
-  ],
-
-  "cells": [
-    {
-      "id": 12,
-      "structure": {
-        "type":             "shop",
-        "ownerIndex":       0,
-        "baseValue":        250,
-        "currentValue":     400,
-        "tollAccrued":      0,
-        "sabotagedUntilTurn": 0,
-        "level":            0,
-        "storedMoney":      0,
-        "idleUntilTurn":    0
-      }
-    }
-  ],
-
-  "districts": { /* DistrictSystem.serialize() */ },
-  "market":    { /* MarketSystem.serialize()  */ },
-  "chance":    { /* ChanceSystem.serialize()  */ },
-  "trade":     { /* TradeSystem.serialize()    */ },
-
-  "log": ["last 20 strings", ...]
-}
-```
-
-`AccaSave.deserialize(data, game)`:
-
-1. Validates `data.version === 1`.
-2. Resets `game.cells` cell-structure links by id.
-3. Restores `game.players[i]` fields.
-4. Calls `serialize()/deserialize()` on each owned system.
-5. Restores `currentPlayerIndex` and `turnCounter`, then re-runs `recomputeAll` on districts.
-
-Note: only the last 20 log entries are persisted to keep the save under a few KB.
-
-## 16.4 Event payload schema
-
-Shapes used on `engine.events`. (See `02_Architecture.md` §2.3 for the full table of v2-emitted events.)
-
-| Event                    | Payload                                          |
-|--------------------------|--------------------------------------------------|
-| `cell:enter`             | `{ player: Player, cell: Cell, final: bool }`    |
-| `cell:leave`             | `{ player: Player, cell: Cell }`                 |
-| `move:complete`          | `{ player: Player }`                             |
-| `district:mayorChanged`  | `{ district: District, oldMayor: int, newMayor: int }` |
-| `district:taxesPaid`     | `{ district: District, mayor: Player, amount: number }` |
-| `district:taxRateChanged`| `{ district: District, mayor: Player }`          |
-| `district:festival`      | `{ district: District, mayor: Player }`          |
-| `district:grant`         | `{ district: District, mayor: Player }`          |
-| `market:priceChanged`    | `{ resource: string, oldPrice: number, newPrice: number }` |
-| `business:sabotaged`     | `{ structure: PlayerStructure, attacker: Player|null }` |
-
-## 16.5 Validation helpers
-
-`games/Acca2/utils/validate.js`:
-
-```js
-GF.Acca.validate = {
-  validateMap(json),     // → { ok: bool, errors: string[] }
-  validateConfig(cfg),   // → { ok, errors }
-  validateSave(json),    // → { ok, errors }
-};
-```
-
-These are pure functions and don't touch game state. They are called explicitly by MapCreator and ad-hoc by developer console — recommended next step is to wire them into `BoardLoader.load` and `AccaSave.load`.
-
-## 16.6 Δ v1 roundup for this chapter
-
-- Save shape is rectified around the v2 module split (per-system `serialize()`).
-- The save log is capped at the last 20 entries (v1 had no cap).
-- Validators exist but are not called automatically — easy next step.
-- Map JSON includes `nextCellId` / `nextDistrictId` / `cellCount` as MapCreator hints.

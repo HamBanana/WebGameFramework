@@ -1,5 +1,5 @@
-// games/Acca2/config.js
-// Game-specific configuration for Acca v2 — same schema as v1.
+// games/Acca/config.js
+// Game-specific configuration for Acca v0.1.
 (function (GF) {
   'use strict';
   GF.GAME_CONFIG = {
@@ -49,7 +49,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 2,
+  "numberOfPlayers": 4,
   "startingMoney": 1500,
   "startingResources": {
     "wood": 0,
@@ -80,7 +80,7 @@
     "threatPerLowHappiness": 1
   },
   "property": {
-    "basePrice": 200,
+    "basePrice": 300,
     "baseRent": 30,
     "baseRentRate": 0.15,
     "mayorBonus": 50,
@@ -559,6 +559,6 @@
 };
 
   window.addEventListener('GF:ready', function () {
-    GF.applyLauncherConfig('Acca2');
+    GF.applyLauncherConfig('Acca');
   }, { once: true });
 })(window.GF = window.GF || {});

@@ -1,7 +1,7 @@
-# Acca v2 — Structural Rewrite Report
+# Acca — Structural Rewrite Report
 
 **Date:** 2026-05-04
-**Scope:** Acca v2 — pure structural rewrite of v1 (`games/Acca/`) into `games/Acca2/`.
+**Scope:** Acca 0.1 — structural rewrite (`games/Acca/`) into `games/Acca/`.
 **Behavior changes:** None. Same gameplay, same mechanics, same balance.
 **File changes:** Significant. 1 monolith split into 19 focused modules; inline CSS extracted to 3 stylesheets; HTML slimmed from ~655 lines to 122.
 
@@ -9,7 +9,7 @@
 
 ## TL;DR
 
-The v2 directory is a parallel, fully self-contained copy of Acca that runs end-to-end with the same logic as v1 — `node launch.js` from `games/Acca2/` boots into the same start menu, 4 players, 7 structure types, 8 districts, default Danish-flag-coloured map. The sole purpose of v2 was to break up the 2,989-line `AccaGame.js` monolith and the 568-line inline-styled `index.html` into focused modules. Every line of behavior is preserved verbatim (modulo whitespace and identifier renames where a method moved between owners — for example `game._zoomInOnPlayer` is now `game.camera.zoomInOnPlayer`).
+The v2 directory is a parallel, fully self-contained copy of Acca that runs end-to-end with the same logic as v1 — `node launch.js` from `games/Acca/` boots into the same start menu, 4 players, 7 structure types, 8 districts, default Danish-flag-coloured map. The sole purpose of v2 was to break up the 2,989-line `AccaGame.js` monolith and the 568-line inline-styled `index.html` into focused modules. Every line of behavior is preserved verbatim (modulo whitespace and identifier renames where a method moved between owners — for example `game._zoomInOnPlayer` is now `game.camera.zoomInOnPlayer`).
 
 A smoke test driven via `jsdom` confirmed:
 - All 25 JS files parse cleanly when served by the dev server.
@@ -26,7 +26,7 @@ A 50-turn interactive playtest could not be run end-to-end inside the headless s
 ### File layout — before vs after
 
 ```
-games/Acca/                                games/Acca2/
+games/Acca/                                games/Acca/
 ├── AccaGame.js          (2989 lines)      ├── AccaGame.js          ( 336 lines)
 ├── index.html           ( 655 lines)      ├── index.html           ( 122 lines)
 ├── config.js                              ├── config.js
@@ -134,7 +134,7 @@ After v2:
 - Two non-fatal jsdom-environmental errors logged: missing `ctx.quadraticCurveTo` (canvas stub gap) and a fetch failure on the inline map path (jsdom `runScripts:dangerously` doesn't pass our stubbed fetch into the page-context evaluator). Neither indicates a bug in v2 code.
 
 ### What couldn't be verified in this session
-- **Interactive 50-turn hot-seat playtest in a real browser.** The bash sandbox can't keep a server alive across tool calls (process group is reaped), so I can't drive Chrome MCP to the live server reliably. A real run (which the project instructions describe — "script a hot-seat driver in the page console using `dispatchEvent`") would need to happen on the user's machine: start `node games/Acca2/launch.js`, open the URL in the connected browser, paste the v1 hot-seat driver into devtools.
+- **Interactive 50-turn hot-seat playtest in a real browser.** The bash sandbox can't keep a server alive across tool calls (process group is reaped), so I can't drive Chrome MCP to the live server reliably. A real run (which the project instructions describe — "script a hot-seat driver in the page console using `dispatchEvent`") would need to happen on the user's machine: start `node games/Acca/launch.js`, open the URL in the connected browser, paste the v1 hot-seat driver into devtools.
 - **Visual regression vs v1.** The CSS extraction is byte-for-byte identical to the v1 inline `<style>` content, so the topbar / sidebars / money-flash should render pixel-identically. Worth a side-by-side eyeball check after first boot.
 
 ---
@@ -169,7 +169,7 @@ Most of those lines are the menu builders (`_showStartMenu`, `_showManageMenu`, 
 
 ### 4. Save-format is shared with v1
 
-`acca_save_v1` is the localStorage key for both Acca and Acca v2. Loading a save from v1 into v2 will work because the schema is unchanged — but if v3 changes any state shape, the namespace key should bump (`acca_save_v2`) so v1 and v2 don't accidentally clobber each other's saves.
+`acca_save_v1` is the localStorage key for both Acca and Acca. Loading a save from v1 into v2 will work because the schema is unchanged — but if v3 changes any state shape, the namespace key should bump (`acca_save_v2`) so v1 and v2 don't accidentally clobber each other's saves.
 
 ### 5. The `applyLauncherConfig('Acca2')` pathway
 
@@ -177,7 +177,7 @@ When v2 runs standalone (i.e. via its own `launch.js`), the `GF:ready` listener 
 
 ### 6. The v1 folder is unchanged
 
-Per the user's "Fresh games/Acca2/ folder" choice, `games/Acca/` was not touched in this session. v1 remains independently runnable and playable; players get to compare directly. If the v2 rewrite is accepted long-term, consider a `Acca` → `Acca-legacy` rename after one more round of v2 verification, then promote `Acca2` → `Acca`.
+Per the user's "Fresh games/Acca/ folder" choice, `games/Acca/` was not touched in this session. v1 remains independently runnable and playable; players get to compare directly. If the v2 rewrite is accepted long-term, consider a `Acca` → `Acca-legacy` rename after one more round of v2 verification, then promote `Acca2` → `Acca`.
 
 ---
 
@@ -201,33 +201,33 @@ In the live page console, the v1 hot-seat playtest driver attaches to `window._a
 ## Files added or rewritten in this session
 
 ```
-games/Acca2/AccaGame.js                        (336 lines — slim orchestrator)
-games/Acca2/index.html                         (122 lines — link to extracted CSS)
-games/Acca2/config.js                          (rewritten via heredoc; bash mount truncated the cp)
-games/Acca2/game.json                          (id/title/desc → Acca2 / Acca v2)
-games/Acca2/styles/theme.css                   (variables, layout, body, panels, scrollbars)
-games/Acca2/styles/topbar.css                  (top bar, money-flash, coin burst, resource pills)
-games/Acca2/styles/sidebars.css                (district panel, notifications, player list, row-flash)
-games/Acca2/core/Constants.js                  (GAME_STATE, TURN_STAGE)
-games/Acca2/core/Cell.js                       (Cell class)
-games/Acca2/core/PlayerStructure.js            (PlayerStructure class)
-games/Acca2/core/Player.js                     (Player class + tiny helpers)
-games/Acca2/core/DieController.js              (animated die)
-games/Acca2/core/Menu.js                       (canvas menu overlay)
-games/Acca2/core/MovementController.js         (cardinal stepping)
-games/Acca2/managers/BoardLoader.js            (board init: cells, neighbours, cardinal slots)
-games/Acca2/managers/StructureManager.js       (build, owner options, visitor effects, pass-through)
-games/Acca2/managers/EconomyManager.js         (production, upkeep, debt, catch-up, prompts)
-games/Acca2/managers/CameraManager.js          (zoom, lerp, spotlight)
-games/Acca2/managers/WinConditionChecker.js    (win check, leader, lowest, random grant)
-games/Acca2/managers/TurnManager.js            (turn state machine + per-turn menus)
-games/Acca2/render/BoardRenderer.js            (board, cells, roads, owner rings, spotlight)
-games/Acca2/render/OverlayRenderer.js          (background, die, menu modal, start menu, game over)
-games/Acca2/ui/HUDRenderer.js                  (top bar / sidebars DOM updates with sig caching)
-games/Acca2/ui/MoneyAnimations.js              (cash-delta flashes + coin-burst sparkles)
-games/Acca2/maps/default.json                  (rewritten via heredoc; bash mount truncated the cp)
-games/Acca2/systems/DistrictSystem.js          (rewritten via heredoc; same as v1)
-games/Acca2/systems/PopulationSystem.js        (rewritten via heredoc; same as v1)
+games/Acca/AccaGame.js                        (336 lines — slim orchestrator)
+games/Acca/index.html                         (122 lines — link to extracted CSS)
+games/Acca/config.js                          (rewritten via heredoc; bash mount truncated the cp)
+games/Acca/game.json                          (id/title/desc → Acca2 / Acca)
+games/Acca/styles/theme.css                   (variables, layout, body, panels, scrollbars)
+games/Acca/styles/topbar.css                  (top bar, money-flash, coin burst, resource pills)
+games/Acca/styles/sidebars.css                (district panel, notifications, player list, row-flash)
+games/Acca/core/Constants.js                  (GAME_STATE, TURN_STAGE)
+games/Acca/core/Cell.js                       (Cell class)
+games/Acca/core/PlayerStructure.js            (PlayerStructure class)
+games/Acca/core/Player.js                     (Player class + tiny helpers)
+games/Acca/core/DieController.js              (animated die)
+games/Acca/core/Menu.js                       (canvas menu overlay)
+games/Acca/core/MovementController.js         (cardinal stepping)
+games/Acca/managers/BoardLoader.js            (board init: cells, neighbours, cardinal slots)
+games/Acca/managers/StructureManager.js       (build, owner options, visitor effects, pass-through)
+games/Acca/managers/EconomyManager.js         (production, upkeep, debt, catch-up, prompts)
+games/Acca/managers/CameraManager.js          (zoom, lerp, spotlight)
+games/Acca/managers/WinConditionChecker.js    (win check, leader, lowest, random grant)
+games/Acca/managers/TurnManager.js            (turn state machine + per-turn menus)
+games/Acca/render/BoardRenderer.js            (board, cells, roads, owner rings, spotlight)
+games/Acca/render/OverlayRenderer.js          (background, die, menu modal, start menu, game over)
+games/Acca/ui/HUDRenderer.js                  (top bar / sidebars DOM updates with sig caching)
+games/Acca/ui/MoneyAnimations.js              (cash-delta flashes + coin-burst sparkles)
+games/Acca/maps/default.json                  (rewritten via heredoc; bash mount truncated the cp)
+games/Acca/systems/DistrictSystem.js          (rewritten via heredoc; same as v1)
+games/Acca/systems/PopulationSystem.js        (rewritten via heredoc; same as v1)
 ```
 
 Files copied unchanged from v1: `launch.js`, `MapCreator/`, all of `sprites/`, `themes/`, `utils/`, `maps/denmark.json`, and the four `systems/*.js` (`MarketSystem`, `ChanceSystem`, `TradeSystem`, `AccaSave`).

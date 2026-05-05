@@ -1,4 +1,4 @@
-// games/Acca2/AccaGame.js
+// games/Acca/AccaGame.js
 // Top-level orchestrator. Holds the engine, the menus, the players & cells,
 // and instantiates every manager / system / renderer. The heavy lifting lives
 // in the focused modules under core/, managers/, render/, ui/, systems/.
@@ -43,6 +43,7 @@
       this.cooperativeThreat   = 0;
       this.turnCounter         = 0;
       this._betweenTurnsTimer  = 0;
+      this._zoomOutTimer       = 0;   // seconds until camera zooms out after end-of-turn
 
       // Camera state (zoom + pan).
       this._camera = {
@@ -223,8 +224,14 @@
     }
 
     _beginBetweenTurns() {
-      this.camera.zoomOutToBoard();
-      this._betweenTurnsTimer = this.cfg.camera.betweenTurnsHold;
+      // Hold the camera zoomed in long enough for money animations to play out,
+      // then zoom out and hold the board view for betweenTurnsHold seconds.
+      // MoneyAnimations.FLOAT_LIFETIME_MS is the floating-text lifetime (ms).
+      const animHoldSec = (A.MoneyAnimations && A.MoneyAnimations.FLOAT_LIFETIME_MS)
+        ? A.MoneyAnimations.FLOAT_LIFETIME_MS / 1000
+        : 1.7;
+      this._zoomOutTimer      = animHoldSec;
+      this._betweenTurnsTimer = animHoldSec + this.cfg.camera.betweenTurnsHold;
     }
 
     _advanceToNextPlayer() {
@@ -261,6 +268,11 @@
         case A.GAME_STATE.PLAYING:
           if (this.turn.stage === A.TURN_STAGE.BETWEEN) {
             this._betweenTurnsTimer -= dt;
+            // Zoom out only after the money animation window has elapsed.
+            if (this._zoomOutTimer > 0) {
+              this._zoomOutTimer -= dt;
+              if (this._zoomOutTimer <= 0) this.camera.zoomOutToBoard();
+            }
             if (this._betweenTurnsTimer <= 0) {
               this._advanceToNextPlayer();
             }
@@ -317,7 +329,7 @@
       const mapRes  = await fetch(mapPath);
       GF.mapData    = await mapRes.json();
     } catch (e) {
-      console.error('[Acca2] Failed to load map data:', e);
+      console.error('[Acca] Failed to load map data:', e);
     }
 
     const game = new AccaGame();
