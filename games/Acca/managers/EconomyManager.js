@@ -98,6 +98,18 @@
             if (d) d.population += cfg.housePopContribution;
           }
           player.money += cfg.houseOwnerIncome || 18;
+          // Mayor of this house's district auto-collects the per-house tax
+          // (formerly a manual menu action on landing). Transferring directly
+          // matches the rule that menus must never be used to collect money.
+          if (s.cell && s.cell.district
+              && player.districtsMayoredOf
+              && player.districtsMayoredOf.has(s.cell.district)) {
+            const houseTax = cfg.houseTaxIfMayor || 0;
+            if (houseTax > 0) {
+              player.money += houseTax;
+              game.log(`${player.name} auto-collects $${houseTax} mayor tax from House in ${s.cell.district}.`);
+            }
+          }
         }
         if (s.type === 'shop')          player.money += 20;
         if (s.type === 'toll_gate')     player.money += cfg.tollOwnerIncome       || 8;

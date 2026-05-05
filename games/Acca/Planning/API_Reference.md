@@ -119,7 +119,7 @@ A.TURN_STAGE = { TURN_START, ROLL, MOVE, CONFIRM_LAND, LANDING, LAND_PROMPT, BET
 
 ```js
 class Cell {
-  constructor(id, x, y, type, district, sprite)
+  constructor(id, x, y, type, district, sprite, subType)
   neighbors()                  // → _neighbors[]
 }
 ```
@@ -217,10 +217,15 @@ class StructureManager {
   ownerOptionsFor(structure, player, onDone)     // → menu options[]
   visitorEffect(structure, player, onDone)       // → menu options[] | null (also applies rent)
   passThroughEffect(cell, player)                // toll-gate pass-through
+  expectedVisitorRent(type, baseValue)           // → number (preview for the Build menu; 0 for non-rent types)
 }
 ```
 
 Encodes per-type behaviour for `shop`, `toll_gate`, `teleporter`, `house`, `factory`, `police_station`, `vault`. See `05_StructuresAndBuildings.md`.
+
+Owner action surface (returned by `ownerOptionsFor`): shop → `Invest`; house → `Collect taxes` (mayor only) and `Renovate`; factory → `Collect output`; teleporter → `Teleport to <other terminal>`; vault → deposit/withdraw/upgrade rows; toll_gate → `Collect tolls (+$accrued)` or empty-cup line; police_station → passive. Every menu ends with a `Continue` row that fires `onDone()`.
+
+Visitor follow-up surface (returned by `_offerTakeoverOnLand`, called after `visitorEffect`): `Buy from <owner> ($cost = round(currentValue × takeoverMultiplier))`, `Sabotage ($cost + oilCost oil, duration turns)` — both gated by `TradeSystem.canTakeover` / `canSabotage`, and **`Continue`**.
 
 ### `managers/EconomyManager.js` — `A.EconomyManager`
 
@@ -276,6 +281,10 @@ class TurnManager {
 Public fields: `stage` (TURN_STAGE), `player`.
 
 `TurnManager` hosts every menu in v2 (start, manage, mayor, portfolio, trade, market, build, owner-options, visitor-effect, takeover, chance result). The menu construction lives in dedicated private methods inside this class; each one returns when the user picks a terminal action that calls back to advance state.
+
+Landing dispatch (`_handleLanding`) handles `bank` (+$200), `chance` (random event), `buildable` (build menu / owner-options / visitor-effect), `power_plant` (+3 electricity), `well` (+3 water), `mine` (+3 of `cell.subType` resource — `iron` → steel), `market` (opens market UI), and `structure` (routes through buildable if a `PlayerStructure` is present, otherwise logs a flavour line and ends the turn). A near-miss check fires a chance event with probability `cfg.chance.nearMissProb` when the player lands on a non-chance cell adjacent to a chance cell — the event is logged explicitly to make the substitution visible.
+
+The portfolio menu (`_showPortfolioStructure`) reuses `StructureManager.ownerOptionsFor` so the action surface matches landing exactly; only the done-callback differs (return to portfolio list vs end turn).
 
 ---
 

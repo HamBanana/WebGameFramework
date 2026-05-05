@@ -51,8 +51,15 @@
 
       cells.forEach(c => {
         const { sprite, gameType } = this._resolveSprite(c);
-        const cell = new A.Cell(c.id, c.x, c.y, gameType, c.district, sprite);
+        const cell = new A.Cell(c.id, c.x, c.y, gameType, c.district, sprite, c.subType);
         cell.animator = game.sprites.createAnimator(sprite, 'idle');
+        // Pre-placed neutral structure cells: stash the structureType on the
+        // cell so TurnManager can label it on landing without consulting
+        // GF.mapData. cell.structure remains null (these are not owned by
+        // any player and don't participate in build/sell flows).
+        if (gameType === 'structure' && c.structureType) {
+          cell.structureType = c.structureType;
+        }
         game.cells.push(cell);
         cellById.set(c.id, cell);
       });

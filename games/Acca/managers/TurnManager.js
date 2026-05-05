@@ -88,45 +88,88 @@
       }
     }
 
-    // ── Start-of-turn menu ────────────────────────────────────────────────
+    // ── Start-of-turn menu (horizontal bottom bar) ───────────────────────
     _showStartMenu() {
       const p    = this.player;
-      const game = this.game;
       const opts = [
-        { label: 'Roll',   action: () => this.enter(A.TURN_STAGE.ROLL) },
-        { label: 'Manage', action: () => this._showManageMenu() },
+        { label: 'Roll',               action: () => this.enter(A.TURN_STAGE.ROLL) },
+        { label: 'Manage properties',  action: () => this._showManageMenu() },
+        { label: 'Sell assets',        action: () => this._showSellAssetsMenu() },
+        { label: 'Other',              action: () => this._showOtherMenu() },
       ];
+      this.menu.show(`${p.name}  •  $${p.money}`, opts, null, { layout: 'horizontal' });
+    }
+
+    // ── Other submenu ─────────────────────────────────────────────────────
+    _showOtherMenu() {
+      const p    = this.player;
+      const game = this.game;
+      const opts = [];
       if (game.cfg.mode !== 'cooperative' && game.players.length > 1) {
         opts.push({ label: 'Trade / Hostile actions', action: () => this._showTradeRootMenu() });
       }
-      opts.push({ label: 'Market', action: () => this._showMarketMenu() });
-      // Save / Load (Load is greyed out when no slot exists).
       opts.push({ label: 'Save game', action: () => {
         if (GF.Acca && GF.Acca.Save) {
           if (GF.Acca.Save.save(game)) game.log('Game saved.');
           else game.log('Save failed.');
         }
-        this._showStartMenu();
+        this._showOtherMenu();
       } });
       const hasSave = !!(GF.Acca && GF.Acca.Save && GF.Acca.Save.exists());
       opts.push({
         label: hasSave ? 'Load game' : 'Load game  — no save slot',
         _disabled: !hasSave,
         action: () => {
-          if (!hasSave) { this._showStartMenu(); return; }
+          if (!hasSave) { this._showOtherMenu(); return; }
           if (GF.Acca.Save.load(game)) {
             game.log('Game loaded.');
             this.player = game.currentPlayer;
             this._showStartMenu();
           } else {
             game.log('Load failed.');
-            this._showStartMenu();
+            this._showOtherMenu();
           }
         },
       });
       opts.push({ label: 'Game log', action: () => this._showGameLog(0) });
       opts.push({ label: 'Pass turn', action: () => this.enter(A.TURN_STAGE.END_TURN) });
-      this.menu.show(`${p.name}'s turn  ($${p.money})`, opts);
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      this.menu.show('Other', opts, `${p.name}  •  $${p.money}`);
+    }
+
+    // ── Sell assets submenu ───────────────────────────────────────────────
+    _showSellAssetsMenu() {
+      const p    = this.player;
+      const game = this.game;
+      const back = () => this._showStartMenu();
+
+      if (p.ownedStructures.length === 0) {
+        this.menu.show('Sell assets', [
+          { label: '(no structures to sell)', action: back },
+        ], 'You own no properties.');
+        return;
+      }
+
+      const opts = p.ownedStructures.map(s => {
+        const salePrice = Math.round(s.currentValue * 0.5);
+        return {
+          label: `${s.cell.district} · ${this._typeLabel(s.type)} · val $${s.currentValue} → sell $${salePrice}`,
+          action: () => {
+            p.addMoney(salePrice);
+            const idx = p.ownedStructures.indexOf(s);
+            if (idx !== -1) p.ownedStructures.splice(idx, 1);
+            s.cell.structure = null;
+            s.cell.sprite    = null;
+            s.cell.animator  = null;
+            game.log(`${p.name} sold ${this._typeLabel(s.type)} in ${s.cell.district} for $${salePrice}.`);
+            if (game.districtSys) game.districtSys.recomputeMayor(s.cell.district);
+            game.engine.events.emit('property:sold', { structure: s, ownerIndex: p.index });
+            this._showSellAssetsMenu();
+          },
+        };
+      });
+      opts.push({ label: 'Back', action: back });
+      this.menu.show('Sell assets', opts, 'Sale price: 50% of current value  ·  Cannot be undone');
     }
 
     /** Paginated game-log viewer. Shows 14 entries per page in reverse
@@ -154,7 +197,7 @@
       if (safePage > 0) {
         opts.push({ label: `Previous page (${safePage}/${totalPages})`, action: () => this._showGameLog(safePage - 1) });
       }
-      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      opts.push({ label: 'Back', action: () => this._showOtherMenu() });
       this.menu.show('Game log', opts,
         `Page ${safePage + 1} of ${totalPages}  ·  ${all.length} entries (newest first)`);
     }
@@ -240,11 +283,16 @@
                ` · cell ${s.cell.id}` +
                (s.sabotagedUntilTurn > game.turnCounter ? ' (sabotaged)' : ''),
         meta: { cell: s.cell, structure: s },
-        action: back,
+        // Confirming a row opens the standard owner-options menu for that
+        // structure (Invest / Renovate / Deposit / Upgrade / Collect tolls / …)
+        // — the same menu shown when landing on the cell in person, but
+        // without ending the turn after the action.
+        action: () => this._showPortfolioStructure(s),
       }));
       if (opts.length === 0) opts.push({ label: '(no structures)', action: back });
       opts.push({ label: 'Back', action: back });
-      this.menu.show('Your structures', opts, 'Highlight a property to focus the camera on it.', {
+      this.menu.show('Your structures', opts,
+        'Confirm a property to manage it; arrows to spotlight on the board.', {
         onIndexChange: (opt) => {
           if (opt && opt.meta && opt.meta.cell) {
             game.camera.spotlightOnCell(opt.meta.cell);
@@ -256,6 +304,30 @@
       });
     }
 
+    /** Inline owner-options menu for a structure managed from the portfolio.
+     *  Reuses StructureManager.ownerOptionsFor so the action surface is
+     *  identical to landing on the cell — the only difference is that the
+     *  done-callback returns to the portfolio list rather than ending the
+     *  turn (which would be punitive for the player just browsing). */
+    _showPortfolioStructure(structure) {
+      const game = this.game;
+      const p    = this.player;
+      const onDone = () => this._showPortfolioMenu();
+      const opts = game.structures.ownerOptionsFor(structure, p, onDone);
+      // Replace the implicit Continue at the tail with explicit Back so the
+      // origin (portfolio) is unambiguous.
+      if (opts.length > 0 && opts[opts.length - 1].label === 'Continue') {
+        opts[opts.length - 1] = { label: 'Back', action: onDone };
+      } else {
+        opts.push({ label: 'Back', action: onDone });
+      }
+      const subtitle = `Cell ${structure.cell.id} · ${structure.cell.district || '—'}` +
+        ` · Value $${structure.currentValue}` +
+        (structure.sabotagedUntilTurn > game.turnCounter ? '  (sabotaged)' : '');
+      this.menu.show(`Your ${this._typeLabel(structure.type)}`, opts, subtitle);
+      game.camera.spotlightOnCell(structure.cell);
+    }
+
     // ── Trade / Hostile root ──────────────────────────────────────────────
     // Hostile takeover is only available by *landing* on a property
     // (handled in _offerTakeoverOnLand) — not from this menu.
@@ -263,7 +335,7 @@
       const opts = [
         { label: 'Trade with player',     action: () => this._showTradeTargetMenu() },
         { label: 'Sabotage a structure',  action: () => this._showSabotageTargetMenu() },
-        { label: 'Back',                  action: () => this._showStartMenu() },
+        { label: 'Back',                  action: () => this._showOtherMenu() },
       ];
       this.menu.show('Trade / Hostile', opts);
     }
@@ -341,7 +413,7 @@
         label: `${r}  buy $${M.priceOf(r)}  sell $${M.sellPriceOf(r)}  (you: ${p.resources[r] || 0})`,
         action: () => this._showMarketResource(r),
       }));
-      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      opts.push({ label: 'Done', action: () => this.enter(A.TURN_STAGE.END_TURN) });
       this.menu.show('Market', opts, `Cash $${p.money}`);
     }
 
@@ -389,6 +461,10 @@
         const cfg = this.game.cfg.chance || {};
         const nearMissProb = cfg.nearMissProb || 0;
         if (nearChance && Math.random() < nearMissProb) {
+          // Near-miss: a chance event fires even though the player didn't
+          // land on a chance cell. Log it explicitly so players understand
+          // why the cell's normal landing effect was bypassed.
+          this.game.log(`Near-miss chance — adjacent to a Chance cell (${Math.round(nearMissProb * 100)}% chance).`);
           this._handleChance();
           return;
         }
@@ -413,8 +489,10 @@
           break;
         case 'mine': {
           // mine.subType ∈ { coal, iron, oil } — iron mines grant steel.
-          const meta = (GF.mapData && GF.mapData.cells || []).find(c => c.id === cell.id) || {};
-          const sub = meta.subType || 'coal';
+          // Read straight off the live Cell (BoardLoader copies subType from
+          // map JSON onto the Cell at load time); the GF.mapData lookup the
+          // earlier implementation used was fragile across save/load.
+          const sub = cell.subType || 'coal';
           const resource = (sub === 'iron') ? 'steel' : sub;
           this._grantResource(cell, resource, 3, `${sub.charAt(0).toUpperCase()}${sub.slice(1)} Mine`);
           break;
@@ -425,6 +503,23 @@
           this._showMarketMenu();
           this.stage = A.TURN_STAGE.LAND_PROMPT;
           break;
+        case 'structure': {
+          // Pre-placed neutral structure (map-defined). If the cell happens
+          // to carry a real PlayerStructure (e.g. seeded by a scenario),
+          // route through the buildable handler so the standard
+          // owner/visitor flows kick in. Otherwise treat as a flavour cell
+          // — log the structure type and end the turn safely.
+          if (cell.structure) {
+            this._handleBuildable(cell);
+          } else {
+            const label = cell.structureType
+              ? this._typeLabel(cell.structureType)
+              : 'fixed structure';
+            this.game.log(`${this.player.name} stops at a neutral ${label}.`);
+            this.enter(A.TURN_STAGE.END_TURN);
+          }
+          break;
+        }
         default:
           this.enter(A.TURN_STAGE.END_TURN);
           break;
@@ -484,25 +579,52 @@
     }
 
     /** Offer the landing player the option to take over the structure they
-     *  just landed on for 5× current value. */
+     *  just landed on for 5× current value, or to sabotage it (subject to the
+     *  usual cost / oil / police-shield / cooldown rules in TradeSystem). */
     _offerTakeoverOnLand(structure) {
       const game  = this.game;
       const p     = this.player;
       const owner = game.players[structure.ownerIndex];
-      const cost  = Math.round(structure.currentValue * game.cfg.property.takeoverMultiplier);
-      const can   = p.money >= cost;
-      const label = can
+      const cfgSab = game.cfg.sabotage;
+
+      // Takeover row.
+      const cost = Math.round(structure.currentValue * game.cfg.property.takeoverMultiplier);
+      const can  = p.money >= cost;
+      const takeoverLabel = can
         ? `Buy from ${owner.name}  ($${cost} = 5× value)`
         : `Buy from ${owner.name}  ($${cost})  — cannot afford`;
+
+      // Sabotage row — only meaningful in competitive multiplayer; reuse
+      // TradeSystem.canSabotage so we get the same affordability/oil/police
+      // shield/cooldown checks as the menu-driven sabotage path.
+      const sabCheck = (game.cfg.mode !== 'cooperative' && game.tradeSys)
+        ? game.tradeSys.canSabotage(p, structure, game.turnCounter)
+        : { ok: false, reason: 'unavailable' };
+      const sabLabel = sabCheck.ok
+        ? `Sabotage  ($${cfgSab.cost} + ${cfgSab.oilCost} oil, ${cfgSab.duration} turns)`
+        : `Sabotage — ${sabCheck.reason}`;
+
       const opts = [
         {
-          label,
+          label: takeoverLabel,
           action: () => {
             if (!can) { this.enter(A.TURN_STAGE.END_TURN); return; }
             const r = game.tradeSys.takeover(p, structure, game.players, game.turnCounter);
             game.log(r.ok
               ? `${p.name} bought the ${this._typeLabel(structure.type)} from ${owner.name} for $${r.cost}.`
               : `Purchase refused: ${r.reason}.`);
+            this.enter(A.TURN_STAGE.END_TURN);
+          },
+        },
+        {
+          label: sabLabel,
+          _disabled: !sabCheck.ok,
+          action: () => {
+            if (!sabCheck.ok) { this.enter(A.TURN_STAGE.END_TURN); return; }
+            const r = game.tradeSys.sabotage(p, structure, game.players, game.turnCounter);
+            game.log(r.ok
+              ? `${p.name} sabotaged ${owner.name}'s ${this._typeLabel(structure.type)} for ${cfgSab.duration} turns.`
+              : `Sabotage refused: ${r.reason}.`);
             this.enter(A.TURN_STAGE.END_TURN);
           },
         },
@@ -533,10 +655,30 @@
       if (canAffordAnything) {
         sorted.forEach(entry => {
           const can = p.money >= entry.cost;
+          // Preview the visitor rent (or other earning mechanism) so the
+          // buy decision isn't blind. Falls back to a sensible per-type
+          // hint for structures that don't charge rent.
+          const rent = game.structures.expectedVisitorRent(entry.type, entry.cost);
+          let hint;
+          if (rent > 0) {
+            hint = `rent ~$${rent}/visit`;
+          } else if (entry.type === 'toll_gate') {
+            hint = `+$${cfg.tollIncrement}/pass-through`;
+          } else if (entry.type === 'teleporter') {
+            hint = `$${cfg.teleportFee}/visitor teleport`;
+          } else if (entry.type === 'police_station') {
+            hint = `+$${cfg.policeOwnerIncome}/turn, sabotage shield`;
+          } else if (entry.type === 'vault') {
+            hint = `+$${cfg.vaultOwnerIncome}/turn + 1% interest`;
+          } else {
+            hint = '';
+          }
+          const cost = `Build ${entry.label} ($${entry.cost})`;
+          const tail = hint ? ` — ${hint}` : '';
           opts.push({
             label: can
-              ? `Build ${entry.label} ($${entry.cost})`
-              : `Build ${entry.label} ($${entry.cost})  — need $${entry.cost - p.money}`,
+              ? `${cost}${tail}`
+              : `${cost}  — need $${entry.cost - p.money}`,
             _disabled: !can,
             action: () => {
               if (!can) { this._showBuildMenu(cell); return; }

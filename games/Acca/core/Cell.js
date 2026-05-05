@@ -9,11 +9,12 @@
   const A = GF.Acca = GF.Acca || {};
 
   class Cell {
-    constructor(id, x, y, type, district, sprite) {
+    constructor(id, x, y, type, district, sprite, subType) {
       this.id        = id;
       this.x         = x;
       this.y         = y;
       this.type      = type;     // 'bank' | 'buildable' | 'chance' | 'empty' | …
+      this.subType   = subType || null;  // e.g. 'coal' | 'iron' | 'oil' for mines
       this.district  = district;
       this.sprite    = sprite;
 

@@ -77,7 +77,9 @@
           ctx.strokeRect(x - size / 2 + 4, y - size / 2 + 4, size - 8, size - 8);
         }
 
-        // Toll-gate accrued indicator.
+        // Toll-gate per-pass fee indicator. The label shows what the next
+        // visitor will pay (paid directly to the owner on pass-through —
+        // there is no cup to collect from).
         if (cell.structure && cell.structure.type === 'toll_gate' && cell.structure.tollAccrued > 0) {
           game.ui.drawText(ctx, `$${cell.structure.tollAccrued}`, x, y + size / 2 - 4, {
             font: 'bold 10px monospace', color: '#ffe7c0', align: 'center', shadow: true,

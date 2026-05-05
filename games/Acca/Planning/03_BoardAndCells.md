@@ -6,15 +6,15 @@ The cell types known to v2 (used by sprite registrations, `BoardLoader`, `TurnMa
 
 | Type           | Sprite name           | Purchasable / buildable? | OnLand effect |
 |----------------|------------------------|--------------------------|---------------|
-| `bank`         | `cell_start`           | No                       | Spawn cell at game start. Pass-through and landing have no enforced effect in v2 (room for a passive bank bonus). |
+| `bank`         | `cell_start`           | No                       | Spawn cell at game start. **Landing pays $200** (a passive stipend, deliberately small). Pass-through is a no-op. |
 | `buildable`    | `cell_property`        | **Yes**                  | If empty, prompt to build a structure. If a structure exists, dispatch to `StructureManager.ownerOptionsFor` (own) or `visitorEffect` (visitor). |
 | `empty`        | `cell_normal`          | Yes (treated as buildable) | Same as `buildable`. Used for unthemed lots. |
 | `chance`       | `cell_chance`          | No                       | Draw a chance event from the pool via `ChanceSystem`. |
 | `market`       | `cell_market`          | No                       | Open the market menu (buy/sell resources). |
-| `power_plant`  | `cell_power_plant`     | No                       | Resource cell — landing yields a small electricity bonus or invokes a special prompt. |
-| `well`         | `cell_well`            | No                       | Resource cell — landing yields water. |
-| `mine`         | `cell_mine`            | No (subType: `coal` / `iron`) | Resource cell — landing yields coal or steel ore depending on `subType`. |
-| `structure`    | (varies per `structureType`) | No (pre-placed) | Pre-built non-player structure (e.g. a fixed shop placed by the map). |
+| `power_plant`  | `cell_power_plant`     | No                       | Resource cell — landing yields +3 electricity. |
+| `well`         | `cell_well`            | No                       | Resource cell — landing yields +3 water. |
+| `mine`         | `cell_mine`            | No (subType: `coal` / `iron` / `oil`) | Resource cell — landing yields +3 of the matching resource (`iron` → steel). `subType` is read from the live `Cell` (set by `BoardLoader` from the map JSON). |
+| `structure`    | (varies per `structureType`) | No (pre-placed) | Pre-built non-player structure. If the cell carries a `PlayerStructure` instance the regular owner/visitor flow runs; otherwise the landing is a flavour-only stop and the turn ends safely. |
 
 Cell type is set in the map JSON and never inferred from neighborhood.
 

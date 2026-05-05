@@ -83,8 +83,13 @@
       }
     }
 
-    /** Convert a player's token world position to page (screen) coordinates,
-     *  matching the camera transform used by BoardRenderer.drawWorld. */
+    /** Convert a player's token world position to viewport coordinates,
+     *  matching the camera transform used by BoardRenderer.drawWorld.
+     *
+     *  The canvas is rendered at an internal resolution (cfg.engine.width ×
+     *  cfg.engine.height) but displayed at a different CSS size when the engine
+     *  scales it to fit the container. We must account for that ratio so the
+     *  fixed-position DOM overlays land on the token pixel-perfectly. */
     _tokenScreenPos(player) {
       const game = this.game;
       if (!player.currentCell || !game._toPixel) return null;
@@ -98,11 +103,18 @@
       // World → canvas-local pixel (same transform as BoardRenderer.drawWorld).
       const cx  = (wx - cam.cx) * cam.scale + W / 2;
       const cy  = (wy - cam.cy) * cam.scale + H / 2;
-      // Canvas-local → page coordinates.
+      // Canvas-local → viewport coordinates.
+      // getBoundingClientRect() gives the *CSS* size, which may differ from the
+      // internal pixel dimensions when Engine._setupScaling() has applied a
+      // display scale factor. Normalise cx/cy into 0-1 fractions first, then
+      // map into CSS pixels.
       const canvasEl = game.engine && game.engine.canvas;
       if (!canvasEl) return { x: cx, y: cy };
       const rect = canvasEl.getBoundingClientRect();
-      return { x: rect.left + cx, y: rect.top + cy };
+      return {
+        x: rect.left + cx * (rect.width  / W),
+        y: rect.top  + cy * (rect.height / H),
+      };
     }
 
     /** Absolute-positioned "+$X" / "-$X" element that floats up and fades.

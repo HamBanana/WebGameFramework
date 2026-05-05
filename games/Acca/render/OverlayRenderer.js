@@ -45,7 +45,64 @@
     drawMenuOverlay(ctx, W, H) {
       const game = this.game;
       if (!game.menu.visible) return;
-      const UI = game.ui;
+      if (game.menu.layout === 'horizontal') {
+        this._drawHorizontalBar(ctx, W, H);
+      } else {
+        this._drawVerticalPanel(ctx, W, H);
+      }
+    }
+
+    _drawHorizontalBar(ctx, W, H) {
+      const game  = this.game;
+      const UI    = game.ui;
+      const opts  = game.menu.options;
+      const barH  = 58;
+      const barY  = H - barH;
+
+      // Full-width background bar
+      UI.drawPanel(ctx, 0, barY, W, barH, {
+        bgColor: 'rgba(8,12,22,0.96)',
+        borderColor: '#7796c4', borderWidth: 2, radius: 0,
+      });
+
+      // Tabs — centred in the bar
+      const tabPad   = 28;
+      const measured = opts.map(o => {
+        ctx.font = '13px monospace';
+        return ctx.measureText(o.label).width + tabPad * 2;
+      });
+      const totalW  = measured.reduce((a, b) => a + b, 0);
+      let   tabX    = Math.round((W - totalW) / 2);
+
+      opts.forEach((opt, i) => {
+        const tw       = measured[i];
+        const selected = i === game.menu.index;
+        const disabled = !!opt._disabled;
+
+        if (selected) {
+          // Highlight background
+          ctx.fillStyle = disabled ? 'rgba(80,80,80,0.35)' : 'rgba(100,150,220,0.28)';
+          ctx.fillRect(tabX + 2, barY + 5, tw - 4, barH - 10);
+          // Top accent line
+          ctx.fillStyle = disabled ? '#9aa0a8' : '#7796c4';
+          ctx.fillRect(tabX + 2, barY + 5, tw - 4, 3);
+        }
+
+        const color = disabled
+          ? (selected ? '#9aa0a8' : '#55606a')
+          : (selected ? '#ffffff'  : '#bcd0e8');
+        UI.drawText(ctx, opt.label, tabX + tw / 2, barY + barH / 2,
+          { font: selected ? 'bold 13px monospace' : '13px monospace',
+            color, align: 'center', baseline: 'middle' });
+
+        tabX += tw;
+      });
+
+    }
+
+    _drawVerticalPanel(ctx, W, H) {
+      const game = this.game;
+      const UI   = game.ui;
       const opts = game.menu.options;
       const optH = 24;
       const w    = 320;

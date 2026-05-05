@@ -55,15 +55,33 @@
           break;
         }
         case 'house': {
+          // House taxes (mayor) are now auto-deposited at start-of-turn by
+          // EconomyManager._runProduction — no manual "Collect taxes" menu.
+          // Show a brief informational line so the player can confirm the
+          // mayor bonus is active for this property.
           if (player.districtsMayoredOf.has(structure.cell.district)) {
             const tax = cfg.houseTaxIfMayor;
-            opts.push({ label: `Collect taxes (+$${tax})`, action: () => {
-              player.addMoney(tax);
-              game.log(`${player.name} collected $${tax} in taxes from their House.`);
-              onDone();
-            } });
+            opts.push({ label: `Mayor tax (+$${tax}/turn) auto-collected`, action: onDone });
           } else {
             opts.push({ label: `Need mayor of ${structure.cell.district} to tax`, action: onDone });
+          }
+          // Renovate — mirrors Shop's invest pattern. Bumps currentValue by
+          // houseRenovateStep up to a per-district cap, raising the visitor
+          // rent (which scales with currentValue).
+          const cap  = this._houseMaxCapital(structure, player);
+          const step = cfg.houseRenovateStep || 100;
+          const room = cap - structure.currentValue;
+          if (room >= step && player.money >= step) {
+            opts.push({ label: `Renovate $${step}  (val→$${structure.currentValue + step}/${cap})`,
+              action: () => {
+                player.addMoney(-step);
+                structure.currentValue += step;
+                game.log(`${player.name} renovated their House for $${step}.`);
+                onDone();
+              } });
+          } else {
+            opts.push({ label: `Renovate cap: $${cap}  Current: $${structure.currentValue}`,
+              action: onDone });
           }
           break;
         }
@@ -98,7 +116,20 @@
           this._appendVaultOptions(structure, player, onDone, opts);
           break;
         }
-        case 'toll_gate':
+        case 'toll_gate': {
+          // Toll receipts are paid to the owner immediately on each
+          // pass-through (see passThroughEffect). There's no cup to collect
+          // from on landing — show a passive line so the owner sees the
+          // current toll amount and that it's auto-deposited.
+          const fee = structure.tollAccrued || 0;
+          opts.push({
+            label: fee > 0
+              ? `Toll auto-collected (+$${fee}/pass-through)`
+              : `Toll auto-collected (next pass: free)`,
+            action: onDone,
+          });
+          break;
+        }
         case 'police_station':
           opts.push({ label: '(passive — owner takes no action)', action: onDone });
           break;
@@ -125,13 +156,20 @@
           return null;
         }
         case 'house': {
-          const fee = Math.max(1, Math.round(structure.baseValue * cfg.houseRentRate));
+          // Rent scales with currentValue so the Renovate owner action
+          // actually moves the visitor-rent dial.
+          const fee = Math.max(1, Math.round(structure.currentValue * cfg.houseRentRate));
           this._payRent(player, owner, fee, 'rent a House room');
           onDone();
           return null;
         }
         case 'factory': {
-          const fee = Math.max(1, Math.round(structure.baseValue * cfg.houseRentRate));
+          // Factory rent uses the property baseRentRate (0.15) per planning
+          // doc §5.5 — keeps factories distinct from houses (which use the
+          // higher houseRentRate of 0.25) and rewards investment indirectly
+          // through the per-turn resource production.
+          const rate = (game.cfg.property && game.cfg.property.baseRentRate) || 0.15;
+          const fee  = Math.max(1, Math.round(structure.currentValue * rate));
           this._payRent(player, owner, fee, 'tour a Factory');
           onDone();
           return null;
@@ -174,7 +212,12 @@
       return null;
     }
 
-    /** Toll-gate pass-through effect — fires on every step into the cell. */
+    /** Toll-gate pass-through effect — fires on every step into the cell.
+     *  The current per-pass toll (`tollAccrued`) is transferred to the owner
+     *  immediately. The fee then grows by `tollIncrement` for the next visitor
+     *  (popular routes get more expensive). There is no "cup" — the owner
+     *  never has to land on the gate to collect; receipts hit their wallet
+     *  the moment a visitor walks through. */
     passThroughEffect(cell, player) {
       if (!cell.structure || cell.structure.type !== 'toll_gate') return;
       const s = cell.structure;
@@ -267,6 +310,29 @@
       const cfg = this.game.cfg.structures;
       const sameDistrict = player.structuresInDistrict(structure.cell.district);
       return cfg.shopBaseCap + sameDistrict * cfg.shopCapPerStructure;
+    }
+
+    /** Expected visitor rent for a freshly-built structure of `type` with the
+     *  given baseValue. Returns 0 for structures that don't charge rent
+     *  (toll_gate / police_station / vault / teleporter — those have their own
+     *  pricing models). Used by the Build menu to preview earnings. */
+    expectedVisitorRent(type, baseValue) {
+      const cfg = this.game.cfg.structures;
+      const baseRent = (this.game.cfg.property && this.game.cfg.property.baseRentRate) || 0.15;
+      switch (type) {
+        case 'shop':    return Math.max(1, Math.round(baseValue * cfg.shopVisitRate));
+        case 'house':   return Math.max(1, Math.round(baseValue * cfg.houseRentRate));
+        case 'factory': return Math.max(1, Math.round(baseValue * baseRent));
+        default:        return 0;
+      }
+    }
+
+    _houseMaxCapital(structure, player) {
+      const cfg = this.game.cfg.structures;
+      const sameDistrict = player.structuresInDistrict(structure.cell.district);
+      const base = (cfg.houseBaseCap != null) ? cfg.houseBaseCap : 700;
+      const per  = (cfg.houseCapPerStructure != null) ? cfg.houseCapPerStructure : 150;
+      return base + sameDistrict * per;
     }
 
     _factoryOutput(player) {
