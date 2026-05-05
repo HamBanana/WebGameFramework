@@ -1,10 +1,10 @@
-# API Reference — Acca v2
+# API Reference — Acca
 
-Per-file class / method reference for every source file under `games/Acca2/`. Generated from the v2 source as of 2026-05-04.
+Per-file class / method reference for every source file under `games/Acca/`. Generated from the source as of 2026-05-04.
 
 Conventions:
 
-- "Exports" are entries attached to `GF.Acca` (alias `A`) or `GF.GAME_CONFIG` or `GF.sprites`. v2 does not use ES modules.
+- "Exports" are entries attached to `GF.Acca` (alias `A`) or `GF.GAME_CONFIG` or `GF.sprites`. not currently use ES modules.
 - Classes are listed with public fields (those referenced from other files) and public methods. Internal helpers prefixed with `_` are omitted unless they're part of the contract.
 - "Listens"/"Emits" name events on `engine.events`.
 
@@ -12,18 +12,18 @@ Conventions:
 
 ## Top-level
 
-### `games/Acca2/index.html`
+### `games/Acca/index.html`
 
 The page scaffold. Declares the topbar (`#topbar`), district sidebar (`#districtSidebar`), canvas (`#gameCanvas`), and right sidebar (`#sidebar`) with notifications and player list panels. Links the three CSS files and loads scripts in the order specified in `17_FileStructure.md` §17.1.
 
-### `games/Acca2/game.json`
+### `games/Acca/game.json`
 
 Launcher metadata + per-launch config options.
 
 ```json
 {
-  "id":    "Acca2",
-  "title": "Acca v2",
+  "id":    "Acca",
+  "title": "Acca v0.1",
   "icon":  "🏙️",
   "color": "#4da6ff",
   "tags":  ["BOARD GAME", "2–4 PLAYERS", "STRATEGY"],
@@ -37,7 +37,7 @@ Launcher metadata + per-launch config options.
 }
 ```
 
-### `games/Acca2/launch.js`
+### `games/Acca/launch.js`
 
 Standalone Node dev server. Serves the game directory at `/` and the framework directory at `/framework/`.
 
@@ -45,11 +45,11 @@ Standalone Node dev server. Serves the game directory at `/` and the framework d
 - `node launch.js 8080` — custom port.
 - Opens the browser automatically (`start` / `open` / `xdg-open`).
 
-### `games/Acca2/config.js`
+### `games/Acca/config.js`
 
-Defines `GF.GAME_CONFIG` — the entire game configuration object (see `16_DataModels.md` §16.1). Listens for `GF:ready` and calls `GF.applyLauncherConfig('Acca2')` to merge launcher overrides.
+Defines `GF.GAME_CONFIG` — the entire game configuration object (see `16_DataModels.md` §16.1). Listens for `GF:ready` and calls `GF.applyLauncherConfig('Acca')` to merge launcher overrides.
 
-### `games/Acca2/AccaGame.js`
+### `games/Acca/AccaGame.js`
 
 Top-level orchestrator. Exports `A.AccaGame`.
 
@@ -187,7 +187,7 @@ class MovementController {
   update()                       // arrow-key driven step
   stepTo(target)                 // explicit step (used by chance teleport)
   cancel()
-  selectedRoad()                 // legacy — returns null in v2
+  selectedRoad()                 // legacy — returns null in Acca
 }
 ```
 
@@ -275,7 +275,7 @@ class TurnManager {
 
 Public fields: `stage` (TURN_STAGE), `player`.
 
-`TurnManager` hosts every menu in v2 (start, manage, mayor, portfolio, trade, market, build, owner-options, visitor-effect, takeover, chance result). The menu construction lives in dedicated private methods inside this class; each one returns when the user picks a terminal action that calls back to advance state.
+`TurnManager` hosts every menu in Acca (start, manage, mayor, portfolio, trade, market, build, owner-options, visitor-effect, takeover, chance result). The menu construction lives in dedicated private methods inside this class; each one returns when the user picks a terminal action that calls back to advance state.
 
 ---
 
@@ -461,7 +461,7 @@ Each file calls `GF.sprites = GF.sprites || {}; Object.assign(GF.sprites, { ... 
 | `sprites/cells_extra.js`| `cell_power_plant`, `cell_well`, `cell_mine` |
 | `sprites/structures.js` | `cell_shop`, `cell_toll_gate`, `cell_teleporter`, `cell_house`, `cell_factory`, `cell_police_station`, `cell_vault` |
 | `sprites/resources.js`  | Resource icon sprites for the 7 resources. |
-| `sprites/businesses.js` | Legacy business iconography (kept for v1 compatibility). |
+| `sprites/businesses.js` | Legacy business iconography (the structures registry covers the same ground). |
 | `sprites/ui_icons.js`   | Mayor crown, sabotage marker, vault padlock, etc. |
 
 Each sprite is a procedural object with `kind: 'tile'`, a `size`, and a `draw(ctx)` that paints the 64×64 tile.
@@ -521,7 +521,7 @@ JSON shape outlined in `13_AudioVisualFeedback.md` §13.5.
 
 | File                  | Purpose |
 |-----------------------|---------|
-| `maps/default.json`   | Starter map shipped with v2. |
+| `maps/default.json`   | Starter map. |
 | `maps/denmark.json`   | Larger map used in the 500-turn playtest. |
 
 JSON shape in `16_DataModels.md` §16.2.

@@ -1,11 +1,7 @@
-// games/Acca/systems/DistrictSystem.js — Planning §9.
+// games/Acca2/systems/DistrictSystem.js — Planning §9.
 // Tracks per-district state (mayor, tax rate, population, happiness, festival/grant
 // cooldowns) and runs end-of-turn tax collection. PopulationSystem mutates
 // population/happiness; this system owns ownership/mayor/tax mechanics.
-//
-// Terminology:
-//   District = a named group of squares on the board (cell.district === district id).
-//   Region   = a higher-level grouping of districts (future feature).
 
 (function (GF) {
   'use strict';
@@ -17,18 +13,17 @@
       this.color    = color || '#666';
       this.cells    = [];
       this.mayorIndex = -1;
-      this.taxRate    = 0;       // set by DistrictSystem from cfg
+      this.taxRate    = 0;
       this.population = 0;
       this.happiness  = 50;
       this.festivalUntilTurn = -1;
       this.grantCooldownUntil = -1;
       this.festivalCooldownUntil = -1;
-      // For PopulationSystem HUD
       this.birthsThisTurn = 0;
       this.deathsThisTurn = 0;
       this.migratedIn  = 0;
       this.migratedOut = 0;
-      this.specialty   = null;   // resource id or null
+      this.specialty   = null;
     }
   }
 
@@ -36,10 +31,9 @@
     constructor(cfg, eventBus) {
       this.cfg       = cfg;
       this.events    = eventBus;
-      this.districts = new Map();   // id → District
+      this.districts = new Map();
     }
 
-    /** Build districts from cells; cell.district holds the district id string. */
     init(cells, districtsMeta) {
       this.districts.clear();
       const metaById = new Map();
@@ -63,15 +57,9 @@
     list() { return Array.from(this.districts.values()); }
     get(id) { return this.districts.get(id); }
 
-    /** Recompute mayor for `districtId`.
-     *  Mayor = the player with a STRICT MAJORITY of all buildable cells in the
-     *  district (i.e. owns more than half). With four players this means owning
-     *  ⌈buildable/2⌉ + (buildable even ? 1 : 0) cells; with two players it's just
-     *  more than half. We require >50% (not plurality) so the mayor seat is a
-     *  meaningful prize the player has to actually contest, but it is now
-     *  reachable in normal 4-player play (vs the previous "owns all cells in
-     *  the district" rule that the 500-turn playtest never satisfied).
-     */
+    /** Mayor = player with strict majority of buildable cells in the district.
+     *  Threshold = floor(buildable/2)+1, so the mayor seat is contested but
+     *  reachable in normal 4-player play (vs the v1 "owns all cells" rule). */
     recomputeMayor(districtId) {
       const d = this.districts.get(districtId);
       if (!d) return;
@@ -84,9 +72,6 @@
         }
         return;
       }
-      // Tally owned cells by player index. Unowned cells don't get counted —
-      // the threshold is against TOTAL buildable cells, so unowned cells make
-      // the mayor seat harder to win (but not impossible).
       const tally = new Map();
       buildable.forEach(c => {
         const s = c.structure;
@@ -106,21 +91,13 @@
       }
     }
 
-    /** Recompute mayor for every district — call after bulk ownership changes. */
-    recomputeAll() {
-      this.districts.forEach((_, id) => this.recomputeMayor(id));
-    }
+    recomputeAll() { this.districts.forEach((_, id) => this.recomputeMayor(id)); }
 
-    /** Collect taxes for the player whose turn just ended (Planning §9.2). */
     collectTaxes(player) {
       let total = 0;
       const propBonus = (this.cfg && this.cfg.property && this.cfg.property.mayorBonus) || 0;
       this.districts.forEach(d => {
         if (d.mayorIndex !== player.index) return;
-        // Base population tax + flat mayor bonus per district. The flat bonus
-        // (cfg.property.mayorBonus, default 50) was previously configured but
-        // never wired in; iter 14 of the autonomous playtest activated it so
-        // mayoring is meaningful even in low-population districts.
         const taxEarned = Math.round(d.population * d.taxRate * this.cfg.district.taxBase);
         const earned = taxEarned + propBonus;
         if (earned <= 0) return;
