@@ -102,8 +102,8 @@
 
     _transferMoney(from, to, amt) {
       if (amt <= 0) return;
-      from.money -= amt;
-      to.money   += amt;
+      from.addMoney(-amt, `Trade payment to ${to.name}`);
+      to.addMoney(amt,    `Trade payment from ${from.name}`);
     }
     _transferResources(from, to, bag) {
       Object.entries(bag).forEach(([r, q]) => {
@@ -124,24 +124,32 @@
     }
 
     // ── Hostile takeover ──────────────────────────────────────────────────
-    canTakeover(attacker, structure) {
+    canTakeover(attacker, structure, turn) {
       if (!structure || structure.ownerIndex === attacker.index) return { ok: false, reason: 'self-owned' };
       if (structure.ownerIndex < 0) return { ok: false, reason: 'not owned' };
       const s = this._state(attacker);
       if (s.takeoversThisTurn >= this.cfg.property.maxTakeoversPerTurn) {
         return { ok: false, reason: 'takeover limit this turn' };
       }
-      const cost = Math.round(structure.currentValue * this.cfg.property.takeoverMultiplier);
+      // Sabotaged structures sell at a discounted multiplier so opportunistic
+      // takeovers actually trigger.
+      const sabotaged = (turn != null) && (structure.sabotagedUntilTurn > turn);
+      const baseMul = this.cfg.property.takeoverMultiplier || 3;
+      const sabMul  = (this.cfg.property.takeoverSabotageMultiplier != null)
+        ? this.cfg.property.takeoverSabotageMultiplier
+        : 1.5;
+      const mul = sabotaged ? sabMul : baseMul;
+      const cost = Math.round(structure.currentValue * mul);
       if (attacker.money < cost) return { ok: false, reason: `cannot afford ($${cost})` };
       return { ok: true, cost };
     }
 
     takeover(attacker, structure, players, turn) {
-      const check = this.canTakeover(attacker, structure);
+      const check = this.canTakeover(attacker, structure, turn);
       if (!check.ok) return check;
       const owner = players[structure.ownerIndex];
-      attacker.money -= check.cost;
-      owner.money    += check.cost;
+      attacker.addMoney(-check.cost, `Hostile takeover of ${owner.name}'s ${structure.type}`);
+      owner.addMoney(check.cost,     `Forced sale of ${structure.type} to ${attacker.name}`);
       this._transferStructure(structure, owner, attacker);
       const s = this._state(attacker);
       s.takeoversThisTurn += 1;
@@ -192,7 +200,7 @@
         if (hasPolice) return { ok: false, reason: 'protected by police station' };
       }
       if (!check.ok) return check;
-      attacker.money -= check.cost;
+      attacker.addMoney(-check.cost, `Sabotage of ${structure.type}`);
       attacker.resources.oil = (attacker.resources.oil || 0) - this.cfg.sabotage.oilCost;
       structure.sabotagedUntilTurn = turn + this.cfg.sabotage.duration;
       const s = this._state(attacker);

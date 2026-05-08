@@ -59,18 +59,52 @@
       const barH  = 58;
       const barY  = H - barH;
 
+      // Optional context header above the bar — title (top line) and subtitle
+      // (smaller line below). Drawn on a slim translucent strip so the menu
+      // stays unambiguous when reused for deeper sub-menus (Manage, Other, …).
+      // Only render the header when a subtitle is present, so the start-of-
+      // turn menu (title-only, with the player + cash already in the HUD)
+      // keeps its existing tabs-only look.
+      const title    = game.menu.title    || '';
+      const subtitle = game.menu.subtitle || '';
+      const hasHeader = !!subtitle;
+      const headerH  = hasHeader ? 36 : 0;
+      if (hasHeader) {
+        const hY = barY - headerH;
+        UI.drawPanel(ctx, 0, hY, W, headerH, {
+          bgColor: 'rgba(8,12,22,0.78)',
+          borderColor: '#2a4060', borderWidth: 0, radius: 0,
+        });
+        if (title) {
+          UI.drawText(ctx, title, W / 2, hY + 6,
+            { font: 'bold 13px monospace', color: '#ffffff', align: 'center', shadow: true });
+        }
+        UI.drawText(ctx, subtitle, W / 2, hY + 22,
+          { font: '11px monospace', color: '#9fc8ff', align: 'center' });
+      }
+
       // Full-width background bar
       UI.drawPanel(ctx, 0, barY, W, barH, {
         bgColor: 'rgba(8,12,22,0.96)',
         borderColor: '#7796c4', borderWidth: 2, radius: 0,
       });
 
-      // Tabs — centred in the bar
-      const tabPad   = 28;
-      const measured = opts.map(o => {
-        ctx.font = '13px monospace';
-        return ctx.measureText(o.label).width + tabPad * 2;
-      });
+      // Tabs — centred in the bar.  Adaptive horizontal padding so longer
+      // menus (Other / Sell assets) still fit on the standard 768-wide canvas:
+      // we measure label widths first and shrink padding until the total width
+      // fits, with a sensible floor so neighbours don't visually fuse.
+      ctx.font = '13px monospace';
+      const labelWs = opts.map(o => ctx.measureText(o.label).width);
+      const labelSum = labelWs.reduce((a, b) => a + b, 0);
+      const ideal = 28;
+      const minPad = 8;
+      let tabPad = ideal;
+      const fitsWith = (pad) => labelSum + opts.length * pad * 2 + 16;
+      if (fitsWith(tabPad) > W) {
+        const slack = W - 16 - labelSum;
+        tabPad = Math.max(minPad, Math.floor(slack / (opts.length * 2)));
+      }
+      const measured = labelWs.map(w => w + tabPad * 2);
       const totalW  = measured.reduce((a, b) => a + b, 0);
       let   tabX    = Math.round((W - totalW) / 2);
 
@@ -193,22 +227,124 @@
 
     drawGameOver(ctx, W, H) {
       const game = this.game;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillStyle = 'rgba(0,0,0,0.78)';
       ctx.fillRect(0, 0, W, H);
       const winner = game.winner;
       if (!winner) return;
-      game.ui.drawText(ctx, `${winner.name.toUpperCase()} WINS!`, W / 2, H / 2 - 40,
-        { font: 'bold 40px monospace', color: winner.color,
+      const UI = game.ui;
+
+      // Banner
+      UI.drawText(ctx, `${winner.name.toUpperCase()} WINS!`, W / 2, 30,
+        { font: 'bold 32px monospace', color: winner.color,
           align: 'center', glow: winner.color, glowBlur: 20,
           stroke: '#000000', strokeWidth: 3, shadow: true });
-      game.ui.drawText(ctx, `Cash: $${winner.money}    Net Worth: $${game.netWorth(winner)}`,
-        W / 2, H / 2 + 16,
-        { font: '14px monospace', color: '#cdd6e0', align: 'center' });
+      UI.drawText(ctx,
+        `Cash $${winner.money} · Net Worth $${game.netWorth(winner)} · Turns ${(game.turnCounter || 0)}`,
+        W / 2, 64,
+        { font: '12px monospace', color: '#cdd6e0', align: 'center' });
+
+      // Per-player results table — sorted by NW desc.
+      const rows = game.players.map(p => {
+        let cash = p.money;
+        let structVal = 0, vaultStored = 0;
+        p.ownedStructures.forEach(s => {
+          structVal += (s.currentValue || 0);
+          if (s.type === 'vault') vaultStored += (s.storedMoney || 0);
+        });
+        const prices = game.cfg.market.basePrices;
+        const spread = (game.cfg.market && game.cfg.market.sellSpread) || 1;
+        let resVal = 0;
+        Object.entries(p.resources).forEach(([r, q]) => { resVal += (prices[r] || 0) * spread * q; });
+        return {
+          p,
+          cash,
+          structVal,
+          vaultStored,
+          resVal: Math.round(resVal),
+          nw: game.netWorth(p),
+          structCount: p.ownedStructures.length,
+          mayorCount: p.districtsMayoredOf.size,
+          isWinner: p === winner,
+        };
+      }).sort((a, b) => b.nw - a.nw);
+
+      const headerY = 90;
+      const rowH    = 78;
+      const tableX  = 40;
+      const tableW  = W - 80;
+      // Header pill
+      UI.drawText(ctx, 'FINAL STANDINGS',
+        W / 2, headerY,
+        { font: 'bold 11px monospace', color: '#9fc8ff', align: 'center' });
+
+      // Find the largest single number across rows for the bar normalization.
+      const maxNW = Math.max(1, ...rows.map(r => r.nw));
+
+      rows.forEach((r, i) => {
+        const y = headerY + 18 + i * rowH;
+        const card = {
+          x: tableX, y, w: tableW, h: rowH - 6,
+          bgColor: r.isWinner ? 'rgba(70,120,80,0.20)' : 'rgba(20,30,45,0.55)',
+          borderColor: r.isWinner ? r.p.color : '#2a4060',
+          borderWidth: r.isWinner ? 2 : 1, radius: 6,
+        };
+        UI.drawPanel(ctx, card.x, card.y, card.w, card.h, card);
+
+        // Rank + name + bankrupt badge
+        UI.drawText(ctx, `${i + 1}. ${r.p.name}`, card.x + 12, card.y + 8,
+          { font: 'bold 14px monospace', color: r.p.color, shadow: true });
+        if (r.p.isBankrupt) {
+          UI.drawText(ctx, '(bankrupt)', card.x + 12 + 110, card.y + 10,
+            { font: '10px monospace', color: '#ff8b8b' });
+        }
+        // NW + structure/mayor counts (right side)
+        UI.drawText(ctx, `Net Worth $${r.nw}`,
+          card.x + card.w - 12, card.y + 8,
+          { font: 'bold 13px monospace', color: '#ffffff', align: 'right', shadow: true });
+        UI.drawText(ctx, `${r.structCount} structures · ${r.mayorCount} mayoral`,
+          card.x + card.w - 12, card.y + 26,
+          { font: '10px monospace', color: '#9fc8ff', align: 'right' });
+
+        // NW breakdown bar — cash | structures | vault | resources.
+        const barX = card.x + 12;
+        const barY = card.y + card.h - 22;
+        const barW = card.w - 24;
+        const barH = 8;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(barX, barY, barW, barH);
+        const nwAbs = Math.max(1, r.nw);
+        let cx = barX;
+        const segs = [
+          { v: Math.max(0, r.cash),       color: '#7be07f' }, // cash
+          { v: Math.max(0, r.structVal),  color: '#9fc8ff' }, // structures
+          { v: Math.max(0, r.vaultStored),color: '#ffe57a' }, // vault
+          { v: Math.max(0, r.resVal),     color: '#ff9f6b' }, // resources
+        ];
+        segs.forEach(s => {
+          const w = Math.round(barW * (s.v / nwAbs));
+          if (w <= 0) return;
+          ctx.fillStyle = s.color;
+          ctx.fillRect(cx, barY, w, barH);
+          cx += w;
+        });
+        // Inline legend (small label at left under the bar)
+        UI.drawText(ctx,
+          `cash $${r.cash} · structs $${r.structVal} · vault $${r.vaultStored} · res $${r.resVal}`,
+          barX, barY + barH + 4,
+          { font: '9px monospace', color: '#bcd0e8' });
+      });
+
+      // Action footer
       const blink = Math.floor(performance.now() / 600) % 2;
-      if (blink) {
-        game.ui.drawText(ctx, 'Press Enter to return to menu', W / 2, H - 50,
-          { font: 'bold 14px monospace', color: '#ffffff', align: 'center', shadow: true });
-      }
+      const footY = H - 20;
+      UI.drawPanel(ctx, 0, footY - 28, W, 36, {
+        bgColor: 'rgba(8,12,22,0.92)',
+        borderColor: '#2a4060', borderWidth: 0, radius: 0,
+      });
+      UI.drawText(ctx,
+        blink ? 'Enter — Replay  ·  Esc — Main menu' : 'Enter — Replay  ·  Esc — Main menu',
+        W / 2, footY - 20,
+        { font: 'bold 12px monospace', color: '#ffffff', align: 'center', shadow: true });
     }
   }
 

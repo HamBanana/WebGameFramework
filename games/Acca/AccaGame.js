@@ -20,6 +20,13 @@
       const cfg = GF.GAME_CONFIG;
       this.cfg  = cfg;
 
+      // Apply persisted fast-roll preference before any roll executes.
+      try {
+        if (localStorage.getItem('acca_fast_roll') === '1') {
+          cfg.turn.rollDuration = 0.4;
+        }
+      } catch (e) { /* ignore */ }
+
       const { engine, sprites, physics, ui } = GF.createGame(cfg.engine, cfg.physics);
       this.engine  = engine;
       this.sprites = sprites;
@@ -81,6 +88,13 @@
 
       this.turn = new A.TurnManager(this);
 
+      // Audio cues — synthesised via WebAudio so the game ships with no
+      // binary dependencies. SfxPlayer is a no-op if AudioContext can't be
+      // created, so this is safe to call unconditionally.
+      this.sfx = (A.SfxPlayer && cfg.audio)
+        ? new A.SfxPlayer({ volume: cfg.audio.sfxVolume })
+        : null;
+
       // ── Renderers ─────────────────────────────────────────────────────
       this.boardRenderer    = new A.BoardRenderer(this);
       this.overlayRenderer  = new A.OverlayRenderer(this);
@@ -95,10 +109,14 @@
         if (newMayor >= 0 && this.players[newMayor]) {
           this.players[newMayor].districtsMayoredOf.add(district.id);
           this.log(`${this.players[newMayor].name} is now Mayor of ${district.id}!`);
+          if (this.sfx) this.sfx.mayor();
         }
       });
       engine.events.on('district:taxesPaid', ({ district, mayor, amount }) =>
         this.log(`${mayor.name} collected $${amount} taxes from ${district.id}.`));
+      // Audio cues — keyed off the canonical event names (property:built was
+      // renamed from property:bought in this rebalance).
+      engine.events.on('property:built', () => { if (this.sfx) this.sfx.build(); });
       engine.events.on('market:priceChanged', ({ resource, oldPrice, newPrice }) => {
         const ratio = (newPrice - oldPrice) / Math.max(1, oldPrice);
         if (Math.abs(ratio) >= 0.25) {
@@ -129,14 +147,39 @@
     start() { this.engine.start(); }
 
     // ── Public game-wide helpers ────────────────────────────────────────
-    log(message) {
-      this.eventLog.push(message);
-      // Cap raised so the in-game "Game log" panel can surface a useful history.
-      // Notifications panel slices the last 12, so the visible HUD doesn't change.
+    /** Append a log entry. Coalesces consecutive identical messages into a
+     *  single entry with a count tail (×N) so heavy mayor turns don't drown
+     *  the notification panel. Each entry is a {turn, msg, count} object —
+     *  consumers (HUDRenderer / TurnManager._showGameLog / AccaSave) handle
+     *  both legacy strings and the structured form for back-compat with old
+     *  saves.
+     *
+     *  Pass `{ noCoalesce: true }` to force a fresh row even when the message
+     *  matches the previous one (used for one-shot events that should always
+     *  show separately, e.g. mayor changes). */
+    log(message, opts) {
+      const turn = (this.turnCounter || 0) + 1;
+      const last = this.eventLog[this.eventLog.length - 1];
+      const lastMsg = (last && typeof last === 'object') ? last.msg : last;
+      if (last && typeof last === 'object'
+          && lastMsg === message
+          && !(opts && opts.noCoalesce)) {
+        last.count = (last.count || 1) + 1;
+      } else {
+        this.eventLog.push({ turn, msg: message, count: 1 });
+      }
       const CAP = 500;
       if (this.eventLog.length > CAP) {
         this.eventLog.splice(0, this.eventLog.length - CAP);
       }
+    }
+
+    /** Return the displayable string for a log entry. Old saves may store
+     *  raw strings; new entries are objects. */
+    static logText(entry) {
+      if (!entry) return '';
+      if (typeof entry === 'string') return entry;
+      return entry.count > 1 ? `${entry.msg} (×${entry.count})` : entry.msg;
     }
 
     get currentPlayer() { return this.players[this.currentPlayerIndex]; }
@@ -211,7 +254,7 @@
       const startRes = this.cfg.startingResources || {};
       for (let i = 0; i < count; i++) {
         const def = this.cfg.players[i];
-        const p = new A.Player(i, def, startCell, this.cfg.startingMoney, this.sprites);
+        const p = new A.Player(i, def, startCell, this.cfg.startingMoney, this.sprites, this);
         Object.entries(startRes).forEach(([r, q]) => { p.resources[r] = q; });
         const offsets = [
           { x: -10, y: -6 }, { x:  10, y: -6 },
@@ -220,7 +263,13 @@
         p.moveOffset = offsets[i] || { x: 0, y: 0 };
         this.players.push(p);
       }
-      this.currentPlayerIndex = 0;
+      // Random starting player + per-round rotation removes the slot-N
+      // last-mover advantage observed in the 10-game playtest (P4 won 6/10).
+      // _firstPlayerForRound is the index of the player who acts first this
+      // round; the round counter increments each time the cycle wraps.
+      this.currentPlayerIndex   = Math.floor(Math.random() * count);
+      this._firstPlayerForRound = this.currentPlayerIndex;
+      this._roundCounter        = 0;
     }
 
     _beginBetweenTurns() {
@@ -235,6 +284,7 @@
     }
 
     _advanceToNextPlayer() {
+      const prevIdx = this.currentPlayerIndex;
       for (let i = 1; i <= this.players.length; i++) {
         const idx = (this.currentPlayerIndex + i) % this.players.length;
         if (!this.players[idx].isBankrupt) {
@@ -242,14 +292,59 @@
           break;
         }
       }
+      // Round-robin starting position: when the cycle wraps back to (or past)
+      // _firstPlayerForRound, advance the round and rotate the lead. Removes
+      // the last-mover advantage Player 4 enjoyed in the playtest baseline.
+      const cycledThroughLead =
+        (prevIdx >= this._firstPlayerForRound &&
+         this.currentPlayerIndex < this._firstPlayerForRound) ||
+        (prevIdx <  this._firstPlayerForRound &&
+         this.currentPlayerIndex >= this._firstPlayerForRound &&
+         this.currentPlayerIndex < prevIdx);
+      if (cycledThroughLead) {
+        this._roundCounter++;
+        this._firstPlayerForRound = (this._firstPlayerForRound + 1) % this.players.length;
+        // Skip bankrupt players when picking the next round's lead.
+        let safety = this.players.length;
+        while (this.players[this._firstPlayerForRound].isBankrupt && safety-- > 0) {
+          this._firstPlayerForRound = (this._firstPlayerForRound + 1) % this.players.length;
+        }
+      }
+      // Auto-save once per completed round.
+      if (cycledThroughLead && GF.Acca && GF.Acca.Save) {
+        try {
+          if (GF.Acca.Save.save(this)) this._flashAutoSave();
+        } catch (e) { /* save failures are non-fatal */ }
+      }
       const winner = this.win.check();
       if (winner) {
         this.winner    = winner;
         this.gameState = A.GAME_STATE.GAME_OVER;
         this.log(`Game Over — ${winner.name} wins!`);
+        if (this.sfx) this.sfx.victory();
         return;
       }
       this.turn.startTurn(this.currentPlayer);
+    }
+
+    /** Briefly flash a "Saved" indicator in the topbar after an auto-save.
+     *  Pure DOM — no canvas churn. */
+    _flashAutoSave() {
+      let el = document.getElementById('tb-autosave');
+      if (!el) {
+        const tb = document.getElementById('topbar');
+        if (!tb) return;
+        el = document.createElement('div');
+        el.id = 'tb-autosave';
+        el.className = 'tb-autosave';
+        el.textContent = 'Saved';
+        tb.appendChild(el);
+      }
+      el.classList.remove('show');
+      // Force reflow so the animation can re-trigger on rapid auto-saves.
+      // eslint-disable-next-line no-unused-expressions
+      void el.offsetWidth;
+      el.classList.add('show');
     }
 
     // ── Per-frame ───────────────────────────────────────────────────────
@@ -283,7 +378,12 @@
           break;
 
         case A.GAME_STATE.GAME_OVER:
+          // Enter → Replay (same player count, fresh board);
+          // Escape → Main menu (player-count picker).
           if (this.engine.input.wasPressed('confirm')) {
+            this.hud.resetSignatures();
+            this._beginGame();
+          } else if (this.engine.input.wasPressed('cancel')) {
             this.gameState = A.GAME_STATE.MENU;
             this.menuPlayerCount = this.cfg.numberOfPlayers;
             this.hud.resetSignatures();

@@ -95,15 +95,22 @@
 
     _renderNotifications(dom) {
       const game = this.game;
-      const logSig = game.eventLog.length + ':' + (game.eventLog[game.eventLog.length - 1] || '');
+      const last = game.eventLog[game.eventLog.length - 1];
+      const lastSig = last && typeof last === 'object'
+        ? `${last.turn}:${last.msg}:${last.count || 1}`
+        : (last || '');
+      const logSig = game.eventLog.length + '|' + lastSig;
       if (this._lastLogSig === logSig) return;
       this._lastLogSig = logSig;
       dom.notifications.innerHTML = '';
-      const recent = game.eventLog.slice(-12);
-      recent.forEach((msg, idx) => {
+      // Show ~14 lines (was 12) — still tight enough not to dominate the
+      // viewport but reduces the rate at which interesting events scroll off.
+      const recent = game.eventLog.slice(-14);
+      recent.forEach((entry, idx) => {
         const div = document.createElement('div');
         div.className = 'notif' + (idx === recent.length - 1 ? ' latest' : '');
-        div.textContent = msg;
+        div.textContent = A.AccaGame ? A.AccaGame.logText(entry)
+          : (typeof entry === 'object' ? entry.msg : entry);
         dom.notifications.appendChild(div);
       });
       dom.notifications.scrollTop = dom.notifications.scrollHeight;

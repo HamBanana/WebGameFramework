@@ -12,15 +12,33 @@
   padding: 7px;
   background: linear-gradient(180deg, rgba(10, 14, 22, 0.92) 0%, rgba(5, 8, 14, 0.95) 100%);
   border-right: 1px solid var(--panel-border);
+  /* Bound the sidebar to the viewport minus the topbar so the inner list can
+     scroll instead of clipping behind adjacent panels. */
+  min-height: 0;
+  max-height: 100vh;
 }
 
-#districtSidebar .panel { flex: 1; }
+#districtSidebar .panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 #districtList {
   flex: 1;
   overflow-y: auto;
   font-size: 10px;
+  /* Scrollbar styling — keep it slim so it doesn't compete with the content. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(159, 200, 255, 0.25) transparent;
 }
+#districtList::-webkit-scrollbar { width: 4px; }
+#districtList::-webkit-scrollbar-thumb {
+  background: rgba(159, 200, 255, 0.25);
+  border-radius: 2px;
+}
+#districtList::-webkit-scrollbar-track { background: transparent; }
 
 .dist-row {
   padding: 6px 5px;
@@ -97,11 +115,20 @@
 #sidebar {
   grid-area: sidebar;
   display: grid;
-  grid-template-rows: 38% 62%;
+  /* Notifications panel takes ~50% of the column (was 38%) so the ~14 most
+     recent events stay visible during heavy mayor turns. */
+  grid-template-rows: 50% 50%;
   gap: 7px;
   padding: 7px;
   background: linear-gradient(180deg, rgba(10, 14, 22, 0.92) 0%, rgba(5, 8, 14, 0.95) 100%);
   border-left: 1px solid var(--panel-border);
+  min-height: 0;
+  max-height: 100vh;
+}
+#sidebar .panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 #notifications {

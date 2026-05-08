@@ -86,7 +86,8 @@
     "mayorBonus": 50,
     "sabotageRebate": 15,
     "bankBuybackRate": 0.5,
-    "takeoverMultiplier": 5,
+    "takeoverMultiplier": 3,
+    "takeoverSabotageMultiplier": 1.5,
     "maxTakeoversPerTurn": 1,
     "tierUpgradeCost": {
       "2": 300,
@@ -105,32 +106,32 @@
       {
         "type": "toll_gate",
         "label": "Toll Gate",
-        "cost": 400
+        "cost": 250
       },
       {
         "type": "teleporter",
         "label": "Teleporter",
-        "cost": 500
+        "cost": 400
       },
       {
         "type": "house",
         "label": "House",
-        "cost": 300
+        "cost": 250
       },
       {
         "type": "factory",
         "label": "Factory",
-        "cost": 600
+        "cost": 500
       },
       {
         "type": "police_station",
         "label": "Police Station",
-        "cost": 700
+        "cost": 500
       },
       {
         "type": "vault",
         "label": "Vault",
-        "cost": 1000
+        "cost": 750
       }
     ],
     "sprites": {
@@ -146,20 +147,25 @@
     "shopCapPerStructure": 200,
     "shopVisitRate": 0.2,
     "shopInvestStep": 100,
+    "shopPassiveValueRate": 0.05,
+    "shopPassivePopScale": 100,
     "houseRenovateStep": 100,
     "houseBaseCap": 700,
     "houseCapPerStructure": 150,
-    "tollIncrement": 25,
+    "tollIncrement": 10,
+    "tollInitialRent": 10,
     "teleportFee": 75,
     "houseRentRate": 0.25,
     "houseTaxIfMayor": 60,
     "housePopContribution": 4,
     "houseOwnerIncome": 18,
     "tollOwnerIncome": 8,
-    "teleporterOwnerIncome": 12,
+    "teleporterOwnerIncome": 15,
     "policeOwnerIncome": 30,
-    "vaultOwnerIncome": 10,
-    "vaultInterestRate": 0.01,
+    "vaultOwnerIncome": 25,
+    "vaultInterestRate": 0.015,
+    "factoryOwnerIncome": 20,
+    "shopSameDistrictDimishing": 0.5,
     "factoryBaseRate": 1,
     "factoryHouseBonus": 0.25,
     "factoryResource": "food",
@@ -169,7 +175,7 @@
     "vaultLevels": [
       {
         "level": 1,
-        "buildCost": 1000,
+        "buildCost": 750,
         "capacity": 5000
       },
       {
@@ -249,8 +255,9 @@
   },
   "district": {
     "taxBase": 1,
-    "maxTaxRate": 0.5,
-    "defaultTaxRate": 0.1,
+    "taxRateMin": 0.05,
+    "taxRateMax": 0.25,
+    "taxRateAnchor": 1000,
     "defaultPopulation": 30,
     "festivalCost": 200,
     "festivalDuration": 3,

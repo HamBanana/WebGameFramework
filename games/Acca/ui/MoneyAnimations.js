@@ -16,11 +16,18 @@
     constructor(game) {
       this.game = game;
       this._lastMoney = null;
+      // Spawn rate-limit per cell — at most one float per (cellId × ~250ms)
+      // window. Multiple income events on the same tile in a single tick get
+      // visually summed instead of stacking on top of each other.
+      this._lastSpawnByCell = new Map();
     }
 
     /** Reset the cash baseline so the initial cash deal doesn't get rendered
      *  as a +$X delta. Called from AccaGame._beginGame. */
-    reset() { this._lastMoney = null; }
+    reset() {
+      this._lastMoney = null;
+      this._lastSpawnByCell.clear();
+    }
 
     tick() {
       const game = this.game;
@@ -53,6 +60,9 @@
       const cls  = delta > 0 ? 'gain' : 'loss';
       const sign = delta > 0 ? '+' : '−';
       const txt  = `${sign}$${Math.abs(delta)}`;
+      // Audio cue — SfxPlayer self-throttles so a heavy mayor turn fires at
+      // most one chime per ~60ms.
+      if (game.sfx && delta > 0) game.sfx.coin();
 
       // Topbar money cell flash (current player only) — CSS only, no position anchor.
       if (isCurrent && game.dom.tbMoney) {
@@ -76,10 +86,30 @@
       }
 
       // Floating delta + coin burst anchored to the player token on the canvas.
+      // Group consecutive deltas on the same cell within ~250ms so a heavy
+      // mayor-turn stream of "+$19" doesn't stack visually — instead the prior
+      // float gets summed and re-rendered with the new total.
       const pos = this._tokenScreenPos(player);
       if (pos) {
-        this._spawnFloating(txt, cls, pos.x, pos.y, isCurrent);
-        if (delta > 0) this._spawnCoinBurst(pos.x, pos.y);
+        const cellId = player.currentCell ? player.currentCell.id : -1;
+        const key = `${index}:${cellId}`;
+        const now = performance.now();
+        const last = this._lastSpawnByCell.get(key);
+        if (last && (now - last.t) < 250 && last.el && last.el.parentNode
+            && Math.sign(last.delta) === Math.sign(delta)) {
+          // Coalesce: replace text with running total.
+          const total = last.delta + delta;
+          const newSign = total > 0 ? '+' : (total < 0 ? '−' : '');
+          last.el.textContent = `${newSign}$${Math.abs(total)}`;
+          last.delta = total;
+          last.t     = now;
+        } else {
+          const el = this._spawnFloating(txt, cls, pos.x, pos.y, isCurrent);
+          if (el) {
+            this._lastSpawnByCell.set(key, { el, delta, t: now });
+          }
+          if (delta > 0) this._spawnCoinBurst(pos.x, pos.y);
+        }
       }
     }
 
@@ -118,7 +148,8 @@
     }
 
     /** Absolute-positioned "+$X" / "-$X" element that floats up and fades.
-     *  Auto-removed after ~1.7s. */
+     *  Auto-removed after ~1.7s. Returns the element so the caller can
+     *  mutate its text (used by the per-cell coalescer above). */
     _spawnFloating(text, cls, x, y, big) {
       const el = document.createElement('div');
       el.className = 'money-delta ' + cls + (big ? ' big' : '');
@@ -127,6 +158,7 @@
       el.style.top  = y + 'px';
       document.body.appendChild(el);
       setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 1700);
+      return el;
     }
 
     _spawnCoinBurst(x, y) {

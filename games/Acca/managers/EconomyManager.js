@@ -69,6 +69,19 @@
         player.resources.food        = (player.resources.food        || 0) + yield1;
       }
 
+      // Pre-tally how many shops the player owns *per district* so the
+      // per-shop diminishing-returns multiplier can be applied consistently
+      // (the second shop in a district yields 1/(1+0.5)=66%, third yields 50%,
+      // etc.). This breaks the "shops everywhere" attractor identified in the
+      // playtest while keeping shops viable.
+      const shopsByDistrict = {};
+      player.ownedStructures.forEach(s => {
+        if (s.type === 'shop' && s.cell && s.cell.district) {
+          shopsByDistrict[s.cell.district] = (shopsByDistrict[s.cell.district] || 0) + 1;
+        }
+      });
+      const districtShopIdx = {};
+
       player.ownedStructures.forEach(s => {
         if (s.sabotagedUntilTurn > game.turnCounter) return;
         if ((s.idleUntilTurn || -1) > game.turnCounter) return;
@@ -89,15 +102,19 @@
             }
           }
           player.resources[resource] = (player.resources[resource] || 0) + qty;
+          // Flat owner cash from the factory (config: structures.factoryOwnerIncome).
+          // Wired here so the rebalanced cost ($500) has a real per-turn payback.
+          const flat = cfg.factoryOwnerIncome || 0;
+          if (flat > 0) {
+            player.addMoney(flat, `Factory income in ${s.cell && s.cell.district || '—'}`);
+          }
         }
         if (s.type === 'house') {
-          // Houses passively contribute residents to their district population
-          // and earn a small per-turn rent from the resident family.
+          // Houses passively contribute residents to their district population.
           if (game.districtSys && s.cell.district) {
             const d = game.districtSys.get(s.cell.district);
             if (d) d.population += cfg.housePopContribution;
           }
-          player.money += cfg.houseOwnerIncome || 18;
           // Mayor of this house's district auto-collects the per-house tax
           // (formerly a manual menu action on landing). Transferring directly
           // matches the rule that menus must never be used to collect money.
@@ -106,22 +123,77 @@
               && player.districtsMayoredOf.has(s.cell.district)) {
             const houseTax = cfg.houseTaxIfMayor || 0;
             if (houseTax > 0) {
-              player.money += houseTax;
-              game.log(`${player.name} auto-collects $${houseTax} mayor tax from House in ${s.cell.district}.`);
+              player.addMoney(houseTax, `Mayor tax from House in ${s.cell.district}`);
             }
           }
+          // Per-turn flat residence income — kept separate from rent (which is
+          // visit-driven) so houses pay back even on cells nobody walks to.
+          const flat = cfg.houseOwnerIncome || 0;
+          if (flat > 0) {
+            player.addMoney(flat, `House income in ${s.cell && s.cell.district || '—'}`);
+          }
         }
-        if (s.type === 'shop')          player.money += 20;
-        if (s.type === 'toll_gate')     player.money += cfg.tollOwnerIncome       || 8;
-        if (s.type === 'teleporter')    player.money += cfg.teleporterOwnerIncome || 12;
-        if (s.type === 'police_station')player.money += cfg.policeOwnerIncome     || 30;
+        if (s.type === 'shop') {
+          // Shop passive income scales with the shop's invested value and the
+          // district's population: income = currentValue * valueRate * (1 + pop / popScale)
+          const valueRate = cfg.shopPassiveValueRate || 0.05;
+          const popScale  = cfg.shopPassivePopScale  || 100;
+          let   distPop   = 0;
+          let   distId    = '—';
+          if (game.districtSys && s.cell && s.cell.district) {
+            const d = game.districtSys.get(s.cell.district);
+            if (d) distPop = d.population;
+            distId = s.cell.district;
+          }
+          // Per-district diminishing-returns: 1st shop pays full, 2nd pays
+          // 1/(1+k), 3rd pays 1/(1+2k), … where k =
+          // structures.shopSameDistrictDimishing (default 0.5).
+          const k = (cfg.shopSameDistrictDimishing != null) ? cfg.shopSameDistrictDimishing : 0.5;
+          const idx = (districtShopIdx[distId] || 0);
+          districtShopIdx[distId] = idx + 1;
+          const dimMul = 1 / (1 + k * idx);
+          const shopIncome = Math.max(1, Math.round(
+            s.currentValue * valueRate * (1 + distPop / popScale) * dimMul));
+          const dimNote = idx > 0 ? `, ${Math.round(dimMul * 100)}%` : '';
+          player.addMoney(shopIncome,
+            `Shop income in ${distId} (val ${s.currentValue}, pop ${distPop}${dimNote})`);
+        }
         if (s.type === 'vault') {
-          // 1% interest on stored money plus base bookkeeping fee.
+          // Interest on stored money plus a small flat ownership stipend
+          // (vaultOwnerIncome) so building a vault has a real per-turn return
+          // even before you've stored anything.
           const stored = s.storedMoney || 0;
           const interestRate = cfg.vaultInterestRate || 0.01;
           const interest = Math.round(stored * interestRate);
           if (interest > 0) s.storedMoney = stored + interest;
-          player.money += cfg.vaultOwnerIncome || 10;
+          const flat = cfg.vaultOwnerIncome || 0;
+          if (flat > 0) {
+            player.addMoney(flat, `Vault stipend in ${s.cell && s.cell.district || '—'}`);
+          }
+        }
+        if (s.type === 'toll_gate') {
+          // Per-turn maintenance retainer — distinct from the toll itself
+          // (which auto-deposits on each pass-through).
+          const flat = cfg.tollOwnerIncome || 0;
+          if (flat > 0) {
+            player.addMoney(flat, `Toll Gate retainer in ${s.cell && s.cell.district || '—'}`);
+          }
+        }
+        if (s.type === 'teleporter') {
+          // Per-turn idle income for owned teleporters (visitor fees still go
+          // through visitorEffect on landing).
+          const flat = cfg.teleporterOwnerIncome || 0;
+          if (flat > 0) {
+            player.addMoney(flat, `Teleporter income in ${s.cell && s.cell.district || '—'}`);
+          }
+        }
+        if (s.type === 'police_station') {
+          // Per-turn protection fee — also provides the sabotage shield to
+          // structures in the same district.
+          const flat = cfg.policeOwnerIncome || 0;
+          if (flat > 0) {
+            player.addMoney(flat, `Police Station income in ${s.cell && s.cell.district || '—'}`);
+          }
         }
       });
     }
@@ -143,8 +215,7 @@
       const threshold = cfg.threshold || 0.5;
       if (ratio >= threshold) return;
       const bonus = cfg.amount || 100;
-      player.addMoney(bonus);
-      game.log(`${player.name} receives a $${bonus} catch-up bonus (last place, ${Math.round(ratio * 100)}% of leader).`);
+      player.addMoney(bonus, `Catch-up bonus (${Math.round(ratio * 100)}% of leader)`);
     }
 
     /** Surface non-obvious affordances at the top of the turn so casual
@@ -284,8 +355,7 @@
         if (player.money >= 0) return;
         const amt = v.storedMoney;
         v.storedMoney = 0;
-        player.money += amt;
-        game.log(`${player.name}'s Vault auto-withdraws $${amt} to cover debt.`);
+        player.addMoney(amt, `Vault auto-withdrawal to cover debt`);
       });
 
       // 2. Sell resources at market sell price.
@@ -304,11 +374,15 @@
         });
       }
 
-      // 3. Sell structures at half currentValue (cheapest first).
+      // 3. Sell ONE structure per turn at half currentValue (cheapest first).
+      // Capped to a single sale to make the bankruptcy loop bite — if a player
+      // still has structures and is still in debt next turn, they'll lose
+      // another. Prevents the "auto-rescue out of every disaster in one frame"
+      // pathology surfaced in playtesting.
       if (player.money < 0) {
         const sellable = player.ownedStructures.slice().sort((a, b) => a.currentValue - b.currentValue);
-        for (const s of sellable) {
-          if (player.money >= 0) break;
+        const s = sellable[0];
+        if (s) {
           const refund = Math.round((s.currentValue || 0) * (game.cfg.property.bankBuybackRate || 0.5));
           const cell = s.cell;
           if (cell) {
@@ -318,8 +392,7 @@
           }
           const idx = player.ownedStructures.indexOf(s);
           if (idx >= 0) player.ownedStructures.splice(idx, 1);
-          player.money += refund;
-          game.log(`${player.name} auto-sold their ${s.type} in ${cell && cell.district || '(?)'} for $${refund} to settle debt.`);
+          player.addMoney(refund, `Auto-sold ${s.type} in ${cell && cell.district || '(?)'} to settle debt`);
           if (game.districtSys && cell && cell.district) game.districtSys.recomputeMayor(cell.district);
         }
       }

@@ -22,10 +22,20 @@
       const animator   = this.game.sprites.createAnimator(spriteName, 'idle');
       const s = new A.PlayerStructure(type, ownerIndex, entry.cost, animator);
       s.cell = cell;
+      // Toll Gate: rent starts at the configured initial value (default 10) and
+      // grows by tollIncrement on every pass-through (see passThroughEffect).
+      if (type === 'toll_gate') {
+        s.tollAccrued = (cfg.tollInitialRent != null) ? cfg.tollInitialRent : 10;
+      }
       cell.structure = s;
       cell.sprite    = spriteName;
       cell.animator  = animator;
       this.game.players[ownerIndex].ownedStructures.push(s);
+      // Canonical event: a player BUILT a structure (the action verb the rest
+      // of the codebase uses in log lines and menu labels).
+      this.game.engine.events.emit('property:built',  { structure: s, ownerIndex });
+      // Deprecated alias kept one release for external listeners — remove
+      // after subscribers have migrated to property:built.
       this.game.engine.events.emit('property:bought', { structure: s, ownerIndex });
       if (this.game.districtSys) this.game.districtSys.recomputeMayor(cell.district);
       return s;
@@ -45,9 +55,8 @@
           if (room >= step && player.money >= step) {
             opts.push({ label: `Invest $${step}  (val→$${structure.currentValue + step}/${cap})`,
               action: () => {
-                player.addMoney(-step);
+                player.addMoney(-step, `Invested in Shop in ${structure.cell.district || '—'}`);
                 structure.currentValue += step;
-                game.log(`${player.name} invested $${step} in their Shop.`);
                 onDone();
               } });
           }
@@ -74,9 +83,8 @@
           if (room >= step && player.money >= step) {
             opts.push({ label: `Renovate $${step}  (val→$${structure.currentValue + step}/${cap})`,
               action: () => {
-                player.addMoney(-step);
+                player.addMoney(-step, `Renovated House in ${structure.cell.district || '—'}`);
                 structure.currentValue += step;
-                game.log(`${player.name} renovated their House for $${step}.`);
                 onDone();
               } });
           } else {
@@ -116,20 +124,11 @@
           this._appendVaultOptions(structure, player, onDone, opts);
           break;
         }
-        case 'toll_gate': {
+        case 'toll_gate':
           // Toll receipts are paid to the owner immediately on each
-          // pass-through (see passThroughEffect). There's no cup to collect
-          // from on landing — show a passive line so the owner sees the
-          // current toll amount and that it's auto-deposited.
-          const fee = structure.tollAccrued || 0;
-          opts.push({
-            label: fee > 0
-              ? `Toll auto-collected (+$${fee}/pass-through)`
-              : `Toll auto-collected (next pass: free)`,
-            action: onDone,
-          });
+          // pass-through (see passThroughEffect). The owner has no on-landing
+          // action — the only menu entry is the trailing Continue.
           break;
-        }
         case 'police_station':
           opts.push({ label: '(passive — owner takes no action)', action: onDone });
           break;
@@ -196,10 +195,9 @@
             targets.forEach(t => {
               opts.push({ label: `Teleport to ${t.cell.district || 'cell ' + t.cell.id} ($${cfg.teleportFee})`,
                 action: () => {
-                  player.addMoney(-cfg.teleportFee);
-                  owner.addMoney(cfg.teleportFee);
+                  player.addMoney(-cfg.teleportFee, `Teleport fee to ${owner.name}`);
+                  owner.addMoney(cfg.teleportFee,   `Teleport fee from ${player.name}`);
                   game.movePlayerTo(player, t.cell);
-                  game.log(`${player.name} paid $${cfg.teleportFee} to teleport.`);
                   onDone();
                 } });
             });
@@ -214,21 +212,28 @@
 
     /** Toll-gate pass-through effect — fires on every step into the cell.
      *  The current per-pass toll (`tollAccrued`) is transferred to the owner
-     *  immediately. The fee then grows by `tollIncrement` for the next visitor
-     *  (popular routes get more expensive). There is no "cup" — the owner
-     *  never has to land on the gate to collect; receipts hit their wallet
-     *  the moment a visitor walks through. */
+     *  immediately, then the rent grows by `tollIncrement` for the next pass.
+     *  The owner's own pass-throughs trigger the increment too (popular routes
+     *  get more expensive even if the route's owner is the one walking it),
+     *  but no money changes hands when the owner walks their own gate.
+     *  The structure's `currentValue` is intentionally untouched — the
+     *  property's market value is independent of how high the rent has grown. */
     passThroughEffect(cell, player) {
       if (!cell.structure || cell.structure.type !== 'toll_gate') return;
       const s = cell.structure;
-      if (s.ownerIndex === player.index || s.ownerIndex < 0) return;
-      const game  = this.game;
-      const owner = game.players[s.ownerIndex];
-      const due   = s.tollAccrued;
-      if (due > 0) {
-        this._payRent(player, owner, due, 'pass a Toll Gate');
+      if (s.ownerIndex < 0) return; // unowned — pre-built map decoration
+      const game = this.game;
+      const due  = s.tollAccrued;
+      if (s.ownerIndex !== player.index) {
+        const owner = game.players[s.ownerIndex];
+        if (due > 0) {
+          this._payRent(player, owner, due, 'pass a Toll Gate');
+        } else {
+          game.log(`${player.name} passes the Toll Gate (free this time).`);
+        }
       } else {
-        game.log(`${player.name} passes the Toll Gate (free this time).`);
+        // Owner walks their own gate — log the pass but no money moves.
+        game.log(`${player.name} passes their own Toll Gate.`);
       }
       s.tollAccrued += game.cfg.structures.tollIncrement;
     }
@@ -261,9 +266,8 @@
       }
       depositSteps.forEach(amt => {
         opts.push({ label: `Deposit $${amt}  (vault $${stored}/$${cap})`, action: () => {
-          player.addMoney(-amt);
+          player.addMoney(-amt, `Deposit into Vault`);
           structure.storedMoney = (structure.storedMoney || 0) + amt;
-          game.log(`${player.name} deposited $${amt} in their Vault (now $${structure.storedMoney}/$${cap}).`);
           onDone();
         } });
       });
@@ -274,15 +278,13 @@
           if (amt > stored) return;
           opts.push({ label: `Withdraw $${amt}`, action: () => {
             structure.storedMoney = stored - amt;
-            player.addMoney(amt);
-            game.log(`${player.name} withdrew $${amt} from their Vault.`);
+            player.addMoney(amt, `Withdraw from Vault`);
             onDone();
           } });
         });
         opts.push({ label: `Withdraw all $${stored}`, action: () => {
           structure.storedMoney = 0;
-          player.addMoney(stored);
-          game.log(`${player.name} withdrew $${stored} from their Vault.`);
+          player.addMoney(stored, `Withdraw all from Vault`);
           onDone();
         } });
       }
@@ -292,10 +294,9 @@
         const cost = next.upgradeCost;
         if (player.money >= cost) {
           opts.push({ label: `Upgrade to L${next.level}  ($${cost} → cap $${next.capacity})`, action: () => {
-            player.addMoney(-cost);
+            player.addMoney(-cost, `Vault upgrade to L${next.level}`);
             structure.level = next.level;
             structure.currentValue += cost;
-            game.log(`${player.name} upgraded their Vault to L${next.level} (capacity $${next.capacity}).`);
             onDone();
           } });
         } else {
@@ -343,9 +344,8 @@
     }
 
     _payRent(payer, owner, amount, reason) {
-      payer.addMoney(-amount);
-      owner.addMoney(amount);
-      this.game.log(`${payer.name} pays $${amount} to ${owner.name} (${reason}).`);
+      payer.addMoney(-amount, `${reason} — paid to ${owner.name}`);
+      owner.addMoney(amount,  `${reason} — paid by ${payer.name}`);
     }
   }
 

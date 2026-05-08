@@ -207,3 +207,33 @@
   35%  { transform: scale(1.22); background: linear-gradient(180deg, rgba(159, 200, 255, 0.45) 0%, rgba(90, 142, 209, 0.20) 100%); }
   100% { transform: scale(1); }
 }
+
+/* Auto-save flash badge — overlays the topbar's right edge briefly each
+   round when AccaGame._flashAutoSave fires. */
+.tb-autosave {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.9);
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  background: linear-gradient(180deg, #54bb6c 0%, #2f8849 100%);
+  color: #fff;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.tb-autosave.show { animation: autosave-flash 1.6s ease-out forwards; }
+@keyframes autosave-flash {
+  0%   { opacity: 0; transform: translateY(-50%) scale(0.7); }
+  18%  { opacity: 1; transform: translateY(-50%) scale(1.05); }
+  85%  { opacity: 1; transform: translateY(-50%) scale(1.0); }
+  100% { opacity: 0; transform: translateY(-50%) scale(1.0); }
+}

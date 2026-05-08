@@ -6,8 +6,10 @@
   'use strict';
   GF.Acca = GF.Acca || {};
 
-  const VERSION = 1;
-  const STORAGE_KEY = 'acca_save_v1';
+  // Version 2: removed `taxRate` from per-district snapshots — it became a
+  // computed getter (deterministic from total district structure value).
+  const VERSION = 2;
+  const STORAGE_KEY = 'acca_save_v2';
 
   function serialize(game) {
     const players = game.players.map(p => ({
@@ -44,6 +46,11 @@
       mapId: game.cfg.board.map,
       turnCounter: game.turnCounter || 0,
       currentPlayerIndex: game.currentPlayerIndex,
+      // Per-round rotation state — needed so reloaded games keep the
+      // randomized/round-robin starting-player schedule rather than resetting
+      // to slot 0 every load.
+      firstPlayerForRound: game._firstPlayerForRound != null ? game._firstPlayerForRound : 0,
+      roundCounter: game._roundCounter || 0,
       players,
       cells,
       districts: game.districtSys && game.districtSys.serialize(),
@@ -103,6 +110,9 @@
     game.turnCounter = data.turnCounter || 0;
     game.eventLog = (data.log || []).slice();
     game.cooperativeThreat = data.cooperativeThreat || 0;
+    game._firstPlayerForRound = (data.firstPlayerForRound != null)
+      ? data.firstPlayerForRound : (data.currentPlayerIndex || 0);
+    game._roundCounter = data.roundCounter || 0;
 
     if (game.districtSys) game.districtSys.deserialize(data.districts);
     if (game.marketSys)   game.marketSys.deserialize(data.market);

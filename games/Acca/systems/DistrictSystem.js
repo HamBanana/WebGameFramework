@@ -8,12 +8,11 @@
   GF.Acca = GF.Acca || {};
 
   class District {
-    constructor(id, color) {
+    constructor(id, color, cfg) {
       this.id       = id;
       this.color    = color || '#666';
       this.cells    = [];
       this.mayorIndex = -1;
-      this.taxRate    = 0;
       this.population = 0;
       this.happiness  = 50;
       this.festivalUntilTurn = -1;
@@ -24,6 +23,28 @@
       this.migratedIn  = 0;
       this.migratedOut = 0;
       this.specialty   = null;
+      // taxRate is computed (see getter); _cfg is captured so the getter can
+      // read tuning constants without a global lookup.
+      this._cfg = cfg || null;
+    }
+
+    /** Tax rate is derived from the total currentValue of all owned structures
+     *  in the district. Logistic curve: taxRateMin at $0 → asymptote at
+     *  taxRateMax for high-value districts. The mayor never tunes the rate;
+     *  growing it is a side-effect of investment/renovation/upgrades.
+     *
+     *  Bounded to [taxRateMin, taxRateMax] from cfg.district. */
+    get taxRate() {
+      const cfg = (this._cfg && this._cfg.district) || {};
+      const lo = cfg.taxRateMin != null ? cfg.taxRateMin : 0.05;
+      const hi = cfg.taxRateMax != null ? cfg.taxRateMax : 0.25;
+      const anchor = cfg.taxRateAnchor || 1000;
+      let totalValue = 0;
+      for (const c of this.cells) {
+        if (c.structure) totalValue += (c.structure.currentValue || 0);
+      }
+      const x = totalValue / anchor;
+      return lo + (hi - lo) * (x / (x + 4));
     }
   }
 
@@ -43,8 +64,8 @@
         if (!c.district) return;
         if (!this.districts.has(c.district)) {
           const meta = metaById.get(c.district);
-          const d = new District(c.district, meta && meta.color);
-          d.taxRate    = this.cfg.district.defaultTaxRate;
+          // Pass cfg through so District.taxRate getter can read tuning.
+          const d = new District(c.district, meta && meta.color, this.cfg);
           d.population = this.cfg.district.defaultPopulation;
           d.specialty  = (meta && meta.specialty) || null;
           this.districts.set(c.district, d);
@@ -101,19 +122,11 @@
         const taxEarned = Math.round(d.population * d.taxRate * this.cfg.district.taxBase);
         const earned = taxEarned + propBonus;
         if (earned <= 0) return;
-        player.money += earned;
+        player.addMoney(earned, `Taxes from ${d.id}`);
         total += earned;
         this.events.emit('district:taxesPaid', { district: d, mayor: player, amount: earned });
       });
       return total;
-    }
-
-    setTaxRate(player, districtId, rate) {
-      const d = this.districts.get(districtId);
-      if (!d || d.mayorIndex !== player.index) return false;
-      d.taxRate = Math.max(0, Math.min(this.cfg.district.maxTaxRate, rate));
-      this.events.emit('district:taxRateChanged', { district: d, mayor: player });
-      return true;
     }
 
     holdFestival(player, districtId, turn) {
@@ -122,7 +135,7 @@
       if (turn < d.festivalCooldownUntil) return { ok: false, reason: 'cooldown' };
       const cost = this.cfg.district.festivalCost;
       if (player.money < cost) return { ok: false, reason: 'cannot afford' };
-      player.money -= cost;
+      player.addMoney(-cost, `Festival in ${d.id}`);
       d.festivalUntilTurn = turn + this.cfg.district.festivalDuration;
       d.festivalCooldownUntil = turn + this.cfg.district.festivalCooldown;
       d.happiness = Math.min(100, d.happiness + this.cfg.district.festivalHappiness);
@@ -136,7 +149,7 @@
       if (turn < d.grantCooldownUntil) return { ok: false, reason: 'cooldown' };
       const cost = this.cfg.district.grantCost;
       if (player.money < cost) return { ok: false, reason: 'cannot afford' };
-      player.money -= cost;
+      player.addMoney(-cost, `Investment grant in ${d.id}`);
       d.population += this.cfg.district.grantPopulation;
       d.grantCooldownUntil = turn + this.cfg.district.grantCooldown;
       this.events.emit('district:grant', { district: d, mayor: player });
@@ -146,9 +159,11 @@
     serialize() {
       const out = {};
       this.districts.forEach((d, id) => {
+        // taxRate is intentionally NOT serialized — it's a computed getter
+        // derived from district structure values at load time. Persisting it
+        // would just go stale.
         out[id] = {
           mayorIndex: d.mayorIndex,
-          taxRate: d.taxRate,
           population: d.population,
           happiness: d.happiness,
           festivalUntilTurn: d.festivalUntilTurn,
@@ -164,7 +179,9 @@
       Object.entries(data).forEach(([id, snap]) => {
         const d = this.districts.get(id);
         if (!d) return;
-        Object.assign(d, snap);
+        // Skip taxRate even if present in old saves — it's a getter now.
+        const { taxRate, ...rest } = snap;
+        Object.assign(d, rest);
       });
     }
   }

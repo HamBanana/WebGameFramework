@@ -8,12 +8,16 @@
   const A = GF.Acca = GF.Acca || {};
 
   class Player {
-    constructor(index, def, startCell, startingMoney, spriteSystem) {
+    constructor(index, def, startCell, startingMoney, spriteSystem, game) {
       this.index      = index;
       this.name       = def.name;
       this.color      = def.color;
       this.spriteName = def.sprite;
       this.animator   = spriteSystem.createAnimator(def.sprite, 'idle');
+      // Game reference is used by addMoney to log gain/loss reasons. Optional —
+      // tests / fixtures that construct Players outside a running game can
+      // omit it, in which case addMoney just won't log.
+      this.game = game || null;
 
       this.money       = startingMoney;
       this.level       = 1;
@@ -41,9 +45,18 @@
      *  mid-turn (debt) — the end-of-turn pipeline (EconomyManager.resolveDebt)
      *  will force-sell to clear it before the turn rotates, and bankruptcy
      *  fires only when the player's net worth reaches zero.
+     *
+     *  When a `reason` is supplied, a log line of the form
+     *  "Player +$X (reason)" / "Player -$X (reason)" is emitted via the
+     *  game's event log so every cash delta has a traceable cause.
      */
-    addMoney(amount) {
+    addMoney(amount, reason) {
+      if (!amount) return;
       this.money += amount;
+      if (this.game && reason) {
+        const sign = amount > 0 ? '+' : '-';
+        this.game.log(`${this.name} ${sign}$${Math.abs(amount)} (${reason}).`);
+      }
     }
   }
 

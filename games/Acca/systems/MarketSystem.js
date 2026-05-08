@@ -32,7 +32,7 @@
       if (qty <= 0) return { ok: false, reason: 'qty must be > 0' };
       const total = this.priceOf(resource) * qty;
       if (player.money < total) return { ok: false, reason: 'cannot afford' };
-      player.money -= total;
+      player.addMoney(-total, `Bought ${qty} ${resource} at Market`);
       player.resources[resource] = (player.resources[resource] || 0) + qty;
       this._mix('demandMA', resource, qty);
       this.events.emit('market:bought', { player, resource, qty, total });
@@ -46,7 +46,7 @@
       if (have < qty) return { ok: false, reason: 'insufficient' };
       const total = this.sellPriceOf(resource) * qty;
       player.resources[resource] = have - qty;
-      player.money += total;
+      player.addMoney(total, `Sold ${qty} ${resource} at Market`);
       this._mix('supplyMA', resource, qty);
       this.events.emit('market:sold', { player, resource, qty, total });
       return { ok: true, totalProceeds: total };

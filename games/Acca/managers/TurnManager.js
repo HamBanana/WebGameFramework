@@ -49,6 +49,7 @@
           if (this.game.chanceSys) {
             override = this.game.chanceSys.consumeDieOverride(this.player.index);
           }
+          if (this.game.sfx) this.game.sfx.roll();
           this.die.roll(this.game.cfg.turn.rollDuration, (value) => {
             if (override) {
               value = override.min + Math.floor(Math.random() * (override.max - override.min + 1));
@@ -92,11 +93,29 @@
     _showStartMenu() {
       const p    = this.player;
       const opts = [
-        { label: 'Roll',               action: () => this.enter(A.TURN_STAGE.ROLL) },
-        { label: 'Manage properties',  action: () => this._showManageMenu() },
-        { label: 'Sell assets',        action: () => this._showSellAssetsMenu() },
-        { label: 'Other',              action: () => this._showOtherMenu() },
+        { label: 'Roll', action: () => this.enter(A.TURN_STAGE.ROLL) },
       ];
+      // Promote the Mayor menu to the top level when this player holds any
+      // mayoral district — saves two menu transitions for the most-common
+      // mid-game action (Festival / Investment grant). When the player only
+      // holds one mayoral seat we skip the Mayor list and route straight to
+      // the District submenu.
+      if (p.districtsMayoredOf && p.districtsMayoredOf.size > 0) {
+        opts.push({
+          label: `Mayor (${p.districtsMayoredOf.size})`,
+          action: () => {
+            if (p.districtsMayoredOf.size === 1 && this.game.districtSys) {
+              const onlyId = Array.from(p.districtsMayoredOf)[0];
+              const d = this.game.districtSys.get(onlyId);
+              if (d) { this._showDistrictMenu(d); return; }
+            }
+            this._showMayorMenu();
+          },
+        });
+      }
+      opts.push({ label: 'Manage properties',  action: () => this._showManageMenu() });
+      opts.push({ label: 'Sell assets',        action: () => this._showSellAssetsMenu() });
+      opts.push({ label: 'Other',              action: () => this._showOtherMenu() });
       this.menu.show(`${p.name}  •  $${p.money}`, opts, null, { layout: 'horizontal' });
     }
 
@@ -131,49 +150,97 @@
           }
         },
       });
+      // Fast-roll toggle — persisted in localStorage. Default off (1.4s) for
+      // first-time players who need the dice-rolling visual feedback; once
+      // toggled, the value sticks across sessions.
+      const fast = (function () {
+        try { return localStorage.getItem('acca_fast_roll') === '1'; } catch (e) { return false; }
+      })();
+      opts.push({
+        label: fast ? 'Fast rolls: ON  (0.4s)' : 'Fast rolls: off  (1.4s)',
+        action: () => {
+          const next = !fast;
+          try { localStorage.setItem('acca_fast_roll', next ? '1' : '0'); } catch (e) {}
+          game.cfg.turn.rollDuration = next ? 0.4 : 1.4;
+          game.log(next ? 'Fast rolls enabled.' : 'Fast rolls disabled.');
+          this._showOtherMenu();
+        },
+      });
       opts.push({ label: 'Game log', action: () => this._showGameLog(0) });
       opts.push({ label: 'Pass turn', action: () => this.enter(A.TURN_STAGE.END_TURN) });
       opts.push({ label: 'Back', action: () => this._showStartMenu() });
-      this.menu.show('Other', opts, `${p.name}  •  $${p.money}`);
+      this.menu.show('Other', opts, `${p.name}  •  $${p.money}`, { layout: 'horizontal' });
     }
 
-    // ── Sell assets submenu ───────────────────────────────────────────────
+    // ── Sell assets submenu — sells RESOURCES at the spot market price.
+    // (Structure sales live under Manage → Properties → [pick] → Sell.)
     _showSellAssetsMenu() {
       const p    = this.player;
       const game = this.game;
       const back = () => this._showStartMenu();
+      const M    = game.marketSys;
 
-      if (p.ownedStructures.length === 0) {
+      if (!M) {
         this.menu.show('Sell assets', [
-          { label: '(no structures to sell)', action: back },
-        ], 'You own no properties.');
+          { label: '(market unavailable)', action: back },
+        ]);
         return;
       }
 
-      const opts = p.ownedStructures.map(s => {
-        const salePrice = Math.round(s.currentValue * 0.5);
-        return {
-          label: `${s.cell.district} · ${this._typeLabel(s.type)} · val $${s.currentValue} → sell $${salePrice}`,
+      const resources = (game.cfg.market.resources || [])
+        .filter(r => (p.resources[r] || 0) > 0);
+
+      if (resources.length === 0) {
+        this.menu.show('Sell assets', [
+          { label: '(no resources to sell)', action: back },
+        ], 'You hold no tradeable resources.', { layout: 'horizontal' });
+        return;
+      }
+
+      const opts = resources.map(r => ({
+        label: `${r} ×${p.resources[r]}  @ $${M.sellPriceOf(r)} ea`,
+        action: () => this._showSellResource(r),
+      }));
+      opts.push({ label: 'Back', action: back });
+      this.menu.show('Sell assets', opts,
+        `Cash $${p.money}  ·  Spot prices ${(game.cfg.market.sellSpread * 100).toFixed(0)}% of market`,
+        { layout: 'horizontal' });
+    }
+
+    /** Per-resource sell quantity sub-menu (1, 5, all). */
+    _showSellResource(resource) {
+      const p    = this.player;
+      const game = this.game;
+      const M    = game.marketSys;
+      const have = p.resources[resource] || 0;
+      const price = M.sellPriceOf(resource);
+
+      const opts = [];
+      const tryQty = (qty, label) => {
+        if (qty > have) return;
+        opts.push({
+          label: `${label} (+$${qty * price})`,
           action: () => {
-            p.addMoney(salePrice);
-            const idx = p.ownedStructures.indexOf(s);
-            if (idx !== -1) p.ownedStructures.splice(idx, 1);
-            s.cell.structure = null;
-            s.cell.sprite    = null;
-            s.cell.animator  = null;
-            game.log(`${p.name} sold ${this._typeLabel(s.type)} in ${s.cell.district} for $${salePrice}.`);
-            if (game.districtSys) game.districtSys.recomputeMayor(s.cell.district);
-            game.engine.events.emit('property:sold', { structure: s, ownerIndex: p.index });
+            const r = M.sell(p, resource, qty);
+            if (!r.ok) game.log(`Sell refused: ${r.reason}.`);
             this._showSellAssetsMenu();
           },
-        };
-      });
-      opts.push({ label: 'Back', action: back });
-      this.menu.show('Sell assets', opts, 'Sale price: 50% of current value  ·  Cannot be undone');
+        });
+      };
+      tryQty(1, 'Sell 1');
+      tryQty(5, 'Sell 5');
+      if (have > 0 && have !== 1 && have !== 5) {
+        tryQty(have, `Sell all ${have}`);
+      }
+      opts.push({ label: 'Back', action: () => this._showSellAssetsMenu() });
+      this.menu.show(`Sell ${resource}`, opts,
+        `Have ${have}  ·  Sell price $${price} ea`, { layout: 'horizontal' });
     }
 
     /** Paginated game-log viewer. Shows 14 entries per page in reverse
-     *  chronological order (newest first), with prev/next/close. */
+     *  chronological order (newest first), with prev/next/close. Entries are
+     *  {turn,msg,count} objects (or legacy strings); the page header shows the
+     *  turn span of the visible slice. */
     _showGameLog(page) {
       const game = this.game;
       const PER_PAGE = 14;
@@ -183,11 +250,19 @@
       const start = safePage * PER_PAGE;
       const slice = all.slice(start, start + PER_PAGE);
 
+      const fmt = (e) => {
+        if (typeof e === 'string') return { line: e, turn: null };
+        const txt = e.count > 1 ? `${e.msg} (×${e.count})` : e.msg;
+        return { line: txt, turn: e.turn };
+      };
+
       const opts = [];
-      slice.forEach(line => opts.push({
-        label: '· ' + (line.length > 60 ? line.slice(0, 57) + '…' : line),
-        action: () => this._showGameLog(safePage),
-      }));
+      slice.forEach(entry => {
+        const f = fmt(entry);
+        const tag = f.turn != null ? `t${f.turn} ` : '';
+        const text = '· ' + tag + (f.line.length > 60 ? f.line.slice(0, 57) + '…' : f.line);
+        opts.push({ label: text, action: () => this._showGameLog(safePage) });
+      });
       if (slice.length === 0) {
         opts.push({ label: '(no events yet)', action: () => this._showStartMenu() });
       }
@@ -198,8 +273,13 @@
         opts.push({ label: `Previous page (${safePage}/${totalPages})`, action: () => this._showGameLog(safePage - 1) });
       }
       opts.push({ label: 'Back', action: () => this._showOtherMenu() });
+
+      // Compose header — turn-range tag if entries on this page carry turn
+      // numbers. (Old saves may not.)
+      const turns = slice.map(e => (typeof e === 'object' ? e.turn : null)).filter(t => t != null);
+      const turnRange = turns.length > 0 ? ` · turns ${Math.max(...turns)}–${Math.min(...turns)}` : '';
       this.menu.show('Game log', opts,
-        `Page ${safePage + 1} of ${totalPages}  ·  ${all.length} entries (newest first)`);
+        `Page ${safePage + 1} of ${totalPages} · ${all.length} entries${turnRange}`);
     }
 
     // ── Manage submenu ────────────────────────────────────────────────────
@@ -207,13 +287,10 @@
       const p = this.player;
       const game = this.game;
       const opts = [];
-      if (p.districtsMayoredOf.size > 0 && game.districtSys) {
-        opts.push({ label: `Mayor controls (${p.districtsMayoredOf.size} district${p.districtsMayoredOf.size !== 1 ? 's' : ''})`,
-          action: () => this._showMayorMenu() });
-      }
+      // Mayor row was promoted to the start menu — no longer duplicated here.
       opts.push({ label: 'Properties: ' + p.ownedStructures.length, action: () => this._showPortfolioMenu() });
       opts.push({ label: 'Back', action: () => this._showStartMenu() });
-      this.menu.show('Manage', opts, `Cash $${p.money}  ·  Net $${game.netWorth(p)}`);
+      this.menu.show('Manage', opts, `Cash $${p.money}  ·  Net $${game.netWorth(p)}`, { layout: 'horizontal' });
     }
 
     _showMayorMenu() {
@@ -224,7 +301,9 @@
         label: `${d.id}  pop ${d.population}  hap ${Math.round(d.happiness)}  tax ${Math.round(d.taxRate * 100)}%`,
         action: () => this._showDistrictMenu(d),
       }));
-      opts.push({ label: 'Back', action: () => this._showManageMenu() });
+      // Back returns to the start menu — the Mayor row was promoted to top
+      // level, so the Manage menu detour was removed.
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
       this.menu.show('Mayor', opts);
     }
 
@@ -232,9 +311,12 @@
       const p = this.player;
       const game = this.game;
       const cfg = game.cfg.district;
+      // Decide whether returning Back leads to the Mayor list or the start menu —
+      // the start menu's Mayor row routes directly here when the player holds
+      // exactly one mayoral seat, so going Back to the Mayor list would
+      // introduce a needless click.
+      const backToMayorList = p.districtsMayoredOf && p.districtsMayoredOf.size > 1;
       const opts = [
-        { label: `Tax rate: ${Math.round(d.taxRate * 100)}%  (use ←→ in next menu)`,
-          action: () => this._showTaxSlider(d) },
         { label: `Festival ($${cfg.festivalCost})`, action: () => {
           const res = game.districtSys.holdFestival(p, d.id, game.turnCounter);
           game.log(res.ok ? `Festival held in ${d.id}.`
@@ -247,31 +329,11 @@
                           : `Grant rejected: ${res.reason}.`);
           this._showDistrictMenu(d);
         } },
-        { label: 'Back', action: () => this._showMayorMenu() },
+        { label: 'Back', action: () => backToMayorList ? this._showMayorMenu() : this._showStartMenu() },
       ];
+      const taxPct = Math.round(d.taxRate * 100);
       this.menu.show(`District: ${d.id}`, opts,
-        `Pop ${d.population}  Happiness ${Math.round(d.happiness)}  Specialty: ${d.specialty || 'none'}`);
-    }
-
-    _showTaxSlider(d) {
-      const game = this.game;
-      const p = this.player;
-      const cfg = game.cfg.district;
-      // Step the rate via menu options (5% increments)
-      const steps = [];
-      const max = cfg.maxTaxRate;
-      for (let v = 0; v <= max + 0.001; v += 0.05) steps.push(Math.round(v * 100) / 100);
-      const opts = steps.map(v => ({
-        label: `Set ${Math.round(v * 100)}%${v === d.taxRate ? '   ← current' : ''}`,
-        action: () => {
-          game.districtSys.setTaxRate(p, d.id, v);
-          game.log(`Tax for ${d.id} set to ${Math.round(v * 100)}%.`);
-          this._showDistrictMenu(d);
-        },
-      }));
-      opts.push({ label: 'Back', action: () => this._showDistrictMenu(d) });
-      this.menu.show(`Tax for ${d.id}`, opts,
-        `Comfort target ≤ ${Math.round(game.cfg.population.taxComfortRate * 100)}%`);
+        `Pop ${d.population} · Happiness ${Math.round(d.happiness)} · Tax ${taxPct}% (grows with district value) · Specialty: ${d.specialty || 'none'}`);
     }
 
     _showPortfolioMenu() {
@@ -314,13 +376,33 @@
       const p    = this.player;
       const onDone = () => this._showPortfolioMenu();
       const opts = game.structures.ownerOptionsFor(structure, p, onDone);
+
+      // Sell-this-structure action — moved out of the old "Sell assets"
+      // catch-all so structure sales live alongside the rest of the
+      // per-property management (Invest / Renovate / Deposit / …).
+      const salePrice = Math.round(structure.currentValue * 0.5);
+      opts.push({
+        label: `Sell for $${salePrice}  (50% of value)`,
+        action: () => {
+          p.addMoney(salePrice, `Sold ${this._typeLabel(structure.type)} in ${structure.cell.district}`);
+          const idx = p.ownedStructures.indexOf(structure);
+          if (idx !== -1) p.ownedStructures.splice(idx, 1);
+          const cell = structure.cell;
+          cell.structure = null;
+          cell.sprite    = null;
+          cell.animator  = null;
+          if (game.districtSys && cell.district) game.districtSys.recomputeMayor(cell.district);
+          game.engine.events.emit('property:sold', { structure, ownerIndex: p.index });
+          this._showPortfolioMenu();
+        },
+      });
+
       // Replace the implicit Continue at the tail with explicit Back so the
       // origin (portfolio) is unambiguous.
-      if (opts.length > 0 && opts[opts.length - 1].label === 'Continue') {
-        opts[opts.length - 1] = { label: 'Back', action: onDone };
-      } else {
-        opts.push({ label: 'Back', action: onDone });
-      }
+      const continueIdx = opts.findIndex(o => o.label === 'Continue');
+      if (continueIdx !== -1) opts.splice(continueIdx, 1);
+      opts.push({ label: 'Back', action: onDone });
+
       const subtitle = `Cell ${structure.cell.id} · ${structure.cell.district || '—'}` +
         ` · Value $${structure.currentValue}` +
         (structure.sabotagedUntilTurn > game.turnCounter ? '  (sabotaged)' : '');
@@ -354,30 +436,177 @@
     }
 
     _showTradeWith(target) {
-      const opts = [
-        { label: `Offer $100 → request 1 oil`, action: () => this._executePreset(target,
-          { money: 100 }, { resources: { oil: 1 } }) },
-        { label: `Offer $200 → request 1 steel`, action: () => this._executePreset(target,
-          { money: 200 }, { resources: { steel: 1 } }) },
-        { label: `Offer 5 wood → request $100`, action: () => this._executePreset(target,
-          { resources: { wood: 5 } }, { money: 100 }) },
-        { label: `Offer $250 → request 2 food`, action: () => this._executePreset(target,
-          { money: 250 }, { resources: { food: 2 } }) },
-        { label: 'Back', action: () => this._showTradeTargetMenu() },
-      ];
-      this.menu.show(`Propose to ${target.name}`, opts,
-        `Note: assets transfer immediately (hot-seat).`);
+      // Stateful builder — replaces the four hard-coded presets with a
+      // two-pane Offer/Request constructor. Each row's action cycles the
+      // amount through fixed tiers (0 → small → medium → large → 0). The
+      // proposal is held on `this._tradeDraft` so deltas survive sub-menu
+      // re-shows.
+      this._showTradeBuilder(target);
     }
 
-    _executePreset(target, give, receive) {
+    /** Cycle a value through tiers; returns the next tier (wraps). */
+    _cycleTier(current, tiers) {
+      const idx = tiers.indexOf(current);
+      if (idx < 0) return tiers[0];
+      return tiers[(idx + 1) % tiers.length];
+    }
+
+    /** Estimate the cash-equivalent value of one side of a trade. Mirrors
+     *  TradeSystem._estimateValue but is computed locally so the builder can
+     *  surface running totals without a round-trip. */
+    _estimateSide(side) {
       const game = this.game;
-      const res = game.tradeSys.executeTrade(this.player, target, { give, receive });
-      if (res.ok) {
-        game.log(`Trade with ${target.name} completed.`);
-      } else {
-        game.log(`Trade refused: ${res.reason}.`);
+      const prices = (game.cfg.market && game.cfg.market.basePrices) || {};
+      let v = side.money || 0;
+      Object.entries(side.resources || {}).forEach(([r, q]) => {
+        v += (prices[r] || 0) * q;
+      });
+      return Math.round(v);
+    }
+
+    _resetTradeDraft(target) {
+      const me = this.player;
+      this._tradeDraft = {
+        target: target,
+        give:    { money: 0, resources: {} },
+        receive: { money: 0, resources: {} },
+      };
+      // Initialise resource keys to 0 so cycleTier sees a known starting point.
+      const resCfg = (this.game.cfg.market && this.game.cfg.market.resources) || [];
+      resCfg.forEach(r => {
+        this._tradeDraft.give.resources[r] = 0;
+        this._tradeDraft.receive.resources[r] = 0;
+      });
+      // Mark the target — used to invalidate the draft if the player picks
+      // a different opponent later.
+      this._tradeDraft.targetIndex = target.index;
+      void me;
+    }
+
+    _showTradeBuilder(target) {
+      const game = this.game;
+      const me   = this.player;
+      if (!this._tradeDraft || !this._tradeDraft.target
+          || this._tradeDraft.targetIndex !== target.index) {
+        this._resetTradeDraft(target);
       }
-      this._showStartMenu();
+      const draft = this._tradeDraft;
+      const resCfg = (game.cfg.market && game.cfg.market.resources) || [];
+
+      const cashTiersGive = [0, 50, 100, 250, 500].filter(v => v <= me.money + 0.001);
+      if (cashTiersGive[cashTiersGive.length - 1] !== me.money && me.money > 0
+          && !cashTiersGive.includes(me.money)) {
+        cashTiersGive.push(me.money);
+      }
+      const cashTiersReceive = [0, 50, 100, 250, 500].filter(v => v <= target.money + 0.001);
+      if (cashTiersReceive[cashTiersReceive.length - 1] !== target.money && target.money > 0
+          && !cashTiersReceive.includes(target.money)) {
+        cashTiersReceive.push(target.money);
+      }
+      const resTiers = (max) => {
+        const t = [0, 1, 5, 10];
+        const out = t.filter(v => v <= max);
+        if (max > 0 && !out.includes(max)) out.push(max);
+        return out;
+      };
+
+      const opts = [];
+
+      // Offer cash row
+      opts.push({
+        label: `Offer cash: $${draft.give.money}   (Enter cycles)`,
+        action: () => {
+          draft.give.money = this._cycleTier(draft.give.money, cashTiersGive);
+          this._showTradeBuilder(target);
+        },
+      });
+      // Offer resources
+      resCfg.forEach(r => {
+        const have = me.resources[r] || 0;
+        const cur  = draft.give.resources[r] || 0;
+        opts.push({
+          label: `Offer ${r}: ${cur} / ${have}`,
+          _disabled: have === 0 && cur === 0,
+          action: () => {
+            const tiers = resTiers(have);
+            draft.give.resources[r] = this._cycleTier(cur, tiers);
+            this._showTradeBuilder(target);
+          },
+        });
+      });
+
+      // Request cash
+      opts.push({
+        label: `Request cash: $${draft.receive.money}   (Enter cycles)`,
+        action: () => {
+          draft.receive.money = this._cycleTier(draft.receive.money, cashTiersReceive);
+          this._showTradeBuilder(target);
+        },
+      });
+      // Request resources
+      resCfg.forEach(r => {
+        const has = target.resources[r] || 0;
+        const cur = draft.receive.resources[r] || 0;
+        opts.push({
+          label: `Request ${r}: ${cur} / ${has}`,
+          _disabled: has === 0 && cur === 0,
+          action: () => {
+            const tiers = resTiers(has);
+            draft.receive.resources[r] = this._cycleTier(cur, tiers);
+            this._showTradeBuilder(target);
+          },
+        });
+      });
+
+      // Estimated values — used by the imbalance guard in TradeSystem.
+      const giveVal = this._estimateSide(draft.give);
+      const recvVal = this._estimateSide(draft.receive);
+      const ratio = (giveVal > 0 && recvVal > 0)
+        ? Math.max(giveVal, recvVal) / Math.min(giveVal, recvVal)
+        : 1;
+      const limit = (game.cfg.trade && game.cfg.trade.maxImbalanceRatio) || 5;
+      const allow = (giveVal > 0 || recvVal > 0)
+        && ((giveVal === 0 || recvVal === 0)
+            ? !!(game.cfg.trade && game.cfg.trade.allowImbalanced)
+            : ratio <= limit + 0.001);
+
+      opts.push({
+        label: allow
+          ? `Propose trade   (~$${giveVal} → ~$${recvVal})`
+          : `Cannot propose — imbalance ${ratio.toFixed(1)}× (limit ${limit}×)`,
+        _disabled: !allow,
+        action: () => {
+          if (!allow) { this._showTradeBuilder(target); return; }
+          const proposal = {
+            give:    { money: draft.give.money,    resources: this._compactBag(draft.give.resources) },
+            receive: { money: draft.receive.money, resources: this._compactBag(draft.receive.resources) },
+          };
+          const r = game.tradeSys.executeTrade(this.player, target, proposal);
+          if (r.ok) game.log(`Trade with ${target.name} completed (~$${giveVal} ↔ ~$${recvVal}).`);
+          else      game.log(`Trade refused: ${r.reason}.`);
+          this._tradeDraft = null;
+          this._showStartMenu();
+        },
+      });
+      opts.push({
+        label: 'Reset proposal',
+        action: () => { this._resetTradeDraft(target); this._showTradeBuilder(target); },
+      });
+      opts.push({
+        label: 'Back',
+        action: () => { this._tradeDraft = null; this._showTradeTargetMenu(); },
+      });
+
+      this.menu.show(`Trade with ${target.name}`, opts,
+        `You ~$${giveVal} ↔ ${target.name} ~$${recvVal}  ·  Cash $${me.money} → ${target.name} $${target.money}`);
+    }
+
+    /** Drop zero entries from a resource bag so the proposal validates cleanly
+     *  in TradeSystem (which iterates own keys). */
+    _compactBag(bag) {
+      const out = {};
+      Object.entries(bag || {}).forEach(([k, v]) => { if (v > 0) out[k] = v; });
+      return out;
     }
 
     _showSabotageTargetMenu() {
@@ -445,7 +674,7 @@
         { label: 'Back', action: () => this._showMarketMenu() },
       ];
       this.menu.show(`${resource}`, opts,
-        `Buy $${M.priceOf(resource)}  Sell $${M.sellPriceOf(resource)}  Have ${p.resources[resource] || 0}`);
+        `Buy $${M.priceOf(resource)} · Sell $${M.sellPriceOf(resource)} · Have ${p.resources[resource] || 0}`);
     }
 
     // ── Landing dispatch ──────────────────────────────────────────────────
@@ -471,8 +700,7 @@
       }
       switch (cell.type) {
         case 'bank':
-          this.player.addMoney(200);
-          this.game.log(`${this.player.name} stops at the Bank. +$200.`);
+          this.player.addMoney(200, 'Landed on the Bank');
           this.enter(A.TURN_STAGE.END_TURN);
           break;
         case 'chance':
@@ -587,12 +815,21 @@
       const owner = game.players[structure.ownerIndex];
       const cfgSab = game.cfg.sabotage;
 
-      // Takeover row.
-      const cost = Math.round(structure.currentValue * game.cfg.property.takeoverMultiplier);
+      // Takeover row. Sabotaged properties cost a discounted multiplier
+      // (`property.takeoverSabotageMultiplier`) so a sabotage opens up a real
+      // takeover window rather than a dead row.
+      const sabotaged = structure.sabotagedUntilTurn > game.turnCounter;
+      const baseMul = game.cfg.property.takeoverMultiplier || 3;
+      const sabMul  = (game.cfg.property.takeoverSabotageMultiplier != null)
+        ? game.cfg.property.takeoverSabotageMultiplier
+        : 1.5;
+      const mul = sabotaged ? sabMul : baseMul;
+      const cost = Math.round(structure.currentValue * mul);
       const can  = p.money >= cost;
+      const mulLabel = sabotaged ? `${sabMul}× value (sabotaged)` : `${baseMul}× value`;
       const takeoverLabel = can
-        ? `Buy from ${owner.name}  ($${cost} = 5× value)`
-        : `Buy from ${owner.name}  ($${cost})  — cannot afford`;
+        ? `Buy from ${owner.name}  ($${cost} = ${mulLabel})`
+        : `Buy from ${owner.name}  ($${cost} = ${mulLabel})  — cannot afford`;
 
       // Sabotage row — only meaningful in competitive multiplayer; reuse
       // TradeSystem.canSabotage so we get the same affordability/oil/police
@@ -663,7 +900,8 @@
           if (rent > 0) {
             hint = `rent ~$${rent}/visit`;
           } else if (entry.type === 'toll_gate') {
-            hint = `+$${cfg.tollIncrement}/pass-through`;
+            const init = (cfg.tollInitialRent != null) ? cfg.tollInitialRent : 10;
+            hint = `rent $${init}, +$${cfg.tollIncrement}/pass`;
           } else if (entry.type === 'teleporter') {
             hint = `$${cfg.teleportFee}/visitor teleport`;
           } else if (entry.type === 'police_station') {
@@ -682,9 +920,8 @@
             _disabled: !can,
             action: () => {
               if (!can) { this._showBuildMenu(cell); return; }
-              p.addMoney(-entry.cost);
+              p.addMoney(-entry.cost, `Built ${entry.label} in ${cell.district}`);
               game.structures.build(cell, entry.type, p.index);
-              game.log(`${p.name} built a ${entry.label} in ${cell.district}.`);
               if (game.districtSys) game.districtSys.recomputeMayor(cell.district);
               this.enter(A.TURN_STAGE.END_TURN);
             },

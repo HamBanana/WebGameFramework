@@ -48,13 +48,15 @@
     _apply(event, player, players) {
       switch (event.effect) {
         case 'money':
-          this._scopeApply(event.scope, player, players, p => { p.money += event.value; });
+          this._scopeApply(event.scope, player, players, p => {
+            p.addMoney(event.value, `Chance: ${event.label}`);
+          });
           break;
 
         case 'money_pct':
           this._scopeApply(event.scope, player, players, p => {
             const delta = Math.round(p.money * event.value);
-            p.money += delta;
+            p.addMoney(delta, `Chance: ${event.label}`);
           });
           break;
 
