@@ -17,7 +17,7 @@ Built-in characters `claude` and `claudia` have their own dedicated loader files
 | `landmarks.js` | 4 |
 | `monsters.js` | 5 |
 | `player.js` | 11 |
-| `portraits.js` | 6 |
+| `portraits.js` | 7 |
 | `resources.js` | 7 |
 | `scenery.js` | 17 |
 | `tokens.js` | 4 |
