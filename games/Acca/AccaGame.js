@@ -78,6 +78,7 @@
       this.populationSys = (A.PopulationSystem && this.districtSys)
         ? new A.PopulationSystem(cfg, engine.events, this.districtSys) : null;
       this.tradeSys      = A.TradeSystem      ? new A.TradeSystem(cfg, engine.events, this.districtSys) : null;
+      this.theMan        = A.TheManNarrator   ? new A.TheManNarrator(this) : null;
       this.chanceSys     = A.ChanceSystem     ? new A.ChanceSystem(cfg, engine.events, {
         districtSystem: this.districtSys,
         getLeader:        () => this.win.leader(),
@@ -185,19 +186,21 @@
     get currentPlayer() { return this.players[this.currentPlayerIndex]; }
 
     /** Net worth = cash + structure currentValues + vault stored money +
-     *  resources at sell-spread market price. Resources count at sell-spread
-     *  (not buy-side base price) to close the never-build NW exploit
-     *  identified in v1 playtest. */
+     *  resources valued at the current market price (no buy/sell spread —
+     *  the stocks-and-flows market closes the never-build exploit by moving
+     *  the price as the pool changes, so off-market hoards don't trade for
+     *  more than they actually clear at). */
     netWorth(p) {
       let nw = p.money;
       p.ownedStructures.forEach(s => {
         nw += s.currentValue;
         if (s.type === 'vault') nw += (s.storedMoney || 0);
       });
-      const prices = this.cfg.market.basePrices;
-      const spread = (this.cfg.market && this.cfg.market.sellSpread) || 1;
+      const M = this.marketSys;
+      const fallback = (this.cfg.market && this.cfg.market.basePrices) || {};
       Object.entries(p.resources).forEach(([res, qty]) => {
-        nw += (prices[res] || 0) * spread * qty;
+        const price = M ? M.priceOf(res) : (fallback[res] || 0);
+        nw += price * qty;
       });
       return Math.round(nw);
     }
@@ -322,6 +325,9 @@
         this.gameState = A.GAME_STATE.GAME_OVER;
         this.log(`Game Over — ${winner.name} wins!`);
         if (this.sfx) this.sfx.victory();
+        if (this.engine && this.engine.events) {
+          this.engine.events.emit('game:won', { winner });
+        }
         return;
       }
       this.turn.startTurn(this.currentPlayer);

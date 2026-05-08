@@ -49,7 +49,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 4,
+  "numberOfPlayers": 2,
   "startingMoney": 1500,
   "startingResources": {
     "wood": 0,
@@ -80,7 +80,7 @@
     "threatPerLowHappiness": 1
   },
   "property": {
-    "basePrice": 300,
+    "basePrice": 200,
     "baseRent": 30,
     "baseRentRate": 0.15,
     "mayorBonus": 50,
@@ -101,37 +101,65 @@
       {
         "type": "shop",
         "label": "Shop",
-        "cost": 250
+        "cost": 250,
+        "resourceCost": {
+          "wood": 1
+        },
+        "description": "Visitors pay rent (% of value). Owner can Invest to grow value up to a per-district cap."
       },
       {
         "type": "toll_gate",
         "label": "Toll Gate",
-        "cost": 250
+        "cost": 250,
+        "resourceCost": {
+          "wood": 1
+        },
+        "description": "Every player passing through pays the current toll directly to the owner. Toll grows by tollIncrement per pass."
       },
       {
         "type": "teleporter",
         "label": "Teleporter",
-        "cost": 400
+        "cost": 400,
+        "resourceCost": {
+          "steel": 1
+        },
+        "description": "Visitors can pay teleportFee to teleport to another teleporter you own. Free for the owner."
       },
       {
         "type": "house",
         "label": "House",
-        "cost": 250
+        "cost": 250,
+        "resourceCost": {
+          "wood": 1
+        },
+        "description": "Generates owner income; contributes population. Visitors pay rent. Mayor of district gets a flat tax per turn."
       },
       {
         "type": "factory",
         "label": "Factory",
-        "cost": 500
+        "cost": 500,
+        "resourceCost": {
+          "steel": 1
+        },
+        "description": "Produces a resource each turn (district specialty if any, else food). Houses in the district scale output."
       },
       {
         "type": "police_station",
         "label": "Police Station",
-        "cost": 500
+        "cost": 500,
+        "resourceCost": {
+          "steel": 1
+        },
+        "description": "Owner income each turn. Structures within policeProtectionTier cells are sabotage-resistant."
       },
       {
         "type": "vault",
         "label": "Vault",
-        "cost": 750
+        "cost": 750,
+        "resourceCost": {
+          "steel": 2
+        },
+        "description": "5 levels — deposit cash up to capacity, earns interest each turn. Stored money counts toward net worth."
       }
     ],
     "sprites": {
@@ -153,6 +181,7 @@
     "houseBaseCap": 700,
     "houseCapPerStructure": 150,
     "tollIncrement": 10,
+    "conversionFee": 100,
     "tollInitialRent": 10,
     "teleportFee": 75,
     "houseRentRate": 0.25,
@@ -201,9 +230,11 @@
     ],
     "upkeep": {
       "houseFood": 1,
+      "houseWater": 1,
       "shopElectricity": 1,
       "houseElectricity": 1,
       "factoryOil": 1,
+      "factoryCoal": 1,
       "policeElectricity": 1,
       "tollElectricity": 0,
       "teleporterElectricity": 1,
@@ -231,6 +262,9 @@
       "oil": 80
     },
     "sellSpread": 0.9,
+    "defaultStockBasis": 12,
+    "factoryDumpShare": 0.5,
+    "cellMarketShare": 0.5,
     "driftRate": 0.2,
     "movingAvgAlpha": 0.3,
     "priceFloorMul": 0.4,
@@ -513,6 +547,37 @@
     "maxImbalanceRatio": 5,
     "allowImbalanced": false
   },
+  "theMan": {
+    "enabled": true,
+    "duration": 3,
+    "threatThreshold": 0.8,
+    "triggers": {
+      "bankrupt": {
+        "emotion": "laughing",
+        "line": "One down."
+      },
+      "roll1": {
+        "emotion": "laughing",
+        "line": "Pathetic."
+      },
+      "trade": {
+        "emotion": "talking",
+        "line": "A handshake means nothing."
+      },
+      "sabotage": {
+        "emotion": "shouting",
+        "line": "Burn it down!"
+      },
+      "win": {
+        "emotion": "crying",
+        "line": "Impossible…"
+      },
+      "lost": {
+        "emotion": "sad",
+        "line": ""
+      }
+    }
+  },
   "turn": {
     "rollDuration": 1.4,
     "moveStepDelay": 0
@@ -557,6 +622,9 @@
     "cancel": [
       "Escape",
       "Backspace"
+    ],
+    "stepBack": [
+      "KeyZ"
     ],
     "endTurn": [
       "KeyE"

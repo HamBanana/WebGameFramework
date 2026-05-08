@@ -1,5 +1,18 @@
 // games/Acca/systems/MarketSystem.js — Planning §6.4
-// Spot market with supply/demand-driven price drift.
+// Stocks-and-flows market.
+//
+// Each resource has a global supply pool (`stock[r]`). Buys deplete it, sells
+// replenish it. Factories optionally dump surplus to the pool, resource cells
+// (mine/well/power_plant) top it up on landing, and population/factory upkeep
+// drains it. Price is derived from stock vs a per-resource basis: high stock
+// pulls the price down toward `priceFloorMul × basePrice`, empty stock pushes
+// it up toward `priceCeilMul × basePrice`.
+//
+// There is no buy/sell spread — `priceOf === sellPriceOf`. The "never-build
+// exploit" from v1 (where hoarding resources off-market valued you at the
+// inflated buy price) is closed instead by stock-driven pricing: a player
+// holding more resources off-market keeps the global stock low, raising the
+// price for everyone (including the next time the hoarder sells).
 
 (function (GF) {
   'use strict';
@@ -10,32 +23,44 @@
       this.cfg     = cfg.market;
       this.events  = eventBus;
       this.basePrices = Object.assign({}, this.cfg.basePrices);
-      this.prices     = Object.assign({}, this.cfg.basePrices);
-      this.supplyMA   = {};
-      this.demandMA   = {};
+      this.stock  = {};
+      this.basis  = {};
+      const startingStock = this.cfg.startingStock || {};
+      const stockBasis    = this.cfg.stockBasis    || {};
+      const defaultBasis  = (this.cfg.defaultStockBasis != null) ? this.cfg.defaultStockBasis : 10;
       this.cfg.resources.forEach(r => {
-        this.supplyMA[r] = 0;
-        this.demandMA[r] = 0;
+        this.stock[r] = (startingStock[r] != null) ? startingStock[r] : defaultBasis;
+        this.basis[r] = (stockBasis[r] != null)    ? stockBasis[r]    : defaultBasis;
       });
     }
 
+    /** Single price for buying or selling — no spread (Planning §F). */
     priceOf(resource) {
-      return this.prices[resource] || 0;
+      const base  = this.basePrices[resource] || 0;
+      if (base === 0) return 0;
+      const stock = this.stock[resource] || 0;
+      const basis = this.basis[resource] || 1;
+      const c = this.cfg;
+      const scale = Math.max(c.priceFloorMul,
+                    Math.min(c.priceCeilMul, basis / Math.max(1, stock)));
+      return Math.max(1, Math.round(base * scale));
     }
 
-    sellPriceOf(resource) {
-      return Math.max(1, Math.round(this.priceOf(resource) * this.cfg.sellSpread));
-    }
+    sellPriceOf(resource) { return this.priceOf(resource); }
 
     /** Buy `qty` of `resource`. Returns {ok, totalCost, reason?}. */
     buy(player, resource, qty) {
       if (qty <= 0) return { ok: false, reason: 'qty must be > 0' };
+      const have = this.stock[resource] || 0;
+      if (have < qty) return { ok: false, reason: `pool depleted (only ${have} ${resource})` };
       const total = this.priceOf(resource) * qty;
       if (player.money < total) return { ok: false, reason: 'cannot afford' };
+      const oldPrice = this.priceOf(resource);
+      this.stock[resource] = have - qty;
       player.addMoney(-total, `Bought ${qty} ${resource} at Market`);
       player.resources[resource] = (player.resources[resource] || 0) + qty;
-      this._mix('demandMA', resource, qty);
       this.events.emit('market:bought', { player, resource, qty, total });
+      this._maybeEmitPriceChange(resource, oldPrice);
       return { ok: true, totalCost: total };
     }
 
@@ -44,56 +69,55 @@
       if (qty <= 0) return { ok: false, reason: 'qty must be > 0' };
       const have = player.resources[resource] || 0;
       if (have < qty) return { ok: false, reason: 'insufficient' };
-      const total = this.sellPriceOf(resource) * qty;
+      const oldPrice = this.priceOf(resource);
+      const total = this.priceOf(resource) * qty;
       player.resources[resource] = have - qty;
+      this.stock[resource] = (this.stock[resource] || 0) + qty;
       player.addMoney(total, `Sold ${qty} ${resource} at Market`);
-      this._mix('supplyMA', resource, qty);
       this.events.emit('market:sold', { player, resource, qty, total });
+      this._maybeEmitPriceChange(resource, oldPrice);
       return { ok: true, totalProceeds: total };
     }
 
-    /** Drift prices toward supply/demand-driven targets. Call once per turn. */
-    drift() {
-      const c = this.cfg;
-      this.cfg.resources.forEach(r => {
-        const ratio  = (1 + this.demandMA[r]) / (1 + this.supplyMA[r]);
-        const base   = this.basePrices[r];
-        const target = Math.max(base * c.priceFloorMul,
-                       Math.min(base * c.priceCeilMul, base * ratio));
-        const old    = this.prices[r];
-        const next   = Math.max(1, Math.round(old + (target - old) * c.driftRate));
-        if (next !== old) {
-          this.prices[r] = next;
-          this.events.emit('market:priceChanged', {
-            resource: r, oldPrice: old, newPrice: next,
-            delta: next - old, ratio: (next - old) / Math.max(1, old),
-          });
-        }
-        // decay MAs each drift so old transactions stop dominating
-        this.supplyMA[r] *= 0.85;
-        this.demandMA[r] *= 0.85;
-      });
+    /** Adjust the global pool from non-trade flows (factory dump, resource-cell
+     *  yield, population consumption, chance event). Positive `qty` adds,
+     *  negative removes; the pool floors at zero. */
+    addStock(resource, qty, source) {
+      if (!qty) return;
+      const oldPrice = this.priceOf(resource);
+      const next = Math.max(0, (this.stock[resource] || 0) + qty);
+      this.stock[resource] = next;
+      this.events.emit('market:stockChanged', { resource, qty, source, total: next });
+      this._maybeEmitPriceChange(resource, oldPrice);
     }
 
-    _mix(channel, resource, qty) {
-      const a = this.cfg.movingAvgAlpha;
-      const cur = this[channel][resource] || 0;
-      this[channel][resource] = a * qty + (1 - a) * cur;
+    /** Stock-driven prices update on every flow, so per-turn drift is a no-op
+     *  — kept as a hook for callers that already invoke it. */
+    drift() {}
+
+    _maybeEmitPriceChange(resource, oldPrice) {
+      const newPrice = this.priceOf(resource);
+      if (newPrice !== oldPrice) {
+        this.events.emit('market:priceChanged', {
+          resource, oldPrice, newPrice,
+          delta: newPrice - oldPrice,
+          ratio: (newPrice - oldPrice) / Math.max(1, oldPrice),
+        });
+      }
     }
 
     serialize() {
       return {
-        prices: Object.assign({}, this.prices),
-        supplyMA: Object.assign({}, this.supplyMA),
-        demandMA: Object.assign({}, this.demandMA),
+        prices: Object.fromEntries(this.cfg.resources.map(r => [r, this.priceOf(r)])),
+        stock:  Object.assign({}, this.stock),
       };
     }
 
     deserialize(data) {
       if (!data) return;
-      if (data.prices)   Object.assign(this.prices, data.prices);
-      if (data.supplyMA) Object.assign(this.supplyMA, data.supplyMA);
-      if (data.demandMA) Object.assign(this.demandMA, data.demandMA);
+      if (data.stock) Object.assign(this.stock, data.stock);
+      // `prices` in old saves is informational; the runtime always derives
+      // price from stock, so we just ignore it.
     }
   }
 

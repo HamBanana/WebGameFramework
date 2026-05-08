@@ -33,7 +33,16 @@
   };
 
   const cardinalAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
-  const angularDev = (a, b) => Math.abs(((a - b + Math.PI) % (2 * Math.PI)) - Math.PI);
+  // Smallest unsigned circular distance between two angles, in [0, π].
+  // Naively `((a - b + π) % 2π) - π` is broken in JS because `%` preserves
+  // sign of the dividend — a NW neighbour at -3π/4 vs a `left` slot at π
+  // ranked 7π/4 instead of π/4, so diagonal neighbours got assigned to the
+  // wrong cardinal. Normalise into [0, 2π) before subtracting π.
+  const TAU = 2 * Math.PI;
+  const angularDev = (a, b) => {
+    const d = ((a - b + Math.PI) % TAU + TAU) % TAU - Math.PI;
+    return Math.abs(d);
+  };
 
   class BoardLoader {
     /** @param {AccaGame} game */
@@ -81,12 +90,18 @@
         game._connections.push({ from: fromCell, to: toCell, direction: conn.direction });
       });
 
-      // Greedy cardinal-slot assignment: for every neighbour, compute its
-      // angular deviation from each cardinal axis, sort the four axes
-      // best-fit-first, sort neighbours by best-fit deviation (most-cardinal
-      // first), and walk the list assigning each to its first available slot.
-      // Guarantees every neighbour gets a slot when one is free, so a 5-way
-      // junction is reachable with arrow keys.
+      // Cardinal-slot assignment with displacement. Two passes:
+      //   1. Process neighbours most-cardinal-first; each claims the closest
+      //      available slot.
+      //   2. For any neighbour still without a slot, walk its preferred fits
+      //      and displace the current occupant if this neighbour is a strictly
+      //      better match for the slot. The displaced occupant joins the
+      //      orphan queue and tries again. Stable because every displacement
+      //      strictly improves the slot's occupant fit (devs decrease on each
+      //      step), bounded by the 4 slots × neighbour count.
+      // With ≤4 neighbours, every neighbour is reachable; with 5+ neighbours
+      // (which only fit on 4 cardinal keys) the worst-aligned ones remain
+      // orphaned and a console.warn is emitted to surface the map issue.
       game.cells.forEach(cell => {
         cell.up = cell.down = cell.left = cell.right = null;
         if (!cell._neighbors || cell._neighbors.length === 0) return;
@@ -101,14 +116,38 @@
           return { neighbor, fits, bestDev: fits[0].dev };
         }).sort((a, b) => a.bestDev - b.bestDev);
 
+        const byNeighbor = new Map();
+        ranked.forEach(r => byNeighbor.set(r.neighbor, r));
+
+        const orphans = [];
         ranked.forEach(r => {
           for (const f of r.fits) {
-            if (cell[f.dir] === null) {
+            if (cell[f.dir] === null) { cell[f.dir] = r.neighbor; return; }
+          }
+          orphans.push(r);
+        });
+
+        let safety = (cell._neighbors.length + 4) * 4;
+        while (orphans.length > 0 && safety-- > 0) {
+          const r = orphans.shift();
+          let placed = false;
+          for (const f of r.fits) {
+            const occupant = cell[f.dir];
+            if (!occupant) { cell[f.dir] = r.neighbor; placed = true; break; }
+            const occRank = byNeighbor.get(occupant);
+            const occFit  = occRank && occRank.fits.find(x => x.dir === f.dir);
+            if (occFit && f.dev < occFit.dev) {
               cell[f.dir] = r.neighbor;
+              orphans.push(occRank);
+              placed = true;
               break;
             }
           }
-        });
+          if (!placed && console && console.warn) {
+            console.warn(`BoardLoader: cell ${cell.id} has more neighbours than cardinal slots; ` +
+              `neighbour ${r.neighbor.id} is unreachable from this cell.`);
+          }
+        }
       });
 
       game._toPixel  = (cell) => ({ x: originX + cell.x, y: originY + cell.y });

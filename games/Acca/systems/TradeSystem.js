@@ -40,41 +40,11 @@
      * Validated → atomic swap. Returns { ok, reason? }.
      */
     executeTrade(playerA, playerB, proposal) {
+      const check = this.previewTrade(playerA, playerB, proposal);
+      if (!check.ok) return check;
+
       const give = proposal.give    || {};
       const get  = proposal.receive || {};
-      // Validate
-      if ((give.money || 0) > playerA.money) return { ok: false, reason: 'A short on cash' };
-      if ((get.money  || 0) > playerB.money) return { ok: false, reason: 'B short on cash' };
-      if (give.resources) {
-        for (const r of Object.keys(give.resources)) {
-          if ((playerA.resources[r] || 0) < give.resources[r])
-            return { ok: false, reason: `A short on ${r}` };
-        }
-      }
-      if (get.resources) {
-        for (const r of Object.keys(get.resources)) {
-          if ((playerB.resources[r] || 0) < get.resources[r])
-            return { ok: false, reason: `B short on ${r}` };
-        }
-      }
-      if (give.structures) {
-        for (const s of give.structures) {
-          if (s.ownerIndex !== playerA.index)
-            return { ok: false, reason: 'A does not own a listed structure' };
-          if (s.sabotagedUntilTurn && s.sabotagedUntilTurn > 0)
-            return { ok: false, reason: 'sabotaged structure cannot be traded' };
-        }
-      }
-      // Imbalance guard
-      const valA = this._estimateValue(give);
-      const valB = this._estimateValue(get);
-      const imbalance = (valA + valB) > 0
-        ? Math.max(valA, valB) / Math.max(1, Math.min(valA, valB))
-        : 1;
-      if (imbalance > this.cfg.trade.maxImbalanceRatio && !this.cfg.trade.allowImbalanced) {
-        return { ok: false, reason: `imbalance ${imbalance.toFixed(1)}× exceeds limit` };
-      }
-
       // Atomic swap
       this._transferMoney(playerA, playerB, give.money || 0);
       this._transferMoney(playerB, playerA, get.money  || 0);
@@ -84,7 +54,65 @@
       (get.structures  || []).forEach(s => this._transferStructure(s, playerB, playerA));
 
       this.events.emit('trade:completed', { from: playerA, to: playerB, proposal });
-      return { ok: true };
+      return { ok: true, valA: check.valA, valB: check.valB };
+    }
+
+    /**
+     * Run the same preflight checks as executeTrade without applying any state
+     * changes. UI builders can call this on every input change and surface
+     * rejection reasons inline. Returns { ok, reason?, valA, valB, imbalance }.
+     */
+    previewTrade(playerA, playerB, proposal) {
+      const give = (proposal && proposal.give)    || {};
+      const get  = (proposal && proposal.receive) || {};
+
+      if ((give.money || 0) > playerA.money) return { ok: false, reason: `${playerA.name} short on cash` };
+      if ((get.money  || 0) > playerB.money) return { ok: false, reason: `${playerB.name} short on cash` };
+      if (give.resources) {
+        for (const r of Object.keys(give.resources)) {
+          if ((playerA.resources[r] || 0) < give.resources[r])
+            return { ok: false, reason: `${playerA.name} short on ${r}` };
+        }
+      }
+      if (get.resources) {
+        for (const r of Object.keys(get.resources)) {
+          if ((playerB.resources[r] || 0) < get.resources[r])
+            return { ok: false, reason: `${playerB.name} short on ${r}` };
+        }
+      }
+      if (give.structures) {
+        for (const s of give.structures) {
+          if (s.ownerIndex !== playerA.index)
+            return { ok: false, reason: `${playerA.name} does not own a listed structure` };
+          if (s.sabotagedUntilTurn && s.sabotagedUntilTurn > 0)
+            return { ok: false, reason: 'sabotaged structure cannot be traded' };
+        }
+      }
+      if (get.structures) {
+        for (const s of get.structures) {
+          if (s.ownerIndex !== playerB.index)
+            return { ok: false, reason: `${playerB.name} does not own a listed structure` };
+          if (s.sabotagedUntilTurn && s.sabotagedUntilTurn > 0)
+            return { ok: false, reason: 'sabotaged structure cannot be traded' };
+        }
+      }
+
+      const valA = this._estimateValue(give);
+      const valB = this._estimateValue(get);
+      if (valA === 0 && valB === 0) {
+        return { ok: false, reason: 'empty proposal', valA, valB, imbalance: 1 };
+      }
+      const imbalance = (valA + valB) > 0
+        ? Math.max(valA, valB) / Math.max(1, Math.min(valA, valB))
+        : 1;
+      if (imbalance > this.cfg.trade.maxImbalanceRatio && !this.cfg.trade.allowImbalanced) {
+        return {
+          ok: false,
+          reason: `imbalance ${imbalance.toFixed(1)}× exceeds limit ${this.cfg.trade.maxImbalanceRatio}×`,
+          valA, valB, imbalance,
+        };
+      }
+      return { ok: true, valA, valB, imbalance };
     }
 
     _estimateValue(side) {

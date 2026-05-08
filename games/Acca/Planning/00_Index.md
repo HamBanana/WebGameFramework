@@ -33,6 +33,7 @@ The planning set is split into self-contained documents. Read them in order for 
 | 18  | `18_ImplementationRoadmap.md`             | Current implementation state and the next phases of work. |
 | 19  | `19_OpenQuestions.md`                     | Unresolved design questions and parked debates. |
 | 20  | `20_Changes.md`                           | Running log of behavior/balance changes vs Acca v1. |
+| 21  | `21_Bugs.md`                              | Live triage of bugs and proposed changes; entries close as commits land. |
 | —   | `API_Reference.md`                        | Per-file class/method reference for every source file under `games/Acca/`. |
 
 ## What's different about v2 (top-level deltas vs Acca v1)
@@ -47,7 +48,7 @@ These are the structural changes that ripple through the entire planning set. Ea
 - **Spotlight + camera lerp.** Camera is owned by `CameraManager` and supports a "spotlight" effect (dimmed screen, glowing hole, pulsing halo) used to draw attention to a specific cell during prompts.
 - **Cooperative threat track.** A counter (`game.cooperativeThreat`) accumulates each turn and from low-happiness districts; when it hits the limit, the table loses cooperatively. Off by default (`mode: "competitive"`).
 - **Catch-up bonus.** A trailing player below `catchUp.threshold` of the leader's net worth receives `catchUp.amount` cash at the start of their turn.
-- **Resource sell-spread in net-worth.** `netWorth()` values resources at `basePrice × sellSpread` (≈ 90%), closing the v1 "never-build" exploit where net-worth tracked buy price exactly.
+- **Stocks-and-flows market.** `MarketSystem` tracks a global supply pool per resource. Price is derived from stock vs a per-resource basis (high stock → price falls, empty stock → price rises). There is no buy/sell spread — `priceOf === sellPriceOf`. The v1 "never-build" exploit is closed differently than the early v2 design: hoarding off-market keeps the pool low and the price high (so the hoarded inventory is valued at the high price but moving it depresses the price), instead of the old `× sellSpread` net-worth haircut.
 
 Detailed deltas are tagged inline as **"Δ v1"** boxes in each chapter.
 

@@ -26,12 +26,16 @@
       // Non-adjacent road choices (legacy — kept null nowadays).
       this.roads    = [];
       this.roadIdx  = 0;
+      // Snapshot stack for stepBack — populated by stepTo, drained by
+      // stepBack, cleared at move:complete (landing commits the move).
+      this.history  = [];
     }
 
     begin(player, moves) {
       this.player    = player;
       this.movesLeft = moves;
       this.active    = true;
+      this.history   = [];
       if (this.game && this.game.die) this.game.die.setFace(this.movesLeft);
       this._refreshCandidates();
     }
@@ -75,6 +79,15 @@
       // property → buy/continue prompt).
       if (this.game && this.game.menu && this.game.menu.visible) return;
 
+      // Step-back undo (Planning H.2). Reverses the most recent stepTo:
+      // restores money, resources, toll-gate state, position, and movesLeft.
+      // Closes the v1 exploit where back-and-forth movement spent moves
+      // without committing to a destination.
+      if (this._pressed('stepBack') && this.history.length > 0) {
+        this.stepBack();
+        return;
+      }
+
       // Cardinal stepping — pressing an arrow key with a slot filled in that
       // direction steps immediately.
       if (this._pressed('up')    && this.adjacent.up)    { this.stepTo(this.adjacent.up);    return; }
@@ -83,9 +96,33 @@
       if (this._pressed('right') && this.adjacent.right) { this.stepTo(this.adjacent.right); return; }
     }
 
+    /** Capture all reversible state before applying a step. Toll-gate
+     *  pass-through is the only side-effect at MOVE granularity in v2;
+     *  player money and resources are also captured for completeness so any
+     *  future pass-through hook (e.g. resource toll) is reverted automatically. */
+    _snapshot() {
+      const p = this.player;
+      const tollGates = [];
+      const cells = (this.game && this.game.cells) || [];
+      cells.forEach(c => {
+        if (c.structure && c.structure.type === 'toll_gate') {
+          tollGates.push({ cellId: c.id, tollAccrued: c.structure.tollAccrued });
+        }
+      });
+      return {
+        money: p.money,
+        resources: Object.assign({}, p.resources),
+        cell: p.currentCell,
+        movesLeft: this.movesLeft,
+        tollGates,
+      };
+    }
+
     /** Public so a future hook (e.g. teleporter) can drive movement. */
     stepTo(target) {
       const p = this.player;
+      // Snapshot BEFORE applying so stepBack can fully restore.
+      this.history.push(this._snapshot());
       this.events.emit('cell:leave', { player: p, cell: p.currentCell });
       p.currentCell = target;
       this.movesLeft--;
@@ -99,9 +136,46 @@
         this.active = false;
         this.adjacent = { up: null, down: null, left: null, right: null };
         this.roads    = [];
+        // Move is committed at landing — discard the undo history.
+        this.history  = [];
         this.events.emit('move:complete', { player: p });
       } else {
         this._refreshCandidates();
+      }
+    }
+
+    /** Undo the most recent stepTo: pop the snapshot, restore player money /
+     *  resources / position / movesLeft, and roll back toll-gate accruals so
+     *  popular routes don't grow on a discarded step. Land-event side-effects
+     *  are NOT in scope (landing fires only when movesLeft hits 0 and the
+     *  history is cleared). */
+    stepBack() {
+      if (this.history.length === 0) return;
+      const snap = this.history.pop();
+      const p = this.player;
+
+      this.events.emit('cell:leave', { player: p, cell: p.currentCell });
+
+      p.money = snap.money;
+      p.resources = Object.assign({}, snap.resources);
+      // Restore toll accruals snapped at the start of the step.
+      const cellsById = (this.game && this.game.cells) || [];
+      const indexed = new Map(cellsById.map(c => [c.id, c]));
+      snap.tollGates.forEach(t => {
+        const c = indexed.get(t.cellId);
+        if (c && c.structure && c.structure.type === 'toll_gate') {
+          c.structure.tollAccrued = t.tollAccrued;
+        }
+      });
+
+      p.currentCell = snap.cell;
+      this.movesLeft = snap.movesLeft;
+      if (this.game && this.game.die) this.game.die.setFace(this.movesLeft);
+      this.events.emit('cell:enter', { player: p, cell: snap.cell, final: false });
+      this._refreshCandidates();
+
+      if (this.game && this.game.log) {
+        this.game.log(`${p.name} stepped back (${this.movesLeft} move${this.movesLeft === 1 ? '' : 's'} remaining).`);
       }
     }
 
@@ -118,6 +192,7 @@
       this.adjacent  = { up: null, down: null, left: null, right: null };
       this.roads     = [];
       this.roadIdx   = 0;
+      this.history   = [];
     }
   }
 

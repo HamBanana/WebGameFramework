@@ -12,11 +12,22 @@
       this.game = game;
     }
 
-    /** Build a structure on a cell for an owner. Returns the new structure. */
+    /** Build a structure on a cell for an owner. Returns the new structure.
+     *  Deducts the entry's `resourceCost` from the owner's stockpile if set;
+     *  it's the caller's job to verify affordability via `canAffordResources`
+     *  before this point (the in-place build menu does so). */
     build(cell, type, ownerIndex) {
       const cfg   = this.game.cfg.structures;
       const entry = cfg.catalog.find(c => c.type === type);
       if (!entry) return null;
+
+      // Resource cost (wood/steel for build materials per planning B.1).
+      const owner = this.game.players[ownerIndex];
+      if (entry.resourceCost && owner) {
+        Object.entries(entry.resourceCost).forEach(([res, qty]) => {
+          owner.resources[res] = (owner.resources[res] || 0) - qty;
+        });
+      }
 
       const spriteName = cfg.sprites[type];
       const animator   = this.game.sprites.createAnimator(spriteName, 'idle');
@@ -39,6 +50,18 @@
       this.game.engine.events.emit('property:bought', { structure: s, ownerIndex });
       if (this.game.districtSys) this.game.districtSys.recomputeMayor(cell.district);
       return s;
+    }
+
+    /** Returns the first {res, missing} pair from `entry.resourceCost` the
+     *  player can't afford, or null if the player has every required quantity.
+     *  Used by the build/convert menus to gate the option. */
+    missingBuildResources(player, entry) {
+      if (!entry || !entry.resourceCost) return null;
+      for (const [res, qty] of Object.entries(entry.resourceCost)) {
+        const have = (player.resources && player.resources[res]) || 0;
+        if (have < qty) return { res, missing: qty - have, need: qty };
+      }
+      return null;
     }
 
     /** Owner-on-land action menu options for this structure. */
@@ -133,8 +156,102 @@
           opts.push({ label: '(passive — owner takes no action)', action: onDone });
           break;
       }
+      this._appendConvertOptions(structure, player, onDone, opts);
       opts.push({ label: 'Continue', action: onDone });
       return opts;
+    }
+
+    /** Convert this structure into another catalog entry. Flat fee (config
+     *  `conversionFee`, default $100) on top of the price delta. Refund equals
+     *  `currentValue` (so investments / renovations / vault upgrades are
+     *  forfeited — the new structure starts at its own `baseValue`). Vaults
+     *  with storedMoney must be withdrawn first; the option lists the missing
+     *  precondition rather than auto-emptying. Teleporter conversion orphans
+     *  the partner — left as a documented side effect.
+     *
+     *  Sub-menu pattern: the parent Convert row opens a fresh menu listing
+     *  every other catalog type with the net cost preview; selecting one
+     *  performs the swap and calls onDone (back to whatever menu the parent
+     *  came from). */
+    _appendConvertOptions(structure, player, onDone, opts) {
+      const game = this.game;
+      const cfg  = game.cfg.structures;
+      const fee  = (cfg.conversionFee != null) ? cfg.conversionFee : 100;
+      // Vault with money still inside — forbid until emptied.
+      if (structure.type === 'vault' && structure.storedMoney > 0) {
+        opts.push({
+          label: `Convert to ...  — withdraw vault $${structure.storedMoney} first`,
+          action: () => {},
+          _disabled: true,
+        });
+        return;
+      }
+      // Build the catalog of available targets (excluding the current type and
+      // any the player can't afford after refund).
+      const refund  = structure.currentValue || 0;
+      const targets = cfg.catalog.filter(e => e.type !== structure.type);
+      if (targets.length === 0) return;
+
+      opts.push({
+        label: `Convert to ...  (refund $${refund}, fee $${fee})`,
+        action: () => {
+          const subOpts = targets.map(entry => {
+            const net = (entry.cost + fee) - refund;
+            const can = (player.money - net) >= 0;
+            return {
+              label: can
+                ? `→ ${entry.label}  (net ${net >= 0 ? '−$' + net : '+$' + (-net)})`
+                : `→ ${entry.label}  (net −$${net})  — need $${net - player.money}`,
+              _disabled: !can,
+              action: () => {
+                this._convertTo(structure, entry, player, fee, refund);
+                onDone();
+              },
+            };
+          });
+          subOpts.push({
+            label: 'Back',
+            action: () => {
+              const parentOpts = this.ownerOptionsFor(structure, player, onDone);
+              game.menu.show(`Your ${structure.type}`, parentOpts);
+            },
+          });
+          game.menu.show(`Convert ${structure.type} to ...`, subOpts);
+        },
+      });
+    }
+
+    /** Apply the conversion: refund old, charge new+fee, replace cell.structure
+     *  with a fresh PlayerStructure of the target type. */
+    _convertTo(oldStructure, entry, player, fee, refund) {
+      const game = this.game;
+      const cfg  = game.cfg.structures;
+      const cell = oldStructure.cell;
+      const district = cell.district;
+
+      // Drop the old structure off the player's portfolio.
+      const idx = player.ownedStructures.indexOf(oldStructure);
+      if (idx >= 0) player.ownedStructures.splice(idx, 1);
+
+      // Net cash motion: refund first (positive), then charge new build + fee.
+      // addMoney logs each leg separately so the player can see the breakdown.
+      player.addMoney(refund, `Refund from converting ${oldStructure.type}`);
+      const charge = entry.cost + fee;
+      player.addMoney(-charge, `Built ${entry.label} (convert) — fee $${fee}`);
+
+      // Build the replacement structure in the same cell. Reuses the standard
+      // build path so toll-gate seed values, animator wiring, and event
+      // emissions stay consistent.
+      cell.structure = null;
+      const fresh = this.build(cell, entry.type, player.index);
+      void fresh;
+
+      game.log(`${player.name} converted ${oldStructure.type} → ${entry.type} ` +
+        `in ${district || '—'} (net $${charge - refund}).`);
+
+      // build() already calls districtSys.recomputeMayor; no extra recompute
+      // needed unless the swap changed something else.
+      void cfg;
     }
 
     /**
