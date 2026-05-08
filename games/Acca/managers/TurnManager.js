@@ -59,6 +59,9 @@
               this.game.log(`Rolled a ${value}.`);
             }
             this.game.lastRoll = value;
+            if (this.game.engine && this.game.engine.events) {
+              this.game.engine.events.emit('roll:done', { player: this.player, value });
+            }
             this.enter(A.TURN_STAGE.MOVE);
           });
           break;
@@ -166,7 +169,7 @@
           this._showOtherMenu();
         },
       });
-      opts.push({ label: 'Game log', action: () => this._showGameLog(0) });
+      opts.push({ label: 'Game log', action: () => this._showGameLog() });
       opts.push({ label: 'Pass turn', action: () => this.enter(A.TURN_STAGE.END_TURN) });
       opts.push({ label: 'Back', action: () => this._showStartMenu() });
       this.menu.show('Other', opts, `${p.name}  •  $${p.money}`, { layout: 'horizontal' });
@@ -203,7 +206,7 @@
       }));
       opts.push({ label: 'Back', action: back });
       this.menu.show('Sell assets', opts,
-        `Cash $${p.money}  ·  Spot prices ${(game.cfg.market.sellSpread * 100).toFixed(0)}% of market`,
+        `Cash $${p.money}  ·  Spot prices follow market stock`,
         { layout: 'horizontal' });
     }
 
@@ -241,14 +244,9 @@
      *  chronological order (newest first), with prev/next/close. Entries are
      *  {turn,msg,count} objects (or legacy strings); the page header shows the
      *  turn span of the visible slice. */
-    _showGameLog(page) {
+    _showGameLog() {
       const game = this.game;
-      const PER_PAGE = 14;
-      const all = (game.eventLog || []).slice().reverse();
-      const totalPages = Math.max(1, Math.ceil(all.length / PER_PAGE));
-      const safePage = Math.max(0, Math.min(page, totalPages - 1));
-      const start = safePage * PER_PAGE;
-      const slice = all.slice(start, start + PER_PAGE);
+      const all  = (game.eventLog || []);
 
       const fmt = (e) => {
         if (typeof e === 'string') return { line: e, turn: null };
@@ -256,30 +254,33 @@
         return { line: txt, turn: e.turn };
       };
 
+      // Group consecutive entries that share the same turn into one heading
+      // followed by sub-bullets (matches the user's request: "one log entry
+      // per action" with breakdown lines). Headings are disabled rows so
+      // confirm slides past them without firing an action; entries themselves
+      // are no-op rows the user can highlight without exiting the log.
       const opts = [];
-      slice.forEach(entry => {
+      let lastTurn = null;
+      const noop = () => this._showGameLog();
+      all.forEach(entry => {
         const f = fmt(entry);
-        const tag = f.turn != null ? `t${f.turn} ` : '';
-        const text = '· ' + tag + (f.line.length > 60 ? f.line.slice(0, 57) + '…' : f.line);
-        opts.push({ label: text, action: () => this._showGameLog(safePage) });
+        const text = f.line.length > 56 ? f.line.slice(0, 53) + '…' : f.line;
+        if (f.turn != null && f.turn !== lastTurn) {
+          opts.push({ label: `── Turn ${f.turn} ──`, action: noop, _disabled: true });
+          lastTurn = f.turn;
+        }
+        opts.push({ label: '  · ' + text, action: noop });
       });
-      if (slice.length === 0) {
-        opts.push({ label: '(no events yet)', action: () => this._showStartMenu() });
-      }
-      if (safePage + 1 < totalPages) {
-        opts.push({ label: `Next page (${safePage + 2}/${totalPages})`, action: () => this._showGameLog(safePage + 1) });
-      }
-      if (safePage > 0) {
-        opts.push({ label: `Previous page (${safePage}/${totalPages})`, action: () => this._showGameLog(safePage - 1) });
+      if (opts.length === 0) {
+        opts.push({ label: '(no events yet)', action: () => this._showOtherMenu() });
       }
       opts.push({ label: 'Back', action: () => this._showOtherMenu() });
 
-      // Compose header — turn-range tag if entries on this page carry turn
-      // numbers. (Old saves may not.)
-      const turns = slice.map(e => (typeof e === 'object' ? e.turn : null)).filter(t => t != null);
-      const turnRange = turns.length > 0 ? ` · turns ${Math.max(...turns)}–${Math.min(...turns)}` : '';
-      this.menu.show('Game log', opts,
-        `Page ${safePage + 1} of ${totalPages} · ${all.length} entries${turnRange}`);
+      this.menu.show('Game log', opts, `${all.length} entries`,
+        { maxVisible: 14 });
+      // Open at the bottom — auto-scroll to latest entry like a chat window.
+      this.menu.index = opts.length - 2 >= 0 ? opts.length - 2 : 0;
+      this.menu._adjustScroll();
     }
 
     // ── Manage submenu ────────────────────────────────────────────────────
@@ -493,20 +494,25 @@
       const draft = this._tradeDraft;
       const resCfg = (game.cfg.market && game.cfg.market.resources) || [];
 
-      const cashTiersGive = [0, 50, 100, 250, 500].filter(v => v <= me.money + 0.001);
-      if (cashTiersGive[cashTiersGive.length - 1] !== me.money && me.money > 0
-          && !cashTiersGive.includes(me.money)) {
-        cashTiersGive.push(me.money);
-      }
-      const cashTiersReceive = [0, 50, 100, 250, 500].filter(v => v <= target.money + 0.001);
-      if (cashTiersReceive[cashTiersReceive.length - 1] !== target.money && target.money > 0
-          && !cashTiersReceive.includes(target.money)) {
-        cashTiersReceive.push(target.money);
-      }
-      const resTiers = (max) => {
-        const t = [0, 1, 5, 10];
-        const out = t.filter(v => v <= max);
+      // Cash tiers — coarse fixed steps ending at the player's full balance.
+      // Resource tiers — every integer 0..max so the user can hit any
+      // specific quantity (Planning §G.2 "selecting specific values must
+      // be possible"). Capped at 20 to keep menus friendly; for piles
+      // bigger than 20, the cycle still hits 0/1/2/.../20 and `max`.
+      const buildCashTiers = (max) => {
+        const t = [0, 50, 100, 250, 500];
+        const out = t.filter(v => v <= max + 0.001);
         if (max > 0 && !out.includes(max)) out.push(max);
+        return out;
+      };
+      const cashTiersGive    = buildCashTiers(me.money);
+      const cashTiersReceive = buildCashTiers(target.money);
+      const resTiers = (max) => {
+        if (max <= 0) return [0];
+        const out = [];
+        const ceiling = Math.min(20, max);
+        for (let i = 0; i <= ceiling; i++) out.push(i);
+        if (max > ceiling) out.push(max);
         return out;
       };
 
@@ -558,32 +564,30 @@
         });
       });
 
-      // Estimated values — used by the imbalance guard in TradeSystem.
-      const giveVal = this._estimateSide(draft.give);
-      const recvVal = this._estimateSide(draft.receive);
-      const ratio = (giveVal > 0 && recvVal > 0)
-        ? Math.max(giveVal, recvVal) / Math.min(giveVal, recvVal)
-        : 1;
-      const limit = (game.cfg.trade && game.cfg.trade.maxImbalanceRatio) || 5;
-      const allow = (giveVal > 0 || recvVal > 0)
-        && ((giveVal === 0 || recvVal === 0)
-            ? !!(game.cfg.trade && game.cfg.trade.allowImbalanced)
-            : ratio <= limit + 0.001);
+      // Build the proposal in the canonical shape and use TradeSystem's
+      // own previewTrade so the builder's allow/reason exactly matches what
+      // executeTrade would do. Avoids drift between local approximation and
+      // the system's actual validation.
+      const proposal = {
+        give:    { money: draft.give.money,    resources: this._compactBag(draft.give.resources) },
+        receive: { money: draft.receive.money, resources: this._compactBag(draft.receive.resources) },
+      };
+      const preview = game.tradeSys.previewTrade(this.player, target, proposal);
+      const giveVal = preview.valA != null ? preview.valA : this._estimateSide(draft.give);
+      const recvVal = preview.valB != null ? preview.valB : this._estimateSide(draft.receive);
 
       opts.push({
-        label: allow
+        label: preview.ok
           ? `Propose trade   (~$${giveVal} → ~$${recvVal})`
-          : `Cannot propose — imbalance ${ratio.toFixed(1)}× (limit ${limit}×)`,
-        _disabled: !allow,
+          : `Cannot propose — ${preview.reason}`,
+        _disabled: !preview.ok,
         action: () => {
-          if (!allow) { this._showTradeBuilder(target); return; }
-          const proposal = {
-            give:    { money: draft.give.money,    resources: this._compactBag(draft.give.resources) },
-            receive: { money: draft.receive.money, resources: this._compactBag(draft.receive.resources) },
-          };
           const r = game.tradeSys.executeTrade(this.player, target, proposal);
-          if (r.ok) game.log(`Trade with ${target.name} completed (~$${giveVal} ↔ ~$${recvVal}).`);
-          else      game.log(`Trade refused: ${r.reason}.`);
+          if (r.ok) {
+            game.log(`Trade with ${target.name} completed (~$${giveVal} ↔ ~$${recvVal}).`);
+          } else {
+            game.log(`Trade refused: ${r.reason}.`);
+          }
           this._tradeDraft = null;
           this._showStartMenu();
         },
@@ -597,8 +601,26 @@
         action: () => { this._tradeDraft = null; this._showTradeTargetMenu(); },
       });
 
+      // Imbalance ratio bar — visual indication of how lopsided the trade
+      // currently is, with the limit marker. Helps the player tune the
+      // proposal to a balanced state without trial-and-error.
+      const limit = (game.cfg.trade && game.cfg.trade.maxImbalanceRatio) || 5;
+      const ratio = (preview && preview.imbalance != null)
+        ? preview.imbalance
+        : ((giveVal > 0 && recvVal > 0) ? Math.max(giveVal, recvVal) / Math.min(giveVal, recvVal) : 1);
+      const segs = 10;
+      const fill = Math.min(segs, Math.round((ratio / limit) * segs));
+      const limitSeg = segs;
+      const bar = Array.from({ length: segs }, (_, i) => {
+        if (i < fill) return '█';
+        if (i === limitSeg - 1) return '▏';
+        return '░';
+      }).join('');
+      const ratioStr = ratio === 1 && (giveVal === 0 || recvVal === 0)
+        ? '—'
+        : ratio.toFixed(1) + '×';
       this.menu.show(`Trade with ${target.name}`, opts,
-        `You ~$${giveVal} ↔ ${target.name} ~$${recvVal}  ·  Cash $${me.money} → ${target.name} $${target.money}`);
+        `You ~$${giveVal} ↔ ${target.name} ~$${recvVal}  ·  imbalance [${bar}] ${ratioStr} (max ${limit}×)`);
     }
 
     /** Drop zero entries from a resource bag so the proposal validates cleanly
@@ -638,10 +660,13 @@
       const p    = this.player;
       const M    = game.marketSys;
       if (!M) { this._showStartMenu(); return; }
-      const opts = game.cfg.market.resources.map(r => ({
-        label: `${r}  buy $${M.priceOf(r)}  sell $${M.sellPriceOf(r)}  (you: ${p.resources[r] || 0})`,
-        action: () => this._showMarketResource(r),
-      }));
+      const opts = game.cfg.market.resources.map(r => {
+        const stock = (M.stock && M.stock[r] != null) ? M.stock[r] : '?';
+        return {
+          label: `${r}  $${M.priceOf(r)} ea  (pool: ${stock} · you: ${p.resources[r] || 0})`,
+          action: () => this._showMarketResource(r),
+        };
+      });
       opts.push({ label: 'Done', action: () => this.enter(A.TURN_STAGE.END_TURN) });
       this.menu.show('Market', opts, `Cash $${p.money}`);
     }
@@ -673,8 +698,9 @@
         } },
         { label: 'Back', action: () => this._showMarketMenu() },
       ];
+      const stock = (M.stock && M.stock[resource] != null) ? M.stock[resource] : '?';
       this.menu.show(`${resource}`, opts,
-        `Buy $${M.priceOf(resource)} · Sell $${M.sellPriceOf(resource)} · Have ${p.resources[resource] || 0}`);
+        `Spot $${M.priceOf(resource)} · Pool ${stock} · Have ${p.resources[resource] || 0}`);
     }
 
     // ── Landing dispatch ──────────────────────────────────────────────────
@@ -757,7 +783,20 @@
     _grantResource(cell, resource, qty, label) {
       const p = this.player;
       p.resources[resource] = (p.resources[resource] || 0) + qty;
-      this.game.log(`${p.name} stops at the ${label} (+${qty} ${resource}).`);
+      // Resource-cell yield also tops up the global market pool — a small
+      // share of what the cell produces ends up "available for trade." The
+      // cellMarketShare config (default 0.5) controls how much of the player
+      // yield mirrors into the pool. Keeps prices anchored when a popular
+      // mine is being mined frequently.
+      const game = this.game;
+      const share = (game.cfg.market && game.cfg.market.cellMarketShare != null)
+        ? game.cfg.market.cellMarketShare
+        : 0.5;
+      const dump = Math.max(0, Math.round(qty * share));
+      if (dump > 0 && game.marketSys && game.marketSys.addStock) {
+        game.marketSys.addStock(resource, dump, label);
+      }
+      game.log(`${p.name} stops at the ${label} (+${qty} ${resource}).`);
       this.enter(A.TURN_STAGE.END_TURN);
     }
 
@@ -829,7 +868,7 @@
       const mulLabel = sabotaged ? `${sabMul}× value (sabotaged)` : `${baseMul}× value`;
       const takeoverLabel = can
         ? `Buy from ${owner.name}  ($${cost} = ${mulLabel})`
-        : `Buy from ${owner.name}  ($${cost} = ${mulLabel})  — cannot afford`;
+        : `Buy from ${owner.name}  ($${cost} = ${mulLabel})  — need $${cost - p.money}`;
 
       // Sabotage row — only meaningful in competitive multiplayer; reuse
       // TradeSystem.canSabotage so we get the same affordability/oil/police
@@ -844,8 +883,8 @@
       const opts = [
         {
           label: takeoverLabel,
+          _disabled: !can,
           action: () => {
-            if (!can) { this.enter(A.TURN_STAGE.END_TURN); return; }
             const r = game.tradeSys.takeover(p, structure, game.players, game.turnCounter);
             game.log(r.ok
               ? `${p.name} bought the ${this._typeLabel(structure.type)} from ${owner.name} for $${r.cost}.`
@@ -857,7 +896,6 @@
           label: sabLabel,
           _disabled: !sabCheck.ok,
           action: () => {
-            if (!sabCheck.ok) { this.enter(A.TURN_STAGE.END_TURN); return; }
             const r = game.tradeSys.sabotage(p, structure, game.players, game.turnCounter);
             game.log(r.ok
               ? `${p.name} sabotaged ${owner.name}'s ${this._typeLabel(structure.type)} for ${cfgSab.duration} turns.`
@@ -891,7 +929,9 @@
       const opts = [];
       if (canAffordAnything) {
         sorted.forEach(entry => {
-          const can = p.money >= entry.cost;
+          const cashOk = p.money >= entry.cost;
+          const missing = game.structures.missingBuildResources(p, entry);
+          const can = cashOk && !missing;
           // Preview the visitor rent (or other earning mechanism) so the
           // buy decision isn't blind. Falls back to a sensible per-type
           // hint for structures that don't charge rent.
@@ -911,15 +951,20 @@
           } else {
             hint = '';
           }
-          const cost = `Build ${entry.label} ($${entry.cost})`;
+          // Resource cost suffix — appears alongside the cash cost so the
+          // material requirement is visible upfront.
+          const resCost = entry.resourceCost
+            ? ' + ' + Object.entries(entry.resourceCost).map(([r, q]) => `${q} ${r}`).join(', ')
+            : '';
+          const cost = `Build ${entry.label} ($${entry.cost}${resCost})`;
           const tail = hint ? ` — ${hint}` : '';
+          let reason = '';
+          if (!cashOk)       reason = `  — need $${entry.cost - p.money}`;
+          else if (missing)  reason = `  — need ${missing.missing} ${missing.res}`;
           opts.push({
-            label: can
-              ? `${cost}${tail}`
-              : `${cost}  — need $${entry.cost - p.money}`,
+            label: can ? `${cost}${tail}` : `${cost}${reason}`,
             _disabled: !can,
             action: () => {
-              if (!can) { this._showBuildMenu(cell); return; }
               p.addMoney(-entry.cost, `Built ${entry.label} in ${cell.district}`);
               game.structures.build(cell, entry.type, p.index);
               if (game.districtSys) game.districtSys.recomputeMayor(cell.district);
@@ -930,10 +975,24 @@
       }
       opts.push({ label: 'Skip', action: () => this.enter(A.TURN_STAGE.END_TURN) });
 
-      const subtitle = canAffordAnything
+      const baseSubtitle = canAffordAnything
         ? `Cash: $${p.money}  ·  Cheapest: $${cheapest}`
         : `Cash: $${p.money}  ·  Cheapest build: $${cheapest}  — can't afford anything yet`;
-      this.menu.show(`Empty plot in ${cell.district}`, opts, subtitle);
+      // Live tooltip: as the player moves through the catalog, swap the
+      // subtitle to show the highlighted entry's longer description. The Skip
+      // row falls back to the base context line.
+      const descByLabel = new Map();
+      sorted.forEach(entry => {
+        if (entry.description) descByLabel.set(entry.label, entry.description);
+      });
+      const onIndexChange = (opt) => {
+        if (!opt) return;
+        // Match by leading "Build <label>" prefix (the visible label has cost/hint suffixes).
+        const m = /^Build\s+([^\s].*?)\s*\(/.exec(opt.label || '');
+        const desc = m && descByLabel.get(m[1]);
+        this.menu.subtitle = desc || baseSubtitle;
+      };
+      this.menu.show(`Empty plot in ${cell.district}`, opts, baseSubtitle, { onIndexChange });
     }
 
     _typeLabel(type) {

@@ -50,6 +50,8 @@ From `cfg.structures.catalog`:
 | `police_station` | $700       | `cell_police_station`                  | Owner income; structures within `policeProtectionTier` cells are sabotage-resistant. |
 | `vault`          | $1000      | `cell_vault`                           | 5 levels: deposit cash up to capacity; earns interest each turn. Stored money counts toward net worth. |
 
+Each catalog entry can also specify a `resourceCost` map (e.g. `{ "wood": 1 }` or `{ "steel": 2 }`) that's deducted from the owner's stockpile when the structure is built. The build menu shows this alongside the cash cost and disables the row with a `need N <res>` reason when the player can't pay both. Default costs: Shop / Toll Gate / House → 1 wood; Teleporter / Factory / Police Station → 1 steel; Vault → 2 steel.
+
 `cfg.structures.shopBaseCap` and `shopCapPerStructure` define how much investment each Shop can absorb based on the owner's structures-in-district count. `cfg.structures.shopInvestStep` is the increment per click ($100 default).
 
 Houses follow the same pattern via `houseBaseCap` (default $700), `houseCapPerStructure` (default $150), and `houseRenovateStep` (default $100). Renovating raises `currentValue` by the step (and therefore the per-visit rent, which scales with `currentValue`) up to the per-district cap.
@@ -86,6 +88,10 @@ The Build menu uses the spotlight effect — `cameraManager.spotlightOnCell(cell
 
 These same options are also reachable from anywhere via **Manage → Properties** — selecting a row opens the structure's owner-options menu inline (camera spotlights the cell). The only difference between the two paths is that the in-place landing menu auto-ends the turn after the action while the portfolio path returns to the structure list.
 
+### Convert (any owner-options menu)
+
+Every owner-options menu also includes **Convert to ...** which opens a sub-menu of the other catalog entries. Selecting one refunds `currentValue` (so investments/renovations/vault upgrades are forfeited — the new structure starts at its own `baseValue`), charges `newType.baseValue + cfg.structures.conversionFee` (default $100 flat), and replaces `cell.structure` with a fresh `PlayerStructure` of the target type. Mayor recompute fires through the regular `build()` path. Vault must be emptied first (the option is shown disabled with `withdraw vault $X first` until `storedMoney === 0`); teleporter conversion orphans the partner.
+
 ## 5.5 Visitor effects (when another player owns it)
 
 `StructureManager.visitorEffect(structure, player, onDone)` is called when a non-owner lands on a structure. It applies the rent/fee immediately and may show a follow-up menu (e.g. takeover).
@@ -109,7 +115,7 @@ After any visitor effect, `TurnManager._offerTakeoverOnLand` always presents thr
 
 `StructureManager.passThroughEffect(cell, player)` is called for every cell stepped through during MOVE, *not just the landing cell*.
 
-The only structure with a pass-through effect is the **toll gate**: each step over a foreign-owned toll gate transfers the current `tollAccrued` from the visitor directly to the owner (immediate payment — there is no cup to collect from), then increases `tollAccrued` by `cfg.structures.tollIncrement` ($25) so the next visitor pays a higher fee.
+The only structure with a pass-through effect is the **toll gate**: each step over a foreign-owned toll gate transfers the current `tollAccrued` from the visitor directly to the owner (immediate payment — there is no cup to collect from), then increases `tollAccrued` by `cfg.structures.tollIncrement` ($10) so the next visitor pays a higher fee.
 
 ## 5.7 Sabotage and police protection
 
@@ -120,10 +126,10 @@ The only structure with a pass-through effect is the **toll gate**: each step ov
 
 `EconomyManager.runEndOfTurn` consumes resources per structure type from `cfg.structures.upkeep`:
 
-- House → 1 food per turn.
+- House → 1 food + 1 water per turn (population upkeep).
 - Shop → 1 electricity.
-- House → 1 electricity (additional to food).
-- Factory → 1 oil.
+- House → 1 electricity (additional to food/water).
+- Factory → 1 oil + 1 coal (industrial input).
 - Police → 1 electricity.
 - Toll gate, vault → 0 electricity (free).
 - Teleporter → 1 electricity.

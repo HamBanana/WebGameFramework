@@ -102,6 +102,17 @@
             }
           }
           player.resources[resource] = (player.resources[resource] || 0) + qty;
+          // Factory output also dumps a configurable share into the global
+          // market pool, so producing a resource at scale presses its price
+          // down (per Planning §F market redesign — replenishment via
+          // factories closes the never-build exploit). Default = full share.
+          const factoryShare = (game.cfg.market && game.cfg.market.factoryDumpShare != null)
+            ? game.cfg.market.factoryDumpShare
+            : 1.0;
+          const dump = Math.max(0, Math.round(qty * factoryShare));
+          if (dump > 0 && game.marketSys && game.marketSys.addStock) {
+            game.marketSys.addStock(resource, dump, 'factory');
+          }
           // Flat owner cash from the factory (config: structures.factoryOwnerIncome).
           // Wired here so the rebalanced cost ($500) has a real per-turn payback.
           const flat = cfg.factoryOwnerIncome || 0;
@@ -271,14 +282,16 @@
       const game   = this.game;
       const cfg    = game.cfg.structures;
       const upkeep = cfg.upkeep || {};
-      const need = { food: 0, electricity: 0, oil: 0 };
+      const need = { food: 0, water: 0, electricity: 0, oil: 0, coal: 0 };
       const idle = [];
 
-      // Houses eat food per residence.
+      // Houses eat food and drink water per residence (population upkeep).
       const houses = player.ownedStructures.filter(s => s.type === 'house');
-      const houseFoodPer = upkeep.houseFood || 0;
-      if (houses.length > 0 && houseFoodPer > 0) {
-        need.food += houses.length * houseFoodPer;
+      const houseFoodPer  = upkeep.houseFood  || 0;
+      const houseWaterPer = upkeep.houseWater || 0;
+      if (houses.length > 0) {
+        if (houseFoodPer  > 0) need.food  += houses.length * houseFoodPer;
+        if (houseWaterPer > 0) need.water += houses.length * houseWaterPer;
       }
 
       // Buildings draw electricity (per-type configurable).
@@ -293,10 +306,12 @@
       };
       player.ownedStructures.forEach(s => { need.electricity += buildingElec(s); });
 
-      // Factories burn oil.
+      // Factories burn oil and coal.
       const factories = player.ownedStructures.filter(s => s.type === 'factory');
-      const factoryOilPer = upkeep.factoryOil || 0;
-      need.oil += factories.length * factoryOilPer;
+      const factoryOilPer  = upkeep.factoryOil  || 0;
+      const factoryCoalPer = upkeep.factoryCoal || 0;
+      need.oil  += factories.length * factoryOilPer;
+      need.coal += factories.length * factoryCoalPer;
 
       const summary = [];
       Object.keys(need).forEach(res => {
@@ -316,7 +331,9 @@
         game.log(`${player.name} short on ${res} (need ${required}, have ${have}); structure idled.`);
         let idleType = null;
         if (res === 'food')             idleType = 'house';
+        else if (res === 'water')       idleType = 'house';
         else if (res === 'oil')         idleType = 'factory';
+        else if (res === 'coal')        idleType = 'factory';
         else if (res === 'electricity') idleType = 'shop';
         if (idleType) {
           const target = player.ownedStructures.find(s => s.type === idleType
@@ -404,6 +421,9 @@
       if (nw <= 0 && !player.isBankrupt) {
         player.isBankrupt = true;
         game.log(`${player.name} is bankrupt — net worth $${nw}.`);
+        if (game.engine && game.engine.events) {
+          game.engine.events.emit('player:bankrupted', { player, netWorth: nw });
+        }
       } else if (nw > 0 && player.isBankrupt) {
         // Recovery (rare but possible if sabotage decay restored value).
         player.isBankrupt = false;

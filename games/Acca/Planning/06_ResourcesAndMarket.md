@@ -6,13 +6,13 @@ Defined under `cfg.market.resources` and seeded in `cfg.startingResources`. v2 s
 
 | Resource      | Base price ($) | Starting qty | Notes |
 |---------------|----------------|--------------|-------|
-| `wood`        | 25             | 0            | Cheap building material; minor industry use. |
-| `steel`       | 50             | 0            | Mid-tier industrial output (mine subType `iron`). |
-| `electricity` | 35             | 3            | Powers shops, houses, police, teleporter, factory. |
-| `water`       | 20             | 0            | Population upkeep + districts gain happiness with surplus. |
-| `food`        | 30             | 3            | Population upkeep; default factory output. |
-| `coal`        | 40             | 0            | Industrial input (mine subType `coal`). |
-| `oil`         | 80             | 1            | Sabotage reagent (1 oil per attempt) + scales mayor's migration capacity. |
+| `wood`        | 25             | 0            | Build material — required to construct Shop / Toll Gate / House. |
+| `steel`       | 50             | 0            | Build material — required for Teleporter / Factory / Police (1) and Vault (2). |
+| `electricity` | 35             | 3            | Powers shops, houses, police, teleporter (factories don't draw electricity). |
+| `water`       | 20             | 0            | Population upkeep — each house drinks 1 water/turn alongside food. |
+| `food`        | 30             | 3            | Population upkeep — each house consumes 1 food/turn; also default factory output. |
+| `coal`        | 40             | 0            | Industrial input — each factory burns 1 coal/turn alongside oil. |
+| `oil`         | 80             | 1            | Industrial input + sabotage reagent (1 oil per attempt); scales mayor's migration capacity. |
 
 These are the only resources v2 trades on the market; structures' upkeep references the `food` / `electricity` / `oil` subset.
 
@@ -39,33 +39,40 @@ End-of-turn (`runEndOfTurn`) applies upkeep (food/electricity/oil consumption �
 
 ## 6.4 Market system
 
-`games/Acca/systems/MarketSystem.js`. The market is a simple rolling supply/demand model.
+`games/Acca/systems/MarketSystem.js`. **Stocks-and-flows model** — each resource has a global supply pool (`stock[r]`) and the spot price is derived directly from the pool size vs a per-resource basis. There is no buy/sell spread.
 
 ```js
 class MarketSystem {
-  constructor(cfg, eventBus) { /* prices, supplyMA, demandMA from cfg.market */ }
+  constructor(cfg, eventBus) { /* basePrices, stock, basis from cfg.market */ }
 
-  priceOf(resource);                 // current buy price
-  sellPriceOf(resource);             // current price × cfg.market.sellSpread (0.9)
+  priceOf(resource);                 // spot price (single price for buy + sell)
+  sellPriceOf(resource);             // alias of priceOf — kept for caller compat
   buy(player, resource, qty);        // {ok, totalCost, reason?}
   sell(player, resource, qty);       // {ok, totalProceeds, reason?}
-  drift();                           // call once per turn end
+  addStock(resource, qty, source);   // factory dump / cell yield / chance event
+  drift();                           // no-op (price is stock-derived)
   serialize() / deserialize(data);
 }
 ```
 
-Drift logic:
+Pricing:
 
-- For each resource each `drift()` call:
-  - `ratio = (1 + demandMA) / (1 + supplyMA)`.
-  - `target = clamp(basePrice × ratio, basePrice × priceFloorMul, basePrice × priceCeilMul)`.
-    - Defaults: floor = 0.4×, ceil = 2.5×.
-  - `next = max(1, round(current + (target - current) × driftRate))` (driftRate = 0.2).
-- After the price update, `supplyMA[r] *= 0.85` and `demandMA[r] *= 0.85` so old transactions stop dominating.
-- Buy/sell themselves smooth toward the new tick: `MA[r] = α × qty + (1 - α) × MA[r]` with `α = movingAvgAlpha` (= 0.3).
-- Emits `market:priceChanged({resource, oldPrice, newPrice, delta, ratio})` whenever a price actually changes. `AccaGame` only logs the change to the in-game notifications when the relative change ≥ 25%.
+- `scale = clamp(priceFloorMul, priceCeilMul, basis / max(1, stock))`.
+- `priceOf(r) = max(1, round(basePrice × scale))`.
+- Defaults: `priceFloorMul = 0.4`, `priceCeilMul = 2.5`, `defaultStockBasis = 12`. Per-resource overrides via `cfg.market.stockBasis[r]`.
+- Stock at basis → price = basePrice. Stock = 1 → price ≈ basePrice × ceil. Stock ≫ basis → price ≈ basePrice × floor.
+
+Flows:
+
+- **Buy** depletes the pool (`stock[r] -= qty`), pays `qty × priceOf(r)`. Refused if `stock < qty` (`pool depleted`).
+- **Sell** replenishes the pool (`stock[r] += qty`), earns `qty × priceOf(r)`. No spread.
+- **Factory output** mirrors `cfg.market.factoryDumpShare` of its production into the pool (default 0.5).
+- **Resource cells** (mine/well/power_plant) on landing dump `cfg.market.cellMarketShare` of the player yield into the pool (default 0.5).
+- **Chance events** can call `addStock(r, ±n, 'chance')` to spike or drain the pool.
+
+Each flow calls `_maybeEmitPriceChange` so price updates propagate to `market:priceChanged` listeners (HUD, log, narrator). `drift()` is a no-op kept as a hook for callers that already invoke it per turn.
 
 Buy/sell helpers:
 
-- `buy()` — checks affordability; deducts `qty × priceOf(resource)`; bumps `demandMA[resource]`; adds resource to player's pile. Emits `market:bought`.
-- `sell()` — checks player has the resource; pays out `qty × sellPriceOf(resource)`; bumps `supplyMA[resource]`. Emits `market
+- `buy()` — checks pool stock and affordability; deducts cost; pulls from `stock`; adds to player. Emits `market:bought` then `market:priceChanged`.
+- `sell()` — checks player has the resource; pays out; adds to `stock`. Emits `market:sold

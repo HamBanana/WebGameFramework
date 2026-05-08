@@ -137,7 +137,13 @@
     _drawVerticalPanel(ctx, W, H) {
       const game = this.game;
       const UI   = game.ui;
-      const opts = game.menu.options;
+      const visible = (typeof game.menu.visibleSlice === 'function')
+        ? game.menu.visibleSlice()
+        : { slice: game.menu.options, offset: 0 };
+      const opts   = visible.slice;
+      const offset = visible.offset;
+      const totalLen = game.menu.options.length;
+      const isWindowed = totalLen > opts.length;
       const optH = 24;
       const w    = 320;
       const h    = 56 + (game.menu.subtitle ? 16 : 0) + opts.length * optH + 24;
@@ -159,22 +165,38 @@
         curY += 16;
       }
 
+      const localIndex = game.menu.index - offset;
       opts.forEach((opt, i) => {
         const oy = curY + 8 + i * optH;
         const disabled = !!opt._disabled;
-        if (i === game.menu.index) {
+        if (i === localIndex) {
           ctx.fillStyle = disabled ? 'rgba(120,120,120,0.18)' : 'rgba(120,160,220,0.25)';
           ctx.fillRect(x + 8, oy - 4, w - 16, optH - 4);
         }
-        const prefix = i === game.menu.index ? '> ' : '  ';
+        const prefix = i === localIndex ? '> ' : '  ';
         const color = disabled
-          ? (i === game.menu.index ? '#9aa0a8' : '#666c75')
-          : (i === game.menu.index ? '#ffffff' : '#bcd0e8');
+          ? (i === localIndex ? '#9aa0a8' : '#666c75')
+          : (i === localIndex ? '#ffffff' : '#bcd0e8');
         UI.drawText(ctx, prefix + opt.label, x + 24, oy,
           { font: '13px monospace', color });
       });
 
-      UI.drawText(ctx, '↑↓ select   Enter confirm', x + w / 2, y + h - 18,
+      // Scroll indicators when the list is windowed.
+      if (isWindowed) {
+        if (offset > 0) {
+          UI.drawText(ctx, '▲ ' + offset + ' more', x + w - 14, curY + 8,
+            { font: '10px monospace', color: '#7793b8', align: 'right' });
+        }
+        const below = totalLen - (offset + opts.length);
+        if (below > 0) {
+          UI.drawText(ctx, '▼ ' + below + ' more', x + w - 14, curY + 8 + opts.length * optH - 4,
+            { font: '10px monospace', color: '#7793b8', align: 'right' });
+        }
+      }
+
+      UI.drawText(ctx,
+        isWindowed ? '↑↓ scroll   Enter confirm' : '↑↓ select   Enter confirm',
+        x + w / 2, y + h - 18,
         { font: '11px monospace', color: '#7793b8', align: 'center' });
     }
 
@@ -251,10 +273,13 @@
           structVal += (s.currentValue || 0);
           if (s.type === 'vault') vaultStored += (s.storedMoney || 0);
         });
-        const prices = game.cfg.market.basePrices;
-        const spread = (game.cfg.market && game.cfg.market.sellSpread) || 1;
+        const M = game.marketSys;
+        const fallback = (game.cfg.market && game.cfg.market.basePrices) || {};
         let resVal = 0;
-        Object.entries(p.resources).forEach(([r, q]) => { resVal += (prices[r] || 0) * spread * q; });
+        Object.entries(p.resources).forEach(([r, q]) => {
+          const price = M ? M.priceOf(r) : (fallback[r] || 0);
+          resVal += price * q;
+        });
         return {
           p,
           cash,
