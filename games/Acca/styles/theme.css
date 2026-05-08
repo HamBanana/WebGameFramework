@@ -1,65 +1,146 @@
-/* games/Acca2/styles/theme.css
- * Root CSS variables (palette, layout dimensions) and the document-level
- * resets/typography. Imported first so every other stylesheet can reference
- * --bg, --text, --accent, --gain, etc.
+/* games/Acca/styles/theme.css
+ * Acca v3 shell — palette tokens, document reset, app grid.
+ * Generated from claude.ai/design mockup_v1, ported to live DOM ids.
+ *
+ * Two palettes via <html data-palette="classic|warm">. Defaults to classic.
+ * Legacy variable names are preserved as aliases so existing JS class hooks
+ * (.flash-gain, .money-loss, .res-pill.bump, .pl-row.active, etc.) keep
+ * resolving the same colors.
  */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
+:root,
+html[data-palette="classic"] {
   --topbar-h        : 52px;
-  --left-sidebar-w  : 220px;
-  --right-sidebar-w : 256px;
+  --left-sidebar-w  : 232px;
+  --right-sidebar-w : 280px;
 
-  --bg-deep         : #05080d;
-  --bg-mid          : #0a1018;
-  --bg-soft         : #111824;
+  --bg-deep         : #0b1320;
+  --bg-deeper       : #070c16;
+  --panel-bg        : #131c2e;
+  --panel-bg-2      : #182338;
+  --panel-line      : #243049;
+  --panel-line-hi   : #324666;
 
-  --panel-bg        : rgba(10, 16, 24, 0.78);
-  --panel-bg-soft   : rgba(20, 30, 44, 0.6);
-  --panel-border    : #2a4060;
-  --panel-border-hi : #3a5680;
+  --ink             : #d6e4ff;
+  --ink-dim         : #8ea0c2;
+  --ink-mute        : #5a6a87;
 
-  --accent          : #5a8ed1;
-  --accent-light    : #9fc8ff;
-  --accent-glow     : rgba(159, 200, 255, 0.45);
-
-  --text            : #e6edf5;
-  --text-bright     : #ffffff;
-  --text-dim        : #9aa5b1;
-  --text-faint      : #5a6878;
+  --accent          : #1c92e8;
+  --accent-2        : #1879c4;
+  --accent-soft     : #2a4a6e;
+  --hi              : #62cdff;
+  --glow            : rgba(28, 146, 232, 0.35);
 
   --gain            : #7be07f;
-  --gain-glow       : rgba(123, 224, 127, 0.7);
   --loss            : #ff7676;
-  --loss-glow       : rgba(255, 118, 118, 0.7);
-  --warn            : #ffe57a;
-  --info            : #9fc8ff;
+  --warn            : #ffc857;
+  --info            : #62cdff;
+
+  --topbar-grad     : linear-gradient(90deg, #1c92e8 0%, #1879c4 100%);
+
+  --tile-a          : #16243a;
+  --tile-b          : #1a2c47;
+  --road            : #2c3e60;
+  --water           : #0e1b30;
+  --crop            : #4a6a3a;
+  --stone           : #5a6373;
+  --brick           : #8a4a3a;
+  --wood            : #6a4a2a;
+  --gold            : #d4a437;
+  --build-tag       : #2a4a6e;
+  --decor-tag       : #4a3a5a;
 }
 
-html, body {
-  width: 100%;
-  height: 100%;
+html[data-palette="warm"] {
+  --bg-deep         : #1a120b;
+  --bg-deeper       : #110a05;
+  --panel-bg        : #2a1d12;
+  --panel-bg-2      : #34241a;
+  --panel-line      : #4a3424;
+  --panel-line-hi   : #6a4a30;
+
+  --ink             : #f6e3c8;
+  --ink-dim         : #c2a47e;
+  --ink-mute        : #846848;
+
+  --accent          : #e8821c;
+  --accent-2        : #c45a18;
+  --accent-soft     : #6a3a18;
+  --hi              : #ffb366;
+  --glow            : rgba(232, 130, 28, 0.35);
+
+  --gain            : #7be07f;
+  --loss            : #ff7676;
+  --warn            : #ffd266;
+  --info            : #ffb366;
+
+  --topbar-grad     : linear-gradient(90deg, #e8821c 0%, #c45a18 100%);
+
+  --tile-a          : #2a1d12;
+  --tile-b          : #34241a;
+  --road            : #5a3a22;
+  --water           : #1a1208;
+  --crop            : #6a5a2a;
+  --stone           : #6a5a48;
+  --brick           : #a05236;
+  --wood            : #7a4a22;
+  --gold            : #e8b03a;
+  --build-tag       : #6a3a18;
+  --decor-tag       : #4a2a3a;
 }
+
+/* Legacy aliases — keep old code referring to --text, --accent-light, etc. working. */
+:root {
+  --text            : var(--ink);
+  --text-bright     : #ffffff;
+  --text-dim        : var(--ink-dim);
+  --text-faint      : var(--ink-mute);
+  --accent-light    : var(--hi);
+  --accent-glow     : var(--glow);
+  --gain-glow       : rgba(123, 224, 127, 0.7);
+  --loss-glow       : rgba(255, 118, 118, 0.7);
+  --bg-mid          : var(--bg-deep);
+  --bg-soft         : var(--panel-bg);
+  --panel-bg-soft   : var(--panel-bg-2);
+  --panel-border    : var(--panel-line);
+  --panel-border-hi : var(--panel-line-hi);
+}
+
+html, body { width: 100%; height: 100%; }
 
 body {
-  background: radial-gradient(ellipse at top, #1a2330 0%, #05080d 60%, #03060a 100%);
+  background: var(--bg-deeper);
   overflow: hidden;
   font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
-  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle ambient glow behind the UI */
+/* Subtle ambient glow + faint scanlines for the retro feel */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(circle at 20% 80%, rgba(90, 142, 209, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 80% 20%, rgba(159, 200, 255, 0.05) 0%, transparent 40%);
+    radial-gradient(1200px 600px at 50% -10%, rgba(255, 255, 255, 0.025), transparent 60%),
+    var(--bg-deep);
   pointer-events: none;
   z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
 }
 
 #gameContainer {
@@ -69,13 +150,11 @@ body::before {
   grid-template-rows: var(--topbar-h) 1fr;
   grid-template-columns: var(--left-sidebar-w) 1fr var(--right-sidebar-w);
   grid-template-areas:
-    "topbar  topbar topbar"
-    "districts map   sidebar";
-  background: linear-gradient(180deg, #14202e 0%, #07090e 100%);
-  z-index: 1;
+    "topbar    topbar topbar"
+    "districts map    sidebar";
+  z-index: 2;
 }
 
-/* Map (canvas) container */
 #mapWrap {
   grid-area: map;
   position: relative;
@@ -83,72 +162,171 @@ body::before {
   display: flex;
   justify-content: center;
   align-items: center;
-  border-left: 1px solid var(--panel-border);
-  border-right: 1px solid var(--panel-border);
+  padding: 10px;
   background:
-    radial-gradient(ellipse at center, rgba(40, 80, 130, 0.06) 0%, transparent 70%),
-    linear-gradient(180deg, #0a121e 0%, #050810 100%);
-  box-shadow:
-    inset 0 0 60px rgba(0, 0, 0, 0.7),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    radial-gradient(ellipse at center, rgba(40, 80, 130, 0.05) 0%, transparent 70%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-deeper) 100%);
 }
 #gameCanvas {
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-  /* width/height are set dynamically by Engine._setupScaling() */
+  background: #000;
+  border: 1px solid var(--panel-line-hi);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-/* Shared panel base */
+/* Shared panel base — restyled for the new aesthetic. */
 .panel {
-  background:
-    linear-gradient(180deg, rgba(40, 56, 80, 0.18) 0%, rgba(10, 16, 24, 0.4) 100%),
-    var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 7px;
-  padding: 9px;
+  background: linear-gradient(180deg, var(--panel-bg) 0%, var(--panel-bg-2) 100%);
+  border: 1px solid var(--panel-line);
+  border-radius: 2px;
+  padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .panel-title {
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: 1.5px;
-  color: var(--accent-light);
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
   text-transform: uppercase;
-  border-bottom: 1px solid rgba(159, 200, 255, 0.12);
-  text-shadow: 0 0 8px rgba(159, 200, 255, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(0, 0, 0, 0.18) 100%);
+  border-bottom: 1px solid var(--panel-line);
+  flex: 0 0 auto;
 }
 
-/* Scrollbar styling (shared across the three scrollable panels) */
+/* The narrator overlay (The Man) — pinned over the canvas, hidden by default. */
+.acca-narrator {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.acca-narrator.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+.acca-narrator .man-portrait {
+  width: 56px;
+  height: 56px;
+  image-rendering: pixelated;
+  background: var(--panel-bg);
+  border: 2px solid var(--accent);
+  border-radius: 1px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5), 0 0 18px var(--glow);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.acca-narrator .bubble {
+  position: relative;
+  background: #000;
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 10px 26px rgba(0, 0, 0, 0.55), 0 0 12px var(--glow);
+  padding: 8px 12px;
+  max-width: 320px;
+  color: var(--ink);
+  font-size: 12px;
+  border-radius: 1px;
+  animation: bubble-in 0.35s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.acca-narrator .bubble::before {
+  content: ''; position: absolute; left: -8px; top: 14px;
+  width: 0; height: 0;
+  border: 7px solid transparent; border-right-color: var(--accent);
+}
+.acca-narrator .bubble::after {
+  content: ''; position: absolute; left: -6px; top: 15px;
+  width: 0; height: 0;
+  border: 6px solid transparent; border-right-color: #000;
+}
+.acca-narrator .bubble .who {
+  font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 3px;
+}
+@keyframes bubble-in {
+  0%   { opacity: 0; transform: translateX(-6px) scale(0.96); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* Palette toggle (tweaks) — pinned bottom-right, fixed. */
+.acca-tweaks {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--panel-line-hi);
+  border-radius: 2px;
+  padding: 6px 8px;
+  z-index: 60;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.acca-tweaks .t-label {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 0 4px;
+}
+.acca-tweaks .seg {
+  display: flex;
+  border: 1px solid var(--panel-line-hi);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.acca-tweaks .seg button {
+  font: inherit;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  background: rgba(255, 255, 255, 0.02);
+  border: 0;
+  border-right: 1px solid var(--panel-line-hi);
+  cursor: pointer;
+}
+.acca-tweaks .seg button:last-child { border-right: 0; }
+.acca-tweaks .seg button.on {
+  color: #fff;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* Shared scrollbars across the three scrollable panels */
 #notifications::-webkit-scrollbar,
 #playerList::-webkit-scrollbar,
-#districtList::-webkit-scrollbar {
-  width: 6px;
-}
+#districtList::-webkit-scrollbar { width: 8px; }
 #notifications::-webkit-scrollbar-track,
 #playerList::-webkit-scrollbar-track,
-#districtList::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 3px;
-}
+#districtList::-webkit-scrollbar-track { background: transparent; }
 #notifications::-webkit-scrollbar-thumb,
 #playerList::-webkit-scrollbar-thumb,
 #districtList::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(159, 200, 255, 0.4) 0%, rgba(90, 142, 209, 0.3) 100%);
-  border-radius: 3px;
-}
-#notifications::-webkit-scrollbar-thumb:hover,
-#playerList::-webkit-scrollbar-thumb:hover,
-#districtList::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(159, 200, 255, 0.65) 0%, rgba(90, 142, 209, 0.5) 100%);
+  background: var(--panel-line-hi);
+  border-radius: 0;
 }

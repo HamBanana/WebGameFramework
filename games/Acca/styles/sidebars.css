@@ -1,233 +1,242 @@
-/* games/Acca2/styles/sidebars.css
- * Left district sidebar (district list rows) and right sidebar (notifications
- * panel + player list rows including row-flash money animations).
+/* games/Acca/styles/sidebars.css
+ * Acca v3 — left district sidebar + right notifications/players sidebar.
+ * Targets the existing DOM and the class names HUDRenderer.js emits:
+ *   .dist-row, .dist-header, .dist-name, .dist-tag, .dist-body, .dist-line,
+ *   .dist-mood-{happy|ok|sad|angry}, .dist-mayor-line, .dist-mayor-dot, .dim
+ *   .notif (+ .latest), .pl-row (+ .active, .bankrupt), .pl-color, .pl-info,
+ *   .pl-name, .pl-stat, .flash-gain, .flash-loss
  */
 
-/* ── Left sidebar — Districts ─────────────────────────────────────────── */
+/* ── Left sidebar — Districts ───────────────────────────────────────────── */
 #districtSidebar {
   grid-area: districts;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 7px;
-  background: linear-gradient(180deg, rgba(10, 14, 22, 0.92) 0%, rgba(5, 8, 14, 0.95) 100%);
-  border-right: 1px solid var(--panel-border);
-  /* Bound the sidebar to the viewport minus the topbar so the inner list can
-     scroll instead of clipping behind adjacent panels. */
+  padding: 8px;
+  background: var(--bg-deeper);
+  border-right: 1px solid var(--panel-line);
   min-height: 0;
   max-height: 100vh;
 }
-
-#districtSidebar .panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
+#districtSidebar .panel { flex: 1; }
 
 #districtList {
   flex: 1;
   overflow-y: auto;
-  font-size: 10px;
-  /* Scrollbar styling — keep it slim so it doesn't compete with the content. */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(159, 200, 255, 0.25) transparent;
+  padding: 0;
+  font-size: 11px;
 }
-#districtList::-webkit-scrollbar { width: 4px; }
-#districtList::-webkit-scrollbar-thumb {
-  background: rgba(159, 200, 255, 0.25);
-  border-radius: 2px;
-}
-#districtList::-webkit-scrollbar-track { background: transparent; }
 
 .dist-row {
-  padding: 6px 5px;
-  margin-bottom: 5px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%);
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  transition: background 0.2s ease, border-color 0.2s ease;
+  display: block;
+  padding: 8px 10px;
+  border-bottom: 1px dashed var(--panel-line);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.18s ease;
 }
-.dist-row:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
-  border-color: rgba(159, 200, 255, 0.15);
+.dist-row:hover { background: rgba(255, 255, 255, 0.025); }
+.dist-row.active {
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 80%);
+}
+.dist-row.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--glow);
 }
 
 .dist-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 4px;
 }
 
 .dist-name {
-  font-weight: bold;
-  font-size: 10.5px;
-  color: var(--text);
-  border-left: 3px solid #666;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  border-left: 3px solid currentColor;
   padding-left: 6px;
-  letter-spacing: 0.3px;
+  /* HUDRenderer sets `style="border-left-color: ${district.color}"` inline. */
 }
 
 .dist-tag {
-  font-size: 8px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text-dim);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-line);
+  border-radius: 1px;
   padding: 1px 5px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.dist-body { padding-left: 9px; }
+.dist-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 10px;
+}
 
 .dist-line {
-  color: var(--text-dim);
-  font-size: 10px;
-  line-height: 1.55;
+  color: var(--ink-dim);
+  font-size: 11px;
+  line-height: 1.45;
 }
-.dist-line strong { color: var(--text); font-weight: bold; }
+.dist-line strong {
+  color: var(--ink);
+  font-weight: 700;
+}
 
-.dist-mood        { font-weight: bold; }
-.dist-mood-happy  { color: #7be07f; text-shadow: 0 0 6px rgba(123, 224, 127, 0.4); }
-.dist-mood-ok     { color: #ffe57a; }
-.dist-mood-sad    { color: #ff9f6b; }
-.dist-mood-angry  { color: #ff6b6b; text-shadow: 0 0 6px rgba(255, 107, 107, 0.4); }
+.dist-mood       { font-weight: 700; }
+.dist-mood-happy { color: var(--gain); text-shadow: 0 0 6px rgba(123, 224, 127, 0.4); }
+.dist-mood-ok    { color: var(--warn); }
+.dist-mood-sad   { color: #ff9f6b; }
+.dist-mood-angry { color: var(--loss); text-shadow: 0 0 6px rgba(255, 118, 118, 0.45); }
 
 .dist-mayor-line {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 2px;
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--ink-dim);
 }
 .dist-mayor-dot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
   flex-shrink: 0;
-  box-shadow: 0 0 4px currentColor;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 4px currentColor;
 }
-.dim { color: #4a5568; }
+.dim { color: var(--ink-mute); }
 
-/* ── Right sidebar — Notifications + Players ──────────────────────────── */
+/* ── Right sidebar — Notifications + Players ───────────────────────────── */
 #sidebar {
   grid-area: sidebar;
   display: grid;
-  /* Notifications panel takes ~50% of the column (was 38%) so the ~14 most
-     recent events stay visible during heavy mayor turns. */
-  grid-template-rows: 50% 50%;
-  gap: 7px;
-  padding: 7px;
-  background: linear-gradient(180deg, rgba(10, 14, 22, 0.92) 0%, rgba(5, 8, 14, 0.95) 100%);
-  border-left: 1px solid var(--panel-border);
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-deeper);
+  border-left: 1px solid var(--panel-line);
   min-height: 0;
   max-height: 100vh;
 }
-#sidebar .panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
+#sidebar .panel { display: flex; flex-direction: column; min-height: 0; }
 
+/* Notifications */
 #notifications {
   flex: 1;
   overflow-y: auto;
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--text-dim);
-  padding-right: 2px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ink-dim);
+  padding: 0;
 }
+
 #notifications .notif {
-  margin-bottom: 4px;
-  padding: 5px 7px;
-  border-left: 2px solid var(--accent);
-  background: linear-gradient(90deg, rgba(90, 142, 209, 0.12) 0%, rgba(90, 142, 209, 0.03) 100%);
-  border-radius: 0 3px 3px 0;
-  animation: notif-in 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+  padding: 6px 10px;
+  border-bottom: 1px dashed var(--panel-line);
+  border-left: 2px solid transparent;
+  color: var(--ink);
+  background: transparent;
+  animation: notif-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 #notifications .notif.latest {
-  color: var(--text);
   border-left-color: var(--warn);
-  background: linear-gradient(90deg, rgba(255, 233, 120, 0.16) 0%, rgba(255, 233, 120, 0.03) 100%);
-  box-shadow:
-    0 0 0 1px rgba(255, 233, 120, 0.08),
-    0 0 8px rgba(255, 233, 120, 0.06);
+  background: linear-gradient(90deg, rgba(255, 200, 87, 0.10) 0%, transparent 90%);
+  box-shadow: inset 0 0 0 1px rgba(255, 200, 87, 0.06);
 }
 @keyframes notif-in {
-  from { opacity: 0; transform: translateX(12px); }
+  from { opacity: 0; transform: translateX(8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
+/* Player list */
 #playerList {
   flex: 1;
   overflow-y: auto;
-  font-size: 11px;
-  padding-right: 2px;
+  font-size: 11.5px;
+  padding: 0;
 }
+
 .pl-row {
   display: grid;
-  grid-template-columns: 6px 1fr;
-  gap: 7px;
-  padding: 6px 6px;
-  margin-bottom: 5px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.01) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
+  grid-template-columns: 4px 1fr;
+  column-gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px dashed var(--panel-line);
   position: relative;
   transition:
     background 0.25s ease,
-    transform 0.2s ease,
-    box-shadow 0.25s ease,
-    border-color 0.25s ease;
+    box-shadow 0.25s ease;
   overflow: hidden;
 }
-.pl-row:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
-  border-color: rgba(159, 200, 255, 0.15);
-}
+.pl-row:hover { background: rgba(255, 255, 255, 0.025); }
 .pl-row.active {
-  background: linear-gradient(180deg, rgba(159, 200, 255, 0.13) 0%, rgba(90, 142, 209, 0.04) 100%);
-  border-color: rgba(159, 200, 255, 0.4);
-  box-shadow:
-    0 0 0 1px rgba(159, 200, 255, 0.2),
-    0 0 14px rgba(159, 200, 255, 0.15);
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 90%);
+}
+.pl-row.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--glow);
 }
 .pl-color {
   width: 4px;
-  border-radius: 2px;
+  align-self: stretch;
+  border-radius: 1px;
   box-shadow: 0 0 6px currentColor;
 }
-.pl-info { display: flex; flex-direction: column; line-height: 1.3; }
+.pl-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  min-width: 0;
+}
 .pl-name {
-  font-weight: bold;
-  font-size: 11px;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   text-shadow: 0 0 4px currentColor;
 }
-.pl-stat { color: var(--text-dim); font-size: 10px; }
-.pl-stat strong { color: var(--text); }
-.pl-row.bankrupt { opacity: 0.55; }
-.pl-row.bankrupt .pl-name { text-decoration: line-through; }
+.pl-stat {
+  color: var(--ink-dim);
+  font-size: 10.5px;
+}
+.pl-stat strong { color: var(--ink); }
+.pl-row.bankrupt .pl-name,
+.pl-row.bankrupt .pl-stat {
+  text-decoration: line-through;
+  color: var(--ink-mute);
+  text-shadow: none;
+}
 
-/* Money flash on player rows */
-.pl-row.flash-gain { animation: row-flash-gain 1s ease-out; }
-.pl-row.flash-loss { animation: row-flash-loss 1s ease-out; }
+/* Money flash on player rows — class names preserved from v2. */
+.pl-row.flash-gain { animation: row-flash-gain 0.95s ease-out; }
+.pl-row.flash-loss { animation: row-flash-loss 0.95s ease-out; }
 @keyframes row-flash-gain {
   0% {
-    background: linear-gradient(180deg, rgba(123, 224, 127, 0.50) 0%, rgba(123, 224, 127, 0.20) 100%);
-    border-color: rgba(123, 224, 127, 0.7);
-    box-shadow:
-      0 0 0 1px rgba(123, 224, 127, 0.6),
-      0 0 18px rgba(123, 224, 127, 0.5);
+    background: linear-gradient(90deg, rgba(123, 224, 127, 0.45) 0%, rgba(123, 224, 127, 0.15) 100%);
+    box-shadow: inset 0 0 0 1px rgba(123, 224, 127, 0.6), 0 0 18px rgba(123, 224, 127, 0.4);
   }
 }
 @keyframes row-flash-loss {
   0% {
-    background: linear-gradient(180deg, rgba(255, 118, 118, 0.50) 0%, rgba(255, 118, 118, 0.20) 100%);
-    border-color: rgba(255, 118, 118, 0.7);
-    box-shadow:
-      0 0 0 1px rgba(255, 118, 118, 0.6),
-      0 0 18px rgba(255, 118, 118, 0.5);
+    background: linear-gradient(90deg, rgba(255, 118, 118, 0.45) 0%, rgba(255, 118, 118, 0.15) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 118, 118, 0.6), 0 0 18px rgba(255, 118, 118, 0.4);
   }
 }

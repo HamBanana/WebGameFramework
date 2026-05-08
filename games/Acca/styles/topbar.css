@@ -1,127 +1,136 @@
-/* games/Acca2/styles/topbar.css
- * Top bar layout (turn / name / money / net worth / resources) plus all the
- * money-flash animations and the bankrupt badge.
+/* games/Acca/styles/topbar.css
+ * Acca v3 topbar — gradient header bar with five zones.
+ * Targets the existing DOM: #topbar > .tb-cell > .tb-label + .tb-value.
+ * Keeps the legacy .res-pill, .money-gain/.money-loss, .flash-*, .coin-burst,
+ * .money-delta animation classes so HUDRenderer.js + MoneyAnimations.js
+ * keep working unchanged.
  */
 
 #topbar {
   grid-area: topbar;
   display: grid;
-  grid-template-columns: 80px 130px 150px 150px 1fr;
+  grid-template-columns: 110px 1fr 180px 180px 1fr;
   align-items: stretch;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%),
-    linear-gradient(180deg, #1c92e8 0%, #155f9e 100%);
-  border-bottom: 1px solid #042a48;
+  background: var(--topbar-grad);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.35);
   box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.3),
-    0 4px 20px rgba(0, 0, 0, 0.5),
+    0 2px 0 rgba(0, 0, 0, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  font-size: 12px;
   overflow: hidden;
   position: relative;
-  z-index: 2;
+  z-index: 3;
 }
 
 .tb-cell {
-  padding: 5px 12px;
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 1px;
+  padding: 0 14px;
+  border-right: 1px solid rgba(0, 0, 0, 0.18);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
   white-space: nowrap;
   position: relative;
+  min-width: 0;
 }
-.tb-cell:last-child { border-right: none; }
+.tb-cell:last-child { border-right: 0; }
 
-.tb-bankrupt-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 7px;
-  font-size: 9px;
-  font-weight: bold;
-  color: #fff;
-  background: linear-gradient(180deg, #d85050 0%, #a83434 100%);
-  border-radius: 3px;
-  letter-spacing: 0.5px;
+/* First cell — turn counter — sunken, treated as a slot. */
+#topbar .tb-cell:first-child {
+  background: rgba(0, 0, 0, 0.28);
+}
+#topbar .tb-cell:first-child .tb-value { font-size: 22px; }
+
+/* Net-worth cell gets a subtle inset to read as secondary. */
+#topbar .tb-cell:nth-child(4) { background: rgba(0, 0, 0, 0.14); }
+
+.tb-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  vertical-align: middle;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  animation: badge-pulse 1.6s ease-in-out infinite;
+  font-weight: 700;
+  opacity: 0.78;
 }
-@keyframes badge-pulse {
-  0%, 100% {
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 0 0 rgba(220, 80, 80, 0);
-  }
-  50% {
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 0 10px rgba(220, 80, 80, 0.7);
-  }
+
+.tb-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: color 0.18s ease, text-shadow 0.18s ease;
+  display: inline-block;
+  transform-origin: left center;
+  font-variant-numeric: tabular-nums;
 }
+
 .tb-name-wrap {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   overflow: hidden;
 }
 .tb-name-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: bold;
+  font-weight: 700;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.tb-label {
-  font-size: 9px;
-  letter-spacing: 1.5px;
-  opacity: 0.72;
-  text-transform: uppercase;
-  font-weight: bold;
-}
-.tb-value {
-  font-size: 15px;
-  font-weight: bold;
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  transition: color 0.18s ease, text-shadow 0.18s ease;
+/* Bankrupt badge — kept as a pill, animated pulse. */
+.tb-bankrupt-badge {
   display: inline-block;
-  transform-origin: left center;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--loss);
+  background: #000;
+  border: 1px solid var(--loss);
+  border-radius: 1px;
+  vertical-align: middle;
+  text-shadow: none;
+  animation: badge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(255, 118, 118, 0); }
+  50%      { box-shadow: 0 0 10px rgba(255, 118, 118, 0.7); }
 }
 
-/* Money gain/loss flash on the topbar value */
+/* Money-flash on the topbar value (HUDRenderer toggles .money-gain / .money-loss
+   on the .tb-value via class names that match these legacy hooks). */
 .tb-value.money-gain { animation: money-flash-gain 0.95s ease-out; }
 .tb-value.money-loss { animation: money-flash-loss 0.95s ease-out; }
 @keyframes money-flash-gain {
-  0%   { transform: scale(1);    color: #ffffff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+  0%   { transform: scale(1);    color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
   14%  { transform: scale(1.32); color: #c9ffcb; text-shadow: 0 0 18px var(--gain-glow), 0 0 6px var(--gain); }
   45%  { transform: scale(1.10); color: var(--gain); text-shadow: 0 0 12px var(--gain-glow); }
-  100% { transform: scale(1);    color: #ffffff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+  100% { transform: scale(1);    color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
 }
 @keyframes money-flash-loss {
-  0%   { transform: translateX(0)    scale(1);    color: #ffffff; }
+  0%   { transform: translateX(0)    scale(1);    color: #fff; }
   8%   { transform: translateX(-4px) scale(1.12); color: #ffb0b0; text-shadow: 0 0 14px var(--loss-glow); }
   18%  { transform: translateX(4px)  scale(1.12); color: var(--loss); text-shadow: 0 0 14px var(--loss-glow); }
   30%  { transform: translateX(-3px) scale(1.06); color: var(--loss); text-shadow: 0 0 10px var(--loss-glow); }
   42%  { transform: translateX(3px)  scale(1.04); }
   55%  { transform: translateX(-1px) scale(1.02); color: var(--loss); }
-  100% { transform: translateX(0)    scale(1);    color: #ffffff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+  100% { transform: translateX(0)    scale(1);    color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
 }
 
-/* Floating "+$X" / "-$X" indicator that drifts up and fades */
+/* Floating "+$X" / "-$X" indicator (MoneyAnimations.js spawns these as
+   document-level absolute elements). */
 .money-delta {
   position: fixed;
   pointer-events: none;
   font-family: 'Consolas', 'Menlo', monospace;
-  font-weight: bold;
+  font-weight: 700;
   font-size: 17px;
   letter-spacing: 0.5px;
   text-shadow:
@@ -135,7 +144,6 @@
 .money-delta.gain { color: var(--gain); }
 .money-delta.loss { color: var(--loss); }
 .money-delta.big  { font-size: 24px; }
-
 @keyframes delta-float {
   0%   { opacity: 0; transform: translate(-50%, 6px)   scale(0.5); }
   14%  { opacity: 1; transform: translate(-50%, -8px)  scale(1.30); }
@@ -143,34 +151,42 @@
   100% { opacity: 0; transform: translate(-50%, -68px) scale(0.92); }
 }
 
-/* Coin sparkle burst on gain */
+/* Coin sparkle burst on gain — class name preserved. */
 .coin-burst {
   position: fixed;
   pointer-events: none;
   width: 0; height: 0;
   z-index: 9998;
 }
-.coin-burst .spark {
+.coin-burst .spark,
+.coin-burst .coin {
   position: absolute;
   left: 0; top: 0;
-  width: 8px; height: 8px;
+  width: 9px; height: 9px;
   border-radius: 50%;
-  background: radial-gradient(circle, #fff8c8 0%, #ffd755 50%, #c4881d 100%);
-  box-shadow: 0 0 8px rgba(255, 220, 100, 0.85);
-  animation: spark-fly 0.75s ease-out forwards;
+  background: radial-gradient(circle at 35% 30%, #fff2a8 0%, #f6c63d 50%, #b27a14 100%);
+  box-shadow: 0 0 6px rgba(246, 198, 61, 0.85), inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  animation: coin-fly 1.4s cubic-bezier(0.2, 0.6, 0.4, 1) forwards;
   transform: translate(-50%, -50%);
 }
-@keyframes spark-fly {
-  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(0.3); }
+@keyframes coin-fly {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  15%  { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform:
+      translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px)))
+      scale(0.4);
+  }
 }
 
+/* Resources cell — wide row of grouped pills. */
 #tb-resources {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 5px;
+  padding: 0 14px;
   align-items: center;
   overflow: hidden;
 }
@@ -179,50 +195,50 @@
   align-items: center;
   gap: 5px;
   padding: 3px 8px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0%, rgba(0, 0, 0, 0.18) 100%);
-  border-radius: 4px;
-  font-size: 11px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 1px;
+  font-size: 12px;
   line-height: 1.2;
+  font-weight: 700;
+  color: #fff;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 1px 1px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.res-pill:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 2px 4px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 0 rgba(0, 0, 0, 0.25);
+  transition: transform 0.08s ease;
 }
 .res-pill .res-name {
-  opacity: 0.78;
-  font-size: 9px;
+  opacity: 0.85;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.06em;
+  font-weight: 700;
 }
-.res-pill .res-val { font-weight: bold; }
-.res-pill.bump { animation: pill-bump 0.6s ease-out; }
-@keyframes pill-bump {
-  0%   { transform: scale(1); }
-  35%  { transform: scale(1.22); background: linear-gradient(180deg, rgba(159, 200, 255, 0.45) 0%, rgba(90, 142, 209, 0.20) 100%); }
-  100% { transform: scale(1); }
-}
+.res-pill .res-val { font-variant-numeric: tabular-nums; }
 
-/* Auto-save flash badge — overlays the topbar's right edge briefly each
-   round when AccaGame._flashAutoSave fires. */
+/* Bump animation when a resource quantity changes. */
+@keyframes bump {
+  0%   { transform: translateY(0)    scale(1); }
+  25%  { transform: translateY(-3px) scale(1.14); }
+  60%  { transform: translateY(0)    scale(1); }
+  100% { transform: translateY(0)    scale(1); }
+}
+.res-pill.bump { animation: bump 0.45s cubic-bezier(0.3, 1.4, 0.5, 1); }
+
+/* Auto-save flash — preserved from v2. */
 .tb-autosave {
   position: absolute;
   right: 14px;
   top: 50%;
   transform: translateY(-50%) scale(0.9);
   font-size: 9px;
-  font-weight: bold;
-  letter-spacing: 1px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 3px 9px;
   background: linear-gradient(180deg, #54bb6c 0%, #2f8849 100%);
   color: #fff;
-  border-radius: 3px;
+  border-radius: 2px;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);

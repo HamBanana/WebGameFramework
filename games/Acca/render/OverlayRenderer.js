@@ -89,20 +89,32 @@
         borderColor: '#7796c4', borderWidth: 2, radius: 0,
       });
 
-      // Tabs — centred in the bar.  Adaptive horizontal padding so longer
-      // menus (Other / Sell assets) still fit on the standard 768-wide canvas:
-      // we measure label widths first and shrink padding until the total width
-      // fits, with a sensible floor so neighbours don't visually fuse.
-      ctx.font = '13px monospace';
-      const labelWs = opts.map(o => ctx.measureText(o.label).width);
-      const labelSum = labelWs.reduce((a, b) => a + b, 0);
-      const ideal = 28;
-      const minPad = 8;
-      let tabPad = ideal;
-      const fitsWith = (pad) => labelSum + opts.length * pad * 2 + 16;
-      if (fitsWith(tabPad) > W) {
-        const slack = W - 16 - labelSum;
-        tabPad = Math.max(minPad, Math.floor(slack / (opts.length * 2)));
+      // Tabs — centred in the bar.  Adaptive sizing so longer menus (Other has
+      // 7 items, Sell assets has many) always fit between the sidebars on the
+      // standard 768-wide canvas: shrink padding first, then drop the font
+      // size, then floor the padding. Selected items render in bold which is
+      // slightly wider, so we measure with the bold font to be safe.
+      const ideal  = 28;
+      const minPad = 4;
+      const maxFont = 13;
+      const minFont = 10;
+      let fontSize = maxFont;
+      let tabPad   = ideal;
+      const measure = (px) => {
+        ctx.font = 'bold ' + px + 'px monospace';
+        const ws = opts.map(o => ctx.measureText(o.label).width);
+        return { ws, sum: ws.reduce((a, b) => a + b, 0) };
+      };
+      let { ws: labelWs, sum: labelSum } = measure(fontSize);
+      const fitsWith = (pad, sum) => sum + opts.length * pad * 2 + 16 <= W;
+      if (!fitsWith(tabPad, labelSum)) {
+        tabPad = Math.max(minPad, Math.floor((W - 16 - labelSum) / (opts.length * 2)));
+      }
+      // If padding alone can't make it fit, step the font down a px at a time.
+      while (!fitsWith(tabPad, labelSum) && fontSize > minFont) {
+        fontSize -= 1;
+        ({ ws: labelWs, sum: labelSum } = measure(fontSize));
+        tabPad = Math.max(minPad, Math.floor((W - 16 - labelSum) / (opts.length * 2)));
       }
       const measured = labelWs.map(w => w + tabPad * 2);
       const totalW  = measured.reduce((a, b) => a + b, 0);
@@ -126,7 +138,7 @@
           ? (selected ? '#9aa0a8' : '#55606a')
           : (selected ? '#ffffff'  : '#bcd0e8');
         UI.drawText(ctx, opt.label, tabX + tw / 2, barY + barH / 2,
-          { font: selected ? 'bold 13px monospace' : '13px monospace',
+          { font: (selected ? 'bold ' : '') + fontSize + 'px monospace',
             color, align: 'center', baseline: 'middle' });
 
         tabX += tw;
