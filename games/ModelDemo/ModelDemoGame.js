@@ -79,12 +79,25 @@
           <div style="font-size:10px;color:#667;letter-spacing:0.5px;">GameFramework showcase</div>
         </div>
 
+        <!-- Mode toggle -->
+        <div class="gf-section-label" style="${SECTION_LABEL}">MODE</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:14px;">
+          <button data-mode="orbit" style="${BTN_SMALL} background:rgba(60,80,140,0.6);">⟳ Orbit</button>
+          <button data-mode="walk"  style="${BTN_SMALL}">🚶 Walk</button>
+        </div>
+
         <!-- Import -->
         <button id="gf-import-btn" style="${BTN_PRIMARY}">
           ＋ Import GLB…
         </button>
-        <div style="font-size:10px;color:#556;margin:6px 0 14px;text-align:center;">
+        <div style="font-size:10px;color:#556;margin:6px 0 10px;text-align:center;">
           or drag &amp; drop onto the viewport
+        </div>
+
+        <!-- Presets -->
+        <div class="gf-section-label" style="${SECTION_LABEL}">PRESET MODELS</div>
+        <div id="gf-preset-row" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px;">
+          <!-- buttons injected from registered presets -->
         </div>
 
         <!-- Model List -->
@@ -146,6 +159,54 @@
         this._fileInput.value = '';
         this._fileInput.click();
       });
+
+      // Mode toggle
+      p.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mode = btn.dataset.mode;
+          this._models.setMode(mode);
+          p.querySelectorAll('[data-mode]').forEach(b => {
+            b.style.background = 'rgba(30,30,60,0.6)';
+          });
+          btn.style.background = 'rgba(60,80,140,0.6)';
+          this._updatePanel();
+        });
+      });
+
+      // Preset model loaders
+      const presetRow = p.querySelector('#gf-preset-row');
+      const presetNames = (window.GF && GF.ModelSystem && GF.ModelSystem.listPresets)
+        ? GF.ModelSystem.listPresets() : [];
+      if (presetNames.length === 0) {
+        presetRow.innerHTML =
+          '<div style="color:#445;font-size:11px;">No presets registered</div>';
+      } else {
+        presetRow.innerHTML = presetNames.map(n =>
+          `<button data-preset="${_esc(n)}" style="${BTN_SMALL} flex:1 1 auto;">${_esc(n)}</button>`
+        ).join('');
+        presetRow.querySelectorAll('[data-preset]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const name = btn.dataset.preset;
+            // Avoid double-loading
+            if (this._models.getModelNames().indexOf(name) !== -1) {
+              this._setStatus(`"${name}" already loaded`);
+              this._models.showModel(name);
+              this._updatePanel();
+              return;
+            }
+            this._setStatus(`Loading preset "${name}"…`);
+            this._models.loadPreset(name)
+              .then(data => {
+                this._setStatus(`Loaded "${data.name}"  (${data.meshCount} meshes, ${data.matCount} materials)`);
+                this._models.showModel(data.name);
+                this._updatePanel();
+              })
+              .catch(err => {
+                this._setStatus(`Failed to load "${name}": ${err.message || err}`);
+              });
+          });
+        });
+      }
 
       // Lighting buttons
       p.querySelectorAll('[data-light]').forEach(btn => {
@@ -348,6 +409,8 @@
 
     _drawInfoBar(ctx, engine, W, H) {
       const active = this._models.getActiveModel();
+      const mode   = this._models.getMode ? this._models.getMode() : 'orbit';
+      const count  = this._models.getModelNames().length;
       const BAR_H  = 34;
       const X0     = 240; // clear of the side panel
       const BAR_W  = W - X0;
@@ -359,11 +422,18 @@
 
       ctx.font      = 'bold 12px "Segoe UI", system-ui, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillStyle = active ? '#aabbff' : '#445566';
+      ctx.fillStyle = (active || count) ? '#aabbff' : '#445566';
 
-      const label = active
-        ? `${active.name}  ·  ${active.meshCount} mesh${active.meshCount !== 1 ? 'es' : ''}  ·  ${active.matCount} material${active.matCount !== 1 ? 's' : ''}  ·  ${active.animationNames.length} animation${active.animationNames.length !== 1 ? 's' : ''}`
-        : 'No model loaded';
+      let label;
+      if (mode === 'walk') {
+        label = count
+          ? `WALK MODE  ·  ${count} model${count !== 1 ? 's' : ''} on display  ·  click viewport, then WASD + mouse`
+          : 'WALK MODE  ·  no models yet  ·  import or load a preset to populate the gallery';
+      } else if (active) {
+        label = `${active.name}  ·  ${active.meshCount} mesh${active.meshCount !== 1 ? 'es' : ''}  ·  ${active.matCount} material${active.matCount !== 1 ? 's' : ''}  ·  ${active.animationNames.length} animation${active.animationNames.length !== 1 ? 's' : ''}`;
+      } else {
+        label = 'No model loaded';
+      }
       ctx.fillText(label, X0 + 14, H - 11);
 
       // FPS on the right
@@ -375,7 +445,10 @@
     }
 
     _drawHint(ctx, engine, W, H) {
+      // Hide hint once a model exists OR once we've entered walk mode
+      // (walk mode shows its own click-to-look overlay).
       if (this._models.getActiveModel()) return;
+      if (this._models.getMode && this._models.getMode() === 'walk') return;
 
       const X0 = 240;
       const cx = X0 + (W - X0) / 2;
@@ -394,7 +467,8 @@
 
       ctx.font      = '12px "Segoe UI", system-ui, sans-serif';
       ctx.fillStyle = 'rgba(80,90,140,0.5)';
-      ctx.fillText('Click "Import GLB…" or drag & drop files onto this window', cx, cy + 36);
+      ctx.fillText('Click "Import GLB…", drag & drop files, or load a preset', cx, cy + 36);
+      ctx.fillText('Switch to "Walk" to step into the gallery', cx, cy + 56);
       ctx.restore();
     }
 

@@ -1,5 +1,5 @@
 // GameFramework.sprites.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-05-04T03:49:48.607Z
+// Built: 2026-05-09T02:12:44.425Z
 // Source: framework/build.js (sprites (optional))
 
 // -- sprites/claude.js -------------------------------------------
@@ -1912,6 +1912,15 @@
   GF.portraits['darkLord'] = (function () {
     const img = new Image();
     img.src = BASE + '/DarkLord/spritesheet.png';
+    return img;
+  })();
+
+  // theMan -- 384x672 spritesheet (4 cols x 7 rows of 96x96 frames).
+  // Animations (row, frames): idle (0,1) | laughing (1,4) | crying (2,4) |
+  // angry (3,4) | sad (4,4) | talking (5,4) | shouting (6,4).
+  GF.portraits['theMan'] = (function () {
+    const img = new Image();
+    img.src = BASE + '/TheMan/spritesheet.png';
     return img;
   })();
 
