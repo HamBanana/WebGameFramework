@@ -26,7 +26,9 @@
       "mcp__Claude_in_Chrome__get_page_text",
       "Bash(node test_acca.js)",
       "Bash(node serve.js 3000)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Force)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }

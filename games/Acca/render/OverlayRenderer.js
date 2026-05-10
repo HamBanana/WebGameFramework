@@ -44,12 +44,29 @@
 
     drawMenuOverlay(ctx, W, H) {
       const game = this.game;
+      if (game.camera && game.camera._mapViewActive) {
+        this._drawMapViewHint(ctx, W, H);
+      }
       if (!game.menu.visible) return;
       if (game.menu.layout === 'horizontal') {
         this._drawHorizontalBar(ctx, W, H);
       } else {
         this._drawVerticalPanel(ctx, W, H);
       }
+    }
+
+    _drawMapViewHint(ctx, W, H) {
+      const UI = this.game.ui;
+      const label = 'MAP VIEW  ·  Tab / M to zoom back';
+      ctx.font = '10px monospace';
+      const tw = ctx.measureText(label).width;
+      const pw = tw + 24;
+      UI.drawPanel(ctx, (W - pw) / 2, 6, pw, 20, {
+        bgColor: 'rgba(10,15,30,0.82)',
+        borderColor: '#4a6888', borderWidth: 1, radius: 4,
+      });
+      UI.drawText(ctx, label, W / 2, 16,
+        { font: '10px monospace', color: '#9fc8ff', align: 'center', baseline: 'middle' });
     }
 
     _drawHorizontalBar(ctx, W, H) {
@@ -157,10 +174,28 @@
       const totalLen = game.menu.options.length;
       const isWindowed = totalLen > opts.length;
       const optH = 24;
-      const w    = 320;
-      const h    = 56 + (game.menu.subtitle ? 16 : 0) + opts.length * optH + 24;
-      const x    = (W / 2) - w / 2;
-      const y    = (H / 2) - h / 2;
+      const pad  = 24;
+
+      // Measure content to determine panel width dynamically.
+      ctx.font = 'bold 16px monospace';
+      let maxContent = ctx.measureText(game.menu.title || '').width;
+      ctx.font = '13px monospace';
+      opts.forEach(opt => {
+        maxContent = Math.max(maxContent, ctx.measureText('> ' + opt.label).width);
+      });
+      const w = Math.min(W - 60, Math.max(320, maxContent + pad * 2));
+
+      // Wrap subtitle into lines that fit the panel interior.
+      const subFont   = '11px monospace';
+      const subLineH  = 16;
+      const subLines  = game.menu.subtitle
+        ? this._wrapText(ctx, game.menu.subtitle, w - pad * 2, subFont)
+        : [];
+      const subtitleH = subLines.length * subLineH;
+
+      const h = 56 + subtitleH + opts.length * optH + 24;
+      const x = (W / 2) - w / 2;
+      const y = (H / 2) - h / 2;
 
       UI.drawPanel(ctx, x, y, w, h, {
         bgColor: 'rgba(10,15,25,0.94)',
@@ -171,11 +206,11 @@
         { font: 'bold 16px monospace', color: '#ffffff', align: 'center', shadow: true });
 
       let curY = y + 36;
-      if (game.menu.subtitle) {
-        UI.drawText(ctx, game.menu.subtitle, x + w / 2, curY,
-          { font: '11px monospace', color: '#9fc8ff', align: 'center' });
-        curY += 16;
-      }
+      subLines.forEach((line, i) => {
+        UI.drawText(ctx, line, x + w / 2, curY + i * subLineH,
+          { font: subFont, color: '#9fc8ff', align: 'center' });
+      });
+      curY += subtitleH;
 
       const localIndex = game.menu.index - offset;
       opts.forEach((opt, i) => {
@@ -210,6 +245,27 @@
         isWindowed ? '↑↓ scroll   Enter confirm' : '↑↓ select   Enter confirm',
         x + w / 2, y + h - 18,
         { font: '11px monospace', color: '#7793b8', align: 'center' });
+    }
+
+    /** Split `text` into lines no wider than `maxWidth` using the given font. */
+    _wrapText(ctx, text, maxWidth, font) {
+      ctx.font = font;
+      const lines = [];
+      for (const paragraph of text.split('\n')) {
+        const words = paragraph.split(' ');
+        let line = '';
+        for (const word of words) {
+          const test = line ? line + ' ' + word : word;
+          if (line && ctx.measureText(test).width > maxWidth) {
+            lines.push(line);
+            line = word;
+          } else {
+            line = test;
+          }
+        }
+        if (line) lines.push(line);
+      }
+      return lines.length ? lines : [''];
     }
 
     drawStartMenu(ctx, W, H) {

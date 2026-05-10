@@ -672,6 +672,16 @@
     ],
     "endTurn": [
       "KeyE"
+    ],
+    "mapView": [
+      "Tab",
+      "KeyM"
+    ],
+    "zoomIn": [
+      "Numpad8"
+    ],
+    "zoomOut": [
+      "Numpad2"
     ]
   },
   "debug": {

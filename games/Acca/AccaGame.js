@@ -444,6 +444,9 @@
           break;
 
         case A.GAME_STATE.PLAYING:
+          if (this.engine.input.wasPressed('mapView')) this.camera.toggleMapView();
+          if (this.engine.input.wasPressed('zoomIn'))  this.camera.zoomIn();
+          if (this.engine.input.wasPressed('zoomOut')) this.camera.zoomOut();
           if (this.turn.stage === A.TURN_STAGE.BETWEEN) {
             this._betweenTurnsTimer -= dt;
             // Zoom out only after the money animation window has elapsed.
