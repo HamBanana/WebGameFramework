@@ -236,17 +236,36 @@
         { font: '11px monospace', color: '#7793b8', align: 'center' });
 
       const tokenY = H * 0.72;
-      const spacing = 56;
+      const spacing = 64;
       const startX = W / 2 - ((game.menuPlayerCount - 1) * spacing) / 2;
+      const types = game.menuPlayerTypes || [];
+      const sel   = (typeof game.menuSelectedSlot === 'number') ? game.menuSelectedSlot : 0;
       for (let i = 0; i < game.menuPlayerCount; i++) {
         const def = game.cfg.players[i];
+        const isCPU = types[i] === 'cpu';
+        const isSel = i === sel;
+        const cx    = startX + i * spacing;
+        if (isSel) {
+          ctx.save();
+          ctx.strokeStyle = '#ffe57a';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(cx - 22, tokenY - 22, 44, 44);
+          ctx.restore();
+        }
         ctx.save();
-        ctx.translate(startX + i * spacing, tokenY);
+        ctx.translate(cx, tokenY);
         ctx.scale(1.1, 1.1);
         game.sprites.drawFrame(ctx, def.sprite, 'idle',
           Math.floor(performance.now() / 250) % 4, 0, 0, false);
         ctx.restore();
+        const tag = (i === 0) ? 'YOU' : (isCPU ? 'CPU' : 'P' + (i + 1));
+        const tagColor = isCPU ? '#ff8a4d' : '#9fc8ff';
+        UI.drawText(ctx, tag, cx, tokenY + 28,
+          { font: 'bold 11px monospace', color: tagColor, align: 'center' });
       }
+      UI.drawText(ctx, '↑↓ select slot  ·  Tab toggles CPU/Human (slot 1 is you)',
+        W / 2, tokenY + 50,
+        { font: '10px monospace', color: '#7793b8', align: 'center' });
 
       const blink = Math.floor(performance.now() / 500) % 2;
       if (blink) {

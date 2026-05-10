@@ -47,6 +47,12 @@
       this.lastRoll            = 0;
       this.winner              = null;
       this.menuPlayerCount     = cfg.numberOfPlayers;
+      // Phase 6 — per-slot CPU/Human types. Index 0 is always 'human' (the
+      // local player). The selection menu lets the user toggle the rest.
+      // Persisted in localStorage so the previous session's setup is the
+      // default next time.
+      this.menuPlayerTypes     = this._loadMenuPlayerTypes(cfg.players.length);
+      this.menuSelectedSlot    = 1;       // currently-highlighted slot in the menu
       this.cooperativeThreat   = 0;
       this.turnCounter         = 0;
       this._betweenTurnsTimer  = 0;
@@ -88,6 +94,11 @@
       }) : null;
 
       this.turn = new A.TurnManager(this);
+
+      // CPU driver (Phase 6) — ticks each frame, takes over input when the
+      // current player is CPU. Constructed unconditionally; it's a no-op
+      // when no player has isCPU set.
+      this.cpu = A.CpuDriver ? new A.CpuDriver(this) : null;
 
       // Audio cues — synthesised via WebAudio so the game ships with no
       // binary dependencies. SfxPlayer is a no-op if AudioContext can't be
@@ -265,7 +276,8 @@
       const count = Math.min(this.menuPlayerCount, this.cfg.players.length);
       const startRes = this.cfg.startingResources || {};
       for (let i = 0; i < count; i++) {
-        const def = this.cfg.players[i];
+        const def = Object.assign({}, this.cfg.players[i],
+          { isCPU: (this.menuPlayerTypes[i] === 'cpu') });
         const p = new A.Player(i, def, startCell, this.cfg.startingMoney, this.sprites, this);
         Object.entries(startRes).forEach(([r, q]) => { p.resources[r] = q; });
         const offsets = [
@@ -422,6 +434,9 @@
       this.die.update(dt);
       this.menu.update();
       this.camera.update(dt);
+      // Phase 6 — CPU driver runs after menu.update so it sees the post-input
+      // menu state. The driver no-ops when the current player isn't CPU.
+      if (this.cpu) this.cpu.update(dt);
 
       switch (this.gameState) {
         case A.GAME_STATE.MENU:
@@ -462,9 +477,47 @@
 
     _updateMenu() {
       const inp = this.engine.input;
+      // Left/right adjusts player count.
       if (inp.wasPressed('left'))    this.menuPlayerCount = Math.max(2, this.menuPlayerCount - 1);
       if (inp.wasPressed('right'))   this.menuPlayerCount = Math.min(this.cfg.players.length, this.menuPlayerCount + 1);
+      // Up/down moves the highlighted slot.
+      if (inp.wasPressed('up'))   this.menuSelectedSlot = Math.max(0, this.menuSelectedSlot - 1);
+      if (inp.wasPressed('down')) this.menuSelectedSlot = Math.min(this.menuPlayerCount - 1, this.menuSelectedSlot + 1);
+      // Clamp slot to current count when count shrinks.
+      if (this.menuSelectedSlot >= this.menuPlayerCount) this.menuSelectedSlot = this.menuPlayerCount - 1;
+      // Tab / KeyT toggles human/CPU on the highlighted slot. Slot 0 stays
+      // human (the local player); other slots cycle. Persisted to localStorage.
+      if (inp.wasPressed('KeyT') || inp.wasPressed('Tab')) {
+        const i = this.menuSelectedSlot;
+        if (i > 0) {
+          this.menuPlayerTypes[i] = (this.menuPlayerTypes[i] === 'cpu') ? 'human' : 'cpu';
+          this._saveMenuPlayerTypes();
+        }
+      }
       if (inp.wasPressed('confirm')) this._beginGame();
+    }
+
+    _loadMenuPlayerTypes(maxSlots) {
+      const types = new Array(maxSlots).fill('human');
+      try {
+        const raw = localStorage.getItem('acca_player_types');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            for (let i = 0; i < Math.min(parsed.length, maxSlots); i++) {
+              types[i] = (parsed[i] === 'cpu' && i > 0) ? 'cpu' : 'human';
+            }
+          }
+        }
+      } catch (e) { /* localStorage unavailable */ }
+      types[0] = 'human';
+      return types;
+    }
+
+    _saveMenuPlayerTypes() {
+      try {
+        localStorage.setItem('acca_player_types', JSON.stringify(this.menuPlayerTypes));
+      } catch (e) { /* ignore */ }
     }
 
     _render(ctx) {

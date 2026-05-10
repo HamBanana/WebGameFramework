@@ -25,7 +25,8 @@
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__get_page_text",
       "Bash(node test_acca.js)",
-      "Bash(node serve.js 3000)"
+      "Bash(node serve.js 3000)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

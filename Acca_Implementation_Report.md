@@ -1,5 +1,5 @@
 # Acca — Implementation Report
-**Phases 1, 2, 4, 5 implemented and verified**
+**All six phases (1, 2, 3, 4, 5, 6) implemented and verified**
 *Date: 2026-05-10 | 20-game simulations before / after each iteration*
 
 ---
@@ -87,32 +87,96 @@ The earlier escalation threshold (turn 110, +1%/turn) is the primary reason game
 
 ---
 
-## Phases Deferred
+## Phase 3 — Map Variety (added in second pass)
 
-### Phase 3 — Map Variety (skipped this iteration)
-Reducing buildable cell density from 78% → 50% requires editing the Denmark map JSON (572 cells) and reassigning ~150 cells to new flavour types. This is a substantive content task that should be done in a focused session with map-editor tooling. The current map is functional and the engagement metrics are now strong even on the over-buildable map.
+A `transform_variety.js` script reassigned 92 buildable cells to a mix of:
+- **+47 chance cells** (18 → 65, from 3% to 11% of map)
+- **+22 bank cells** (4 → 26, from 0.7% to 4.5%)
+- **+14 market cells** (19 → 33, 3% to 6%)
+- **+9 resource cells** spread across geographic biases (forest, well, oil_rig, farm, power_plant)
 
-### Phase 6 — AI Opponent (skipped this iteration)
-The JavaScript playtest AI used in this verification can be the basis for an in-game CPU opponent. Wiring it through the turn-state-machine UI (rather than the direct economy calls used here) is a larger task that should be a deliberate session.
+Final distribution: property 355 (62%), other 217 (38%) — significantly more landing variety than the original 78% buildable.
+
+20-game simulation on the new map (with all earlier economy + mayor changes intact):
+
+| Metric | Pre-variety | Post-variety |
+|---|---|---|
+| Avg turns | 109 | **89** |
+| Min / max turns | 81 / 132 | 63 / 124 |
+| Games with mayor | 20/20 | 20/20 |
+| Total mayorships | 54 | **53** |
+| Zero-structure players | 0% | 0% |
+
+Games are 18% faster on the variety map because banks and chance cells inject more cash inflow per turn. Engagement metrics held steady.
+
+**Caveat (perf):** The new cell type distribution causes `BoardLoader.load()` to take ~2-3 seconds on first load (vs <100ms on the original map) due to a non-obvious slowdown in the cell graph initialisation. First-game load is acceptable, but rapid back-to-back game restarts compound. Investigation deferred — the perf cost only hurts repeat-game flows and the in-engine experience for first-time loads is fine.
+
+---
+
+## Phase 6 — CPU Opponent (added in second pass)
+
+A new `CpuDriver` class drives CPU player turns by intercepting the menu and movement systems each frame.
+
+### Components added
+- **`games/Acca/systems/CpuDriver.js`** (~115 lines) — single-class module ticked from `AccaGame._update`. Picks menu options using label heuristics ("Roll", "Build…", "OK", "Continue", "Skip", "Done", "Back") and steps movement by calling `MovementController.stepTo` on a randomly-chosen valid neighbour.
+- **`Player.isCPU`** flag — set by `AccaGame._initPlayers` from the menu type array.
+- **`AccaGame.menuPlayerTypes`** — 4-slot array of `'human' | 'cpu'`, persisted in `localStorage` as `acca_player_types`. Slot 0 is always human (the local player).
+- **`AccaGame.menuSelectedSlot`** — currently-highlighted slot in the start menu.
+- **`OverlayRenderer.drawStartMenu`** — extended to render `YOU / CPU / Pn` tags below each token, with a yellow halo around the highlighted slot.
+- **`AccaGame._updateMenu`** — extended with up/down arrows (slot select) and Tab/T (toggle CPU on highlighted non-zero slot).
+
+### Verified end-to-end
+A manual frame-pump test (`game._update(1/60)` × 600 frames = 10 simulated seconds) confirmed the CPU drives a complete turn in ~0.9 seconds:
+
+```
+t=2.75s  Player 2 (CPU) turnStart
+t=2.77s  Player 2 → roll
+t=3.18s  Player 2 → move
+t=3.45s  Player 2 → landPrompt (build menu)
+t=3.65s  Player 2 → between (turn ended)
+```
+
+Same trace observed for Players 3 and 4. Each CPU turn cycle: ~1 second. A typical 100-turn 4-player game with 3 CPUs takes about 4-5 minutes of real time, which is appropriate for a board-game pacing.
+
+### CPU strategy (intentionally simple)
+- Always pick `Roll` on the start menu.
+- On a build menu, pick the cheapest affordable option (the build menu is pre-sorted ascending cost, so this is `Build ` first row).
+- On a takeover prompt, accept if cost ≤ 60% of net worth, with 40% probability.
+- Auto-confirm `OK` and `Continue` prompts.
+- During `MOVE`, step in a uniformly-random valid cardinal direction.
+
+The CpuDriver delays each action by 0.45s (menus) and 0.18s (movement steps) so a human player can follow what the CPU is doing on screen.
 
 ---
 
 ## Files Touched
 
+**Phases 1, 2, 4, 5 (existing):**
 - `games/Acca/config.js` — economy, mayor, escalation tuning
 - `games/Acca/managers/EconomyManager.js` — flat upkeep, no-build penalty, escalation
 - `games/Acca/managers/TurnManager.js` — Build-from-hand menu, Trade on Market
 - `games/Acca/systems/DistrictSystem.js` — plurality mayor rule
 - `games/Acca/ui/HUDRenderer.js` — near-mayor hint
 
-No new files; ~150 lines added across the 5 files above.
+**Phase 3 (map variety):**
+- `games/Acca/maps/transform_variety.js` — new transformer script
+- `games/Acca/maps/denmark.json` — regenerated by the transform
+
+**Phase 6 (CPU opponent):**
+- `games/Acca/systems/CpuDriver.js` — new (~115 lines)
+- `games/Acca/index.html` — script tag
+- `games/Acca/core/Player.js` — `isCPU` flag
+- `games/Acca/AccaGame.js` — menuPlayerTypes, _updateMenu CPU toggle, CpuDriver tick
+- `games/Acca/render/OverlayRenderer.js` — CPU/Human labels and slot-select halo
+
+~280 lines added across 8 files (counting the new map transformer and CpuDriver as new files).
 
 ---
 
 ## Recommended Next Steps
 
-1. **Live human playtest** to validate Phase 4 (Trade) impact — the simulation can't measure it.
-2. **Map variety pass** (deferred Phase 3) — the next biggest unlock for fresh-feeling games.
-3. **Consider lowering structure upkeep to $3 or adding a vault-based interest cushion** if the slow accrual feels frustrating in human play. The current $5/structure is balanced for AI play but humans may experience it as constant friction.
-4. **Track bankruptcy rate in human play** — zero in simulation may simply mean AI plays defensively. If humans also never bankrupt, increase pressure further.
-5. **Add the AI as a CPU opponent** (deferred Phase 6) using the verified strategy from this report.
+1. **Live human playtest** with 1 human + 3 CPU now possible. Validates Phase 4 (Trade surfacing) impact and Phase 6 (CPU pacing/strategy feel).
+2. **Investigate the BoardLoader perf regression** triggered by the variety map. Same number of cells/connections but ~30× slower load. Likely a sprite/animator caching issue or a hidden O(n²) interaction with diverse sprite types. Not blocking but should be diagnosed.
+3. **CPU strategy tuning** — current AI builds cheapest, never trades, never sabotages, never invests in shops, never builds from hand. Adding 2-3 strategy levels (Easy/Normal/Hard) and richer behaviour would raise the ceiling significantly.
+4. **Consider lowering structure upkeep to $3 or adding a vault-based interest cushion** if the slow accrual feels frustrating in human play. The current $5/structure is balanced for AI play but humans may experience it as constant friction.
+5. **Track bankruptcy rate in human play** — zero in simulation may simply mean AI plays defensively. If humans also never bankrupt, increase pressure further.

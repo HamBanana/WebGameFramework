@@ -14,6 +14,10 @@
       this.color      = def.color;
       this.spriteName = def.sprite;
       this.animator   = spriteSystem.createAnimator(def.sprite, 'idle');
+      // Phase 6 — CPU opponent flag. Set by AccaGame._initPlayers from the
+      // pre-game menuPlayerTypes array; CpuDriver checks this each frame to
+      // decide whether to take over input for this player's turn.
+      this.isCPU      = !!def.isCPU;
       // Game reference is used by addMoney to log gain/loss reasons. Optional —
       // tests / fixtures that construct Players outside a running game can
       // omit it, in which case addMoney just won't log.
