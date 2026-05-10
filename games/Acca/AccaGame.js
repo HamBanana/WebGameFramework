@@ -54,6 +54,10 @@
       this.menuPlayerTypes     = this._loadMenuPlayerTypes(cfg.players.length);
       this.menuSelectedSlot    = 1;       // currently-highlighted slot in the menu
       this.cooperativeThreat   = 0;
+      // Bug E1 — phase grouping for the game log. The active phase entry (if
+      // any) collects subsequent log() calls as bullet-points. null = no
+      // phase active, log() pushes top-level entries.
+      this._currentLogPhase    = null;
       this.turnCounter         = 0;
       this._betweenTurnsTimer  = 0;
       this._zoomOutTimer       = 0;   // seconds until camera zooms out after end-of-turn
@@ -177,36 +181,103 @@
     // ── Public game-wide helpers ────────────────────────────────────────
     /** Append a log entry. Coalesces consecutive identical messages into a
      *  single entry with a count tail (×N) so heavy mayor turns don't drown
-     *  the notification panel. Each entry is a {turn, msg, count} object —
-     *  consumers (HUDRenderer / TurnManager._showGameLog / AccaSave) handle
-     *  both legacy strings and the structured form for back-compat with old
-     *  saves.
+     *  the notification panel.
+     *
+     *  Bug E1 — when a phase is active (set via beginPhase/endPhase) the
+     *  message becomes a sub-line of that phase's entry, producing
+     *  "one entry per action" with bullet-points (e.g.
+     *    Player 1 — turn start
+     *      · Taxes - District D: $53
+     *      · Shop income: $37
+     *  ).
+     *  Standalone entries (turn/msg/count) are still emitted when no phase
+     *  is active, so log() callers from menu actions, chance events, etc. keep
+     *  working unchanged.
      *
      *  Pass `{ noCoalesce: true }` to force a fresh row even when the message
      *  matches the previous one (used for one-shot events that should always
-     *  show separately, e.g. mayor changes). */
+     *  show separately, e.g. mayor changes).
+     *  Pass `{ standalone: true }` to bypass the active phase and create a
+     *  top-level entry — used for cross-phase announcements. */
     log(message, opts) {
       const turn = (this.turnCounter || 0) + 1;
+      const phase = (opts && opts.standalone) ? null : this._currentLogPhase;
+      if (phase) {
+        const lastLine = phase.lines[phase.lines.length - 1];
+        if (lastLine && lastLine.msg === message && !(opts && opts.noCoalesce)) {
+          lastLine.count = (lastLine.count || 1) + 1;
+        } else {
+          phase.lines.push({ msg: message, count: 1 });
+        }
+        this._capLog();
+        return;
+      }
       const last = this.eventLog[this.eventLog.length - 1];
-      const lastMsg = (last && typeof last === 'object') ? last.msg : last;
-      if (last && typeof last === 'object'
-          && lastMsg === message
-          && !(opts && opts.noCoalesce)) {
+      // Legacy coalescing only against single-line entries (phase entries
+      // never coalesce against a flat msg).
+      if (last && typeof last === 'object' && last.msg === message
+          && !last.action && !(opts && opts.noCoalesce)) {
         last.count = (last.count || 1) + 1;
       } else {
         this.eventLog.push({ turn, msg: message, count: 1 });
       }
+      this._capLog();
+    }
+
+    /** Trim the log to a fixed cap so very long sessions don't grow without
+     *  bound. Phase entries count as one row each. */
+    _capLog() {
       const CAP = 500;
       if (this.eventLog.length > CAP) {
         this.eventLog.splice(0, this.eventLog.length - CAP);
       }
     }
 
+    /** Bug E1 — start a new "action" entry. Subsequent log() calls become
+     *  bullet-points under it until endPhase() is called or another phase
+     *  begins. Returns the phase entry so callers can decorate it. */
+    beginPhase(label, opts) {
+      this.endPhase();
+      const turn = (this.turnCounter || 0) + 1;
+      const entry = { turn, action: label, lines: [] };
+      if (opts && opts.meta) entry.meta = opts.meta;
+      this.eventLog.push(entry);
+      this._currentLogPhase = entry;
+      this._capLog();
+      return entry;
+    }
+
+    /** End the active phase. Empty phases (no lines) are pruned so the log
+     *  doesn't fill with no-op headers (e.g. a "rolling" phase a player
+     *  blasted through with nothing notable to record). */
+    endPhase() {
+      const cur = this._currentLogPhase;
+      this._currentLogPhase = null;
+      if (!cur) return;
+      if (!cur.lines || cur.lines.length === 0) {
+        const i = this.eventLog.lastIndexOf(cur);
+        if (i >= 0) this.eventLog.splice(i, 1);
+      }
+    }
+
     /** Return the displayable string for a log entry. Old saves may store
-     *  raw strings; new entries are objects. */
+     *  raw strings; new entries are either single-message objects (msg/count)
+     *  or phase entries (action/lines).
+     *
+     *  For phase entries this returns the header line; the lines[] array
+     *  must be rendered separately by callers that want bullet sub-rows. */
     static logText(entry) {
       if (!entry) return '';
       if (typeof entry === 'string') return entry;
+      if (entry.action) {
+        // Compact representation for single-row consumers (notifications panel).
+        if (entry.lines && entry.lines.length > 0) {
+          const last = entry.lines[entry.lines.length - 1];
+          const tail = last && last.msg ? ` — ${last.msg}` : '';
+          return `${entry.action}${tail}`;
+        }
+        return entry.action;
+      }
       return entry.count > 1 ? `${entry.msg} (×${entry.count})` : entry.msg;
     }
 
@@ -259,6 +330,7 @@
       this.turnCounter        = 0;
       this.cooperativeThreat  = 0;
       this.eventLog           = [];
+      this._currentLogPhase   = null;
       this.hud.resetSignatures();
       this.log('Game started.');
       this.gameState = A.GAME_STATE.PLAYING;
@@ -434,19 +506,24 @@
       el.classList.add('show');
     }
 
-    /** Wire mousemove/leave on the engine canvas so hovering a cell on the
-     *  board highlights its district in the right-hand district list (and
-     *  triggers the on-map dashed outline). The HUD already keys both pieces
-     *  off `_focusDistrictId`, so this just feeds that same channel.
+    /** Wire mousemove/leave on the engine canvas. Two responsibilities:
      *
-     *  Skips when `_focusDistrictPinned` is true — clicking a row pins the
-     *  focus, and casual mouse movement over the map shouldn't override that. */
+     *  Bug I2 — hovering a cell on the board highlights its district in the
+     *  right-hand list (HUD reads `_focusDistrictId`) WITHOUT moving the
+     *  camera. Camera follow is now gated on `_focusDistrictPinned` in
+     *  CameraManager, so the hover side-effect is purely visual list
+     *  highlighting.
+     *
+     *  Bug I1 — the mouse position drives a camera pan on top of the active
+     *  player-follow target. The camera reads `_mousePosition` during its
+     *  update tick and shifts the target by the mouse's offset from canvas
+     *  centre (capped by config). Skipped while pinned/in map view/over a
+     *  menu so the manual focus is preserved. */
     _initMapHover() {
       const canvas = this.engine && this.engine.canvas;
       if (!canvas) return;
 
       const updateFromEvent = (e) => {
-        if (this._focusDistrictPinned) return;
         if (this.gameState !== A.GAME_STATE.PLAYING) return;
         if (!this.cells || this.cells.length === 0) return;
         if (typeof this._toPixel !== 'function' || !this._cellSize) return;
@@ -457,6 +534,13 @@
         // Client → internal canvas coords (the canvas is CSS-scaled).
         const sx = (e.clientX - rect.left) * (canvas.width  / rect.width);
         const sy = (e.clientY - rect.top)  * (canvas.height / rect.height);
+
+        // Bug I1 — record the screen-space mouse position so CameraManager
+        // can apply a mouse-driven pan. Cleared on mouseleave so the camera
+        // re-centres on the player when the mouse exits the canvas.
+        this._mousePosition = { sx, sy };
+
+        if (this._focusDistrictPinned) return;
 
         // Internal canvas coords → world coords. The board renderer applies:
         //   translate(W/2, H/2); scale(cam.scale); translate(-cam.cx, -cam.cy)
@@ -490,6 +574,8 @@
 
       canvas.addEventListener('mousemove', updateFromEvent);
       canvas.addEventListener('mouseleave', () => {
+        // Drop the mouse-pan offset so the camera snaps back to the player.
+        this._mousePosition = null;
         if (this._focusDistrictPinned) return;
         if (this._focusDistrictId !== null) this._focusDistrictId = null;
       });

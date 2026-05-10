@@ -38,7 +38,21 @@
     oil_rig     : 'oil_rig',
   };
 
-  const cardinalAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };
+  // Bug H1 — slot assignment now considers all 8 compass directions instead
+  // of just the 4 cardinals. Without diagonals, a cell with neighbours at N,
+  // NW, and W would orphan NW (both `up` and `left` are taken with zero
+  // deviation by N and W). Adding diagonal slots gives every neighbour up to
+  // ~22.5° tolerance to claim the closest slot.
+  const cardinalAngles = {
+    up:        -Math.PI / 2,
+    upRight:   -Math.PI / 4,
+    right:      0,
+    downRight:  Math.PI / 4,
+    down:       Math.PI / 2,
+    downLeft:   3 * Math.PI / 4,
+    left:       Math.PI,
+    upLeft:    -3 * Math.PI / 4,
+  };
   // Smallest unsigned circular distance between two angles, in [0, π].
   // Naively `((a - b + π) % 2π) - π` is broken in JS because `%` preserves
   // sign of the dividend — a NW neighbour at -3π/4 vs a `left` slot at π
@@ -64,6 +78,15 @@
       game.cells = [];
       const cellById = new Map();
 
+      // Bug F2 — resource cells (mine / well / forest / farm / oil_rig /
+      // power_plant) start with a finite supply that depletes on landing and
+      // is replenished by factory production. The init/max/min thresholds
+      // come from cfg.market.
+      const mcfg = (game.cfg.market) || {};
+      const supplyInit = (mcfg.cellSupplyInitial != null) ? mcfg.cellSupplyInitial : 30;
+      const supplyMax  = (mcfg.cellSupplyMax     != null) ? mcfg.cellSupplyMax     : 50;
+      const supplyMin  = (mcfg.cellSupplyMin     != null) ? mcfg.cellSupplyMin     : 1;
+      const RESOURCE_GAMETYPES = new Set(['mine', 'well', 'forest', 'farm', 'oil_rig', 'power_plant']);
       cells.forEach(c => {
         const { sprite, gameType } = this._resolveSprite(c);
         const cell = new A.Cell(c.id, c.x, c.y, gameType, c.district, sprite, c.subType);
@@ -74,6 +97,11 @@
         // any player and don't participate in build/sell flows).
         if (gameType === 'structure' && c.structureType) {
           cell.structureType = c.structureType;
+        }
+        if (RESOURCE_GAMETYPES.has(gameType)) {
+          cell.resourceSupply    = supplyInit;
+          cell.resourceSupplyMax = supplyMax;
+          cell.resourceSupplyMin = supplyMin;
         }
         game.cells.push(cell);
         cellById.set(c.id, cell);
@@ -110,6 +138,8 @@
       // orphaned and a console.warn is emitted to surface the map issue.
       game.cells.forEach(cell => {
         cell.up = cell.down = cell.left = cell.right = null;
+        // Bug H1 — diagonal slots filled by the same greedy assignment.
+        cell.upLeft = cell.upRight = cell.downLeft = cell.downRight = null;
         if (!cell._neighbors || cell._neighbors.length === 0) return;
         const ranked = cell._neighbors.map(neighbor => {
           const dx = neighbor.x - cell.x;

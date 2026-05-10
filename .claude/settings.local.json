@@ -28,7 +28,8 @@
       "Bash(node serve.js 3000)",
       "mcp__Claude_Preview__preview_start",
       "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Force)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Directory)"
     ]
   }
 }

@@ -43,20 +43,42 @@
       }, 0);
       const idleFactor = -idle * c.happiness.idleBusinessPenalty;
 
+      // Bug B1 — every resource has a direct survival/happiness role:
+      //   • food / water  — basic survival, biggest swing.
+      //   • electricity   — power for residences and shops (lighting).
+      //   • coal          — heating.
+      //   • oil           — transport / fuel.
+      // Each shortage on the mayor's stockpile docks happiness; surplus has
+      // no penalty (the bonuses come elsewhere — services, festivals, etc.).
       let foodShortage = 0, waterShortage = 0;
+      let powerShortage = 0, heatShortage = 0, fuelShortage = 0;
       if (r.mayorIndex >= 0 && players[r.mayorIndex]) {
         const mayor = players[r.mayorIndex];
-        const foodNeeded  = r.population * c.foodPerCapita;
-        const waterNeeded = r.population * c.waterPerCapita;
-        if ((mayor.resources.food || 0)  < foodNeeded)  foodShortage = -10;
-        if ((mayor.resources.water || 0) < waterNeeded) waterShortage = -10;
+        const pop = r.population;
+        const foodNeeded  = pop * c.foodPerCapita;
+        const waterNeeded = pop * c.waterPerCapita;
+        // Use existing capita rates if configured, else fall back to the same
+        // ratios as food/water — keeps shortages comparable across resources.
+        const elecPerCap  = (c.electricityPerCapita != null) ? c.electricityPerCapita : c.foodPerCapita;
+        const coalPerCap  = (c.coalPerCapita        != null) ? c.coalPerCapita        : c.foodPerCapita * 0.5;
+        const oilPerCap   = (c.oilPerCapita         != null) ? c.oilPerCapita         : c.foodPerCapita * 0.5;
+        const elecNeeded  = pop * elecPerCap;
+        const coalNeeded  = pop * coalPerCap;
+        const oilNeeded   = pop * oilPerCap;
+        if ((mayor.resources.food         || 0) < foodNeeded)  foodShortage  = -10;
+        if ((mayor.resources.water        || 0) < waterNeeded) waterShortage = -10;
+        if ((mayor.resources.electricity  || 0) < elecNeeded)  powerShortage = -5;
+        if ((mayor.resources.coal         || 0) < coalNeeded)  heatShortage  = -3;
+        if ((mayor.resources.oil          || 0) < oilNeeded)   fuelShortage  = -3;
       }
 
       const festivalActive = (r.festivalUntilTurn >= turn) ? 5 : 0;
 
       const target = Math.max(0, Math.min(100,
         50 + taxFactor + empFactor + services + idleFactor +
-        foodShortage + waterShortage + festivalActive));
+        foodShortage + waterShortage +
+        powerShortage + heatShortage + fuelShortage +
+        festivalActive));
       const old = r.happiness;
       r.happiness = old + (target - old) * c.happinessLerp;
       if (Math.abs(r.happiness - old) >= 1) {

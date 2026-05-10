@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["serve.js", "3007"],
       "port": 3007
+    },
+    {
+      "name": "shadowstrike3d",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["games/ShadowStrike3D/launch.js", "3008"],
+      "port": 3008
     }
   ]
 }

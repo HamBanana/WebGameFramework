@@ -96,13 +96,22 @@
       const emotion = trig.emotion || 'idle';
       const line    = trig.line || '';
 
+      // Bug E2 — anger and sadness/crying are reserved for "threatened or
+      // defeated" states only.
+      //   • angry   → cooperative threat must exceed `threatThreshold × cap`.
+      //   • sad     → only on the cooperative-loss trigger.
+      //   • crying  → only when a player has won (The Man is defeated) — we
+      //     don't ever play crying on neutral events.
       if (emotion === 'angry') {
         const threshold = (this.cfg.threatThreshold != null) ? this.cfg.threatThreshold : 0.8;
-        const cap       = this.game.cooperativeThreatCap || 100;
-        const cur       = this.game.cooperativeThreat   || 0;
+        const cap = (this.game.cfg && this.game.cfg.cooperative && this.game.cfg.cooperative.threatLimit)
+          || this.game.cooperativeThreatCap
+          || 100;
+        const cur = this.game.cooperativeThreat || 0;
         if (cur < threshold * cap) return;
       }
-      if (emotion === 'sad' && trigger !== 'lost') return;
+      if (emotion === 'sad'    && trigger !== 'lost') return;
+      if (emotion === 'crying' && trigger !== 'win')  return;
 
       this._show(emotion, line);
     }

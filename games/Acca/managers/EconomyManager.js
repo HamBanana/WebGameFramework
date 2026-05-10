@@ -114,6 +114,13 @@
           if (dump > 0 && game.marketSys && game.marketSys.addStock) {
             game.marketSys.addStock(resource, dump, 'factory');
           }
+          // Bug F2 — factory output also replenishes finite resource cells of
+          // the SAME resource type so the depletion loop closes. The split
+          // is configurable; the default (0.5 of qty) goes back to map cells,
+          // re-enabling that resource's spawn points after they've been
+          // mined out. Distributed evenly across the most-depleted cells of
+          // the matching type so popular spots get topped up first.
+          this._replenishResourceCells(resource, qty);
           // Flat owner cash from the factory (config: structures.factoryOwnerIncome).
           // Wired here so the rebalanced cost ($500) has a real per-turn payback.
           const flat = cfg.factoryOwnerIncome || 0;
@@ -184,12 +191,9 @@
           }
         }
         if (s.type === 'toll_gate') {
-          // Per-turn maintenance retainer — distinct from the toll itself
-          // (which auto-deposits on each pass-through).
-          const flat = cfg.tollOwnerIncome || 0;
-          if (flat > 0) {
-            player.addMoney(flat, `Toll Gate retainer in ${s.cell && s.cell.district || '—'}`);
-          }
+          // Bug C1 — toll gates earn ONLY from pass-throughs (see
+          // StructureManager.passThroughEffect). The previous per-turn flat
+          // `tollOwnerIncome` retainer was removed so that tolls require traffic.
         }
         if (s.type === 'teleporter') {
           // Per-turn idle income for owned teleporters (visitor fees still go
@@ -208,6 +212,60 @@
           }
         }
       });
+    }
+
+    /** Bug F2 — top up finite resource cells when a factory produces.
+     *  `factoryReplenishToCells` (config) is the share of factory output
+     *  that goes back into map cells; the rest stays as the player's stock
+     *  + market pool dump. Distribution is greedy by most-depleted: each
+     *  unit lands in the cell currently furthest below its max, so popular
+     *  cells refill first. */
+    _replenishResourceCells(resource, qty) {
+      const game = this.game;
+      const mcfg = game.cfg.market || {};
+      const share = (mcfg.factoryReplenishToCells != null) ? mcfg.factoryReplenishToCells : 0.5;
+      let toDistribute = Math.max(0, Math.round(qty * share));
+      if (toDistribute <= 0) return;
+
+      // Identify which game-types correspond to each resource so a steel
+      // factory back-fills iron mines, a food factory back-fills farms, etc.
+      const TYPES_FOR_RESOURCE = {
+        steel:       (cell) => cell.type === 'mine' && cell.subType === 'iron',
+        coal:        (cell) => cell.type === 'mine' && cell.subType === 'coal',
+        oil:         (cell) => (cell.type === 'mine' && cell.subType === 'oil') || cell.type === 'oil_rig',
+        electricity: (cell) => cell.type === 'power_plant',
+        water:       (cell) => cell.type === 'well',
+        food:        (cell) => cell.type === 'farm',
+        wood:        (cell) => cell.type === 'forest',
+      };
+      const matcher = TYPES_FOR_RESOURCE[resource];
+      if (!matcher) return;
+
+      const candidates = (game.cells || []).filter(c =>
+        matcher(c) && typeof c.resourceSupply === 'number');
+      if (candidates.length === 0) return;
+
+      // Sort most-depleted first (largest gap to max).
+      candidates.sort((a, b) => {
+        const aGap = (a.resourceSupplyMax || 0) - a.resourceSupply;
+        const bGap = (b.resourceSupplyMax || 0) - b.resourceSupply;
+        return bGap - aGap;
+      });
+      // Distribute one unit at a time around the queue so multiple cells get
+      // topped up rather than one cell soaking the whole batch.
+      let safety = toDistribute * 4;
+      while (toDistribute > 0 && safety-- > 0) {
+        let placedThisSweep = false;
+        for (const c of candidates) {
+          if (toDistribute <= 0) break;
+          const max = c.resourceSupplyMax || c.resourceSupply || 0;
+          if (c.resourceSupply >= max) continue;
+          c.resourceSupply += 1;
+          toDistribute -= 1;
+          placedThisSweep = true;
+        }
+        if (!placedThisSweep) break;  // every candidate at max
+      }
     }
 
     _runCatchUpBonus(player) {

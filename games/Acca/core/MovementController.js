@@ -21,8 +21,13 @@
       this.active   = false;
       this.player   = null;
       this.movesLeft = 0;
-      // Adjacent neighbours by cardinal direction (or null).
-      this.adjacent = { up: null, down: null, left: null, right: null };
+      // Bug H1 — adjacency map now covers all 8 compass directions so
+      // diagonal neighbours can be reached without "orphaning" them when
+      // cardinal slots are already claimed.
+      this.adjacent = {
+        up: null, down: null, left: null, right: null,
+        upLeft: null, upRight: null, downLeft: null, downRight: null,
+      };
       // Non-adjacent road choices (legacy — kept null nowadays).
       this.roads    = [];
       this.roadIdx  = 0;
@@ -45,18 +50,24 @@
      *  angle-fit assignment (BoardLoader), so MOVE just reads them here. */
     _refreshCandidates() {
       const cur = this.player && this.player.currentCell;
-      this.adjacent = { up: null, down: null, left: null, right: null };
+      this.adjacent = {
+        up: null, down: null, left: null, right: null,
+        upLeft: null, upRight: null, downLeft: null, downRight: null,
+      };
       this.roads    = [];
       this.roadIdx  = 0;
       if (!cur) return;
-      this.adjacent.up    = cur.up    || null;
-      this.adjacent.down  = cur.down  || null;
-      this.adjacent.left  = cur.left  || null;
-      this.adjacent.right = cur.right || null;
+      this.adjacent.up        = cur.up        || null;
+      this.adjacent.down      = cur.down      || null;
+      this.adjacent.left      = cur.left      || null;
+      this.adjacent.right     = cur.right     || null;
+      this.adjacent.upLeft    = cur.upLeft    || null;
+      this.adjacent.upRight   = cur.upRight   || null;
+      this.adjacent.downLeft  = cur.downLeft  || null;
+      this.adjacent.downRight = cur.downRight || null;
       // Dead-end (no cardinal slots filled) — forfeit movement and log it
-      // so the player knows what happened.
-      const anyAdj = !!(this.adjacent.up || this.adjacent.down ||
-                        this.adjacent.left || this.adjacent.right);
+      // so the player knows what happened. Diagonals also count as outlets.
+      const anyAdj = Object.values(this.adjacent).some(Boolean);
       if (!anyAdj) {
         if (this.game && this.game.log && this.player) {
           this.game.log(`${this.player.name} reached a dead end with ${this.movesLeft} move${this.movesLeft === 1 ? '' : 's'} remaining.`);
@@ -88,12 +99,51 @@
         return;
       }
 
+      // Bug H1 — diagonal stepping. Two paths feed the diagonals:
+      //   1. Explicit diagonal keys (Q/E/X/C by default) — single press.
+      //   2. Combined arrow keys — pressing e.g. Up while Left is held (or
+      //      vice-versa) routes to upLeft when that slot exists.
+      // The combined path is checked BEFORE the cardinals so a held-down
+      // direction doesn't steal a diagonal step. We also fall back
+      // gracefully: if a diagonal slot is empty but the cardinal one is
+      // filled, the cardinal is still used so single-key controls remain
+      // intuitive.
+      const triedCombo = this._tryComboStep();
+      if (triedCombo) return;
+
+      if (this._pressed('upLeft')    && this.adjacent.upLeft)    { this.stepTo(this.adjacent.upLeft);    return; }
+      if (this._pressed('upRight')   && this.adjacent.upRight)   { this.stepTo(this.adjacent.upRight);   return; }
+      if (this._pressed('downLeft')  && this.adjacent.downLeft)  { this.stepTo(this.adjacent.downLeft);  return; }
+      if (this._pressed('downRight') && this.adjacent.downRight) { this.stepTo(this.adjacent.downRight); return; }
+
       // Cardinal stepping — pressing an arrow key with a slot filled in that
       // direction steps immediately.
       if (this._pressed('up')    && this.adjacent.up)    { this.stepTo(this.adjacent.up);    return; }
       if (this._pressed('down')  && this.adjacent.down)  { this.stepTo(this.adjacent.down);  return; }
       if (this._pressed('left')  && this.adjacent.left)  { this.stepTo(this.adjacent.left);  return; }
       if (this._pressed('right') && this.adjacent.right) { this.stepTo(this.adjacent.right); return; }
+    }
+
+    /** Bug H1 — combined-arrow diagonals. Returns true if a step fired.
+     *  Looks at the just-pressed cardinal and checks whether the
+     *  perpendicular cardinal is currently held; if so, prefer the matching
+     *  diagonal slot. */
+    _tryComboStep() {
+      const press = (act) => this._pressed(act);
+      const held  = (act) => this._held(act);
+      // Up + Left/Right.
+      if (press('up') && held('left')  && this.adjacent.upLeft)    { this.stepTo(this.adjacent.upLeft);    return true; }
+      if (press('up') && held('right') && this.adjacent.upRight)   { this.stepTo(this.adjacent.upRight);   return true; }
+      // Down + Left/Right.
+      if (press('down') && held('left')  && this.adjacent.downLeft)  { this.stepTo(this.adjacent.downLeft);  return true; }
+      if (press('down') && held('right') && this.adjacent.downRight) { this.stepTo(this.adjacent.downRight); return true; }
+      // Left + Up/Down.
+      if (press('left') && held('up')   && this.adjacent.upLeft)   { this.stepTo(this.adjacent.upLeft);   return true; }
+      if (press('left') && held('down') && this.adjacent.downLeft) { this.stepTo(this.adjacent.downLeft); return true; }
+      // Right + Up/Down.
+      if (press('right') && held('up')   && this.adjacent.upRight)   { this.stepTo(this.adjacent.upRight);   return true; }
+      if (press('right') && held('down') && this.adjacent.downRight) { this.stepTo(this.adjacent.downRight); return true; }
+      return false;
     }
 
     /** Capture all reversible state before applying a step. Toll-gate
@@ -134,7 +184,12 @@
 
       if (final) {
         this.active = false;
-        this.adjacent = { up: null, down: null, left: null, right: null };
+        // Bug H1 — reset all 8 slots when movement ends so a stale diagonal
+        // doesn't leak into the next begin() call.
+        this.adjacent = {
+          up: null, down: null, left: null, right: null,
+          upLeft: null, upRight: null, downLeft: null, downRight: null,
+        };
         this.roads    = [];
         // Move is committed at landing — discard the undo history.
         this.history  = [];
@@ -185,11 +240,30 @@
       return codes.some(code => this.input.wasPressed(code));
     }
 
+    /** Bug H1 — `wasPressed` returns true on the press edge only; combined
+     *  arrows need to know if a key is currently HELD. The framework
+     *  InputManager exposes `isDown` against the raw key code, so we look
+     *  the action up in `controls` and ask if any of its codes is held.
+     *  Also accepts a press in the same frame as "still held" so a quick
+     *  simultaneous tap of e.g. Up+Left registers as a diagonal even if
+     *  neither key was held first. */
+    _held(action) {
+      const codes = this.controls[action];
+      if (!codes) return false;
+      return codes.some(code => {
+        if (typeof this.input.isDown === 'function' && this.input.isDown(code)) return true;
+        return this.input.wasPressed(code);
+      });
+    }
+
     cancel() {
       this.active    = false;
       this.player    = null;
       this.movesLeft = 0;
-      this.adjacent  = { up: null, down: null, left: null, right: null };
+      this.adjacent  = {
+        up: null, down: null, left: null, right: null,
+        upLeft: null, upRight: null, downLeft: null, downRight: null,
+      };
       this.roads     = [];
       this.roadIdx   = 0;
       this.history   = [];

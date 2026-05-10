@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Shadow Strike 3D – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050010;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    #gameContainer {
+      position: relative;
+      width: 960px;
+      height: 540px;
+    }
+    #gameCanvas {
+      display: block;
+      border: 2px solid rgba(0, 229, 255, 0.35);
+      box-shadow: 0 0 50px rgba(0, 150, 255, 0.35), 0 0 100px rgba(100, 0, 200, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+  </div>
+
+  <!-- Three.js (required by Three3DScene) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Game config -->
+  <script src="config.js"></script>
+
+  <!-- GameFramework bundle -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- Game logic -->
+  <script src="ShadowStrike3D.js"></script>
+</body>
+</html>

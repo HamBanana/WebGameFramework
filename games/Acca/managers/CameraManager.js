@@ -68,10 +68,11 @@
     update(dt) {
       const game = this.game;
       const cam  = game._camera;
-      // Hovering a district row in the sidebar pins focus to that district —
-      // zoom the camera to fit it. Highest priority so it overrides map view
-      // and player-follow. We save the prior targetScale on entry and restore
-      // it on exit so the camera doesn't stay zoomed at the district's fit.
+      // Bug I2 — hovering a district (over the map or in the sidebar) only
+      // highlights it in the list now; the camera follows the active player
+      // unless the user has explicitly *pinned* a district by clicking its
+      // sidebar row. `_getFocusedDistrict` returns the pinned district or
+      // null.
       const focusDistrict = this._getFocusedDistrict();
       if (focusDistrict) {
         if (this._savedScale === null) this._savedScale = cam.targetScale;
@@ -103,6 +104,12 @@
         const px = game._toPixel(game.turn.player.currentCell);
         cam.targetCx = px.x;
         cam.targetCy = px.y;
+        // Bug I1 — apply a mouse-driven pan offset on top of the player
+        // follow target. The mouse's screen-space distance from the canvas
+        // centre is converted to world units and clamped, then added to
+        // the target. Skipped while a menu is open so menu navigation
+        // doesn't drag the camera around.
+        this._applyMousePan(game, cam);
       }
       const alpha = Math.min(1, game.cfg.camera.lerp * (dt * 60));
       cam.scale += (cam.targetScale - cam.scale) * alpha;
@@ -110,9 +117,37 @@
       cam.cy    += (cam.targetCy    - cam.cy)    * alpha;
     }
 
-    /** Resolve the district-row hover focus into a District object, or null. */
+    /** Bug I1 — translate the cursor's offset from canvas centre into a
+     *  world-space camera-target nudge. The pan amount is capped (default
+     *  half a screen at the current scale) so the camera can never wander
+     *  off the map; cleared automatically when the mouse leaves the canvas
+     *  (AccaGame._initMapHover sets `_mousePosition = null`). */
+    _applyMousePan(game, cam) {
+      const m = game._mousePosition;
+      if (!m) return;
+      // Suppress while any modal-style UI is up.
+      if (game.menu && game.menu.visible) return;
+      const W = game.cfg.engine.width;
+      const H = game.cfg.engine.height;
+      const camCfg = game.cfg.camera || {};
+      const strength = (camCfg.mousePanStrength != null) ? camCfg.mousePanStrength : 0.6;
+      const scale = cam.targetScale > 0 ? cam.targetScale : 1;
+      // Mouse offset from canvas centre, in screen pixels.
+      const dxScreen = m.sx - W / 2;
+      const dyScreen = m.sy - H / 2;
+      // Convert to world units and apply the strength factor.
+      const offX = (dxScreen / scale) * strength;
+      const offY = (dyScreen / scale) * strength;
+      cam.targetCx += offX;
+      cam.targetCy += offY;
+    }
+
+    /** Resolve the PINNED district focus (sidebar row click) into a District
+     *  object, or null. Hovering alone does not return a focused district —
+     *  see Bug I2. */
     _getFocusedDistrict() {
       const game = this.game;
+      if (!game._focusDistrictPinned) return null;
       const id = game._focusDistrictId;
       if (!id || !game.districtSys) return null;
       const d = game.districtSys.get(id);

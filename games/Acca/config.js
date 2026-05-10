@@ -25,7 +25,8 @@
     "zoomedInCellsAcross": 6,
     "zoomOutPadding": 80,
     "lerp": 0.12,
-    "betweenTurnsHold": 0.6
+    "betweenTurnsHold": 0.6,
+    "mousePanStrength": 0.6
   },
   "players": [
     {
@@ -188,7 +189,7 @@
     "houseTaxIfMayor": 60,
     "housePopContribution": 4,
     "houseOwnerIncome": 18,
-    "tollOwnerIncome": 8,
+    "tollOwnerIncome": 0,
     "teleporterOwnerIncome": 15,
     "policeOwnerIncome": 30,
     "vaultOwnerIncome": 25,
@@ -264,7 +265,7 @@
       "coal": 40,
       "oil": 80
     },
-    "sellSpread": 0.9,
+    "sellSpread": 1.0,
     "defaultStockBasis": 12,
     "factoryDumpShare": 0.5,
     "cellMarketShare": 0.5,
@@ -274,7 +275,11 @@
     "priceCeilMul": 2.5,
     "specialtyBonus": 1,
     "specialtyDiscount": 0,
-    "passiveYield": 1
+    "passiveYield": 1,
+    "cellSupplyInitial": 30,
+    "cellSupplyMax": 50,
+    "cellSupplyMin": 1,
+    "factoryReplenishToCells": 0.5
   },
   "population": {
     "birthRate": 0.04,
@@ -284,6 +289,9 @@
     "migrationFloor": 30,
     "foodPerCapita": 0.01,
     "waterPerCapita": 0.01,
+    "electricityPerCapita": 0.01,
+    "coalPerCapita": 0.005,
+    "oilPerCapita": 0.005,
     "taxComfortRate": 0.1,
     "oilPerMigrationUnit": 50,
     "happiness": {
@@ -658,6 +666,18 @@
     "right": [
       "ArrowRight",
       "KeyD"
+    ],
+    "upLeft": [
+      "KeyQ"
+    ],
+    "upRight": [
+      "KeyE"
+    ],
+    "downLeft": [
+      "KeyX"
+    ],
+    "downRight": [
+      "KeyC"
     ],
     "confirm": [
       "Enter",

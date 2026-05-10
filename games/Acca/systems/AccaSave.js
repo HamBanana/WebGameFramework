@@ -26,20 +26,28 @@
       ownedStructureCellIds: p.ownedStructures.map(s => s.cell && s.cell.id),
     }));
 
-    const cells = game.cells.map(c => ({
-      id: c.id,
-      structure: c.structure ? {
-        type: c.structure.type,
-        ownerIndex: c.structure.ownerIndex,
-        baseValue: c.structure.baseValue,
-        currentValue: c.structure.currentValue,
-        tollAccrued: c.structure.tollAccrued,
-        sabotagedUntilTurn: c.structure.sabotagedUntilTurn,
-        level: c.structure.level || 1,
-        storedMoney: c.structure.storedMoney || 0,
-        idleUntilTurn: c.structure.idleUntilTurn || -1,
-      } : null,
-    }));
+    const cells = game.cells.map(c => {
+      const out = {
+        id: c.id,
+        structure: c.structure ? {
+          type: c.structure.type,
+          ownerIndex: c.structure.ownerIndex,
+          baseValue: c.structure.baseValue,
+          currentValue: c.structure.currentValue,
+          tollAccrued: c.structure.tollAccrued,
+          sabotagedUntilTurn: c.structure.sabotagedUntilTurn,
+          level: c.structure.level || 1,
+          storedMoney: c.structure.storedMoney || 0,
+          idleUntilTurn: c.structure.idleUntilTurn || -1,
+        } : null,
+      };
+      // Bug F2 — preserve resource cell depletion across save/load so
+      // mid-game depletion isn't undone by reloading.
+      if (typeof c.resourceSupply === 'number') {
+        out.resourceSupply = c.resourceSupply;
+      }
+      return out;
+    });
 
     return {
       version: VERSION,
@@ -80,6 +88,11 @@
     data.cells.forEach(snap => {
       const cell = cellById.get(snap.id);
       if (!cell) return;
+      // Bug F2 — restore depletion state for resource cells (or leave the
+      // BoardLoader-initialised default if the field isn't present).
+      if (typeof snap.resourceSupply === 'number') {
+        cell.resourceSupply = snap.resourceSupply;
+      }
       if (snap.structure) {
         const s = game.structures.build(cell, snap.structure.type, snap.structure.ownerIndex);
         if (s) {

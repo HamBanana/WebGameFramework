@@ -96,21 +96,55 @@
     _renderNotifications(dom) {
       const game = this.game;
       const last = game.eventLog[game.eventLog.length - 1];
-      const lastSig = last && typeof last === 'object'
-        ? `${last.turn}:${last.msg}:${last.count || 1}`
-        : (last || '');
+      // Bug E1 — phase entries have action+lines instead of msg+count, so
+      // the signature has to take both forms into account or the panel
+      // freezes on the first phase entry.
+      let lastSig = '';
+      if (last && typeof last === 'object') {
+        if (last.action) {
+          const lc = (last.lines && last.lines.length) || 0;
+          const lastLine = lc > 0 ? last.lines[lc - 1] : null;
+          const lastLineMsg = lastLine && lastLine.msg ? lastLine.msg : '';
+          lastSig = `${last.turn}:${last.action}:${lc}:${lastLineMsg}`;
+        } else {
+          lastSig = `${last.turn}:${last.msg}:${last.count || 1}`;
+        }
+      } else if (last) {
+        lastSig = String(last);
+      }
       const logSig = game.eventLog.length + '|' + lastSig;
       if (this._lastLogSig === logSig) return;
       this._lastLogSig = logSig;
       dom.notifications.innerHTML = '';
-      // Show ~14 lines (was 12) — still tight enough not to dominate the
-      // viewport but reduces the rate at which interesting events scroll off.
-      const recent = game.eventLog.slice(-14);
-      recent.forEach((entry, idx) => {
+      // Bug E1 — flatten phase entries (action header + bullet lines) into
+      // individual notification rows so the panel still shows fine-grained
+      // activity even after the log starts grouping by action.
+      const flat = [];
+      const tail = game.eventLog.slice(-12);
+      tail.forEach(entry => {
+        if (entry && typeof entry === 'object' && entry.action) {
+          flat.push({ kind: 'action', text: entry.action });
+          (entry.lines || []).forEach(line => {
+            const text = (line && line.count > 1)
+              ? `· ${line.msg} (×${line.count})`
+              : `· ${(line && line.msg) || ''}`;
+            flat.push({ kind: 'bullet', text });
+          });
+        } else {
+          flat.push({ kind: 'flat', text: A.AccaGame ? A.AccaGame.logText(entry)
+            : (typeof entry === 'object' ? entry.msg : entry) });
+        }
+      });
+      // Cap at 14 visible lines and keep the most recent ones.
+      const recent = flat.slice(-14);
+      recent.forEach((row, idx) => {
         const div = document.createElement('div');
-        div.className = 'notif' + (idx === recent.length - 1 ? ' latest' : '');
-        div.textContent = A.AccaGame ? A.AccaGame.logText(entry)
-          : (typeof entry === 'object' ? entry.msg : entry);
+        const cls = ['notif'];
+        if (idx === recent.length - 1) cls.push('latest');
+        if (row.kind === 'action') cls.push('notif-action');
+        if (row.kind === 'bullet') cls.push('notif-bullet');
+        div.className = cls.join(' ');
+        div.textContent = row.text;
         dom.notifications.appendChild(div);
       });
       dom.notifications.scrollTop = dom.notifications.scrollHeight;

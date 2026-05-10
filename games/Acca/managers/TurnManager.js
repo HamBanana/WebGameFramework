@@ -38,8 +38,13 @@
       switch (stage) {
         case A.TURN_STAGE.TURN_START:
           this.game.camera.zoomInOnPlayer(this.player);
-          this.game.log(`— ${this.player.name}'s turn —`);
+          // Bug E1 — group all start-of-turn micro-events (taxes, shop income,
+          // mayor bonuses, contextual prompts) under a single "turn start"
+          // phase entry. The header line becomes the visible row in the log
+          // and the rest become its bullet-points.
+          this.game.beginPhase(`${this.player.name} — turn start`);
           this.game.economy.runStartOfTurn(this.player);
+          this.game.endPhase();
           this._showStartMenu();
           break;
 
@@ -60,6 +65,8 @@
           if (extraDice > 0) flags.extraDice = 0;
 
           if (this.game.sfx) this.game.sfx.roll();
+          // Bug E1 — group the roll's narration as a single action.
+          this.game.beginPhase(`${this.player.name} — rolls`);
           this.die.roll(this.game.cfg.turn.rollDuration, (value) => {
             if (override) {
               value = override.min + Math.floor(Math.random() * (override.max - override.min + 1));
@@ -78,6 +85,7 @@
               value += sum;
               this.game.log(`Extra dice rolled ${extras.join('+')} = +${sum} (total ${value}).`);
             }
+            this.game.endPhase();
             this.game.lastRoll = value;
             if (this.game.engine && this.game.engine.events) {
               this.game.engine.events.emit('roll:done', { player: this.player, value });
@@ -88,11 +96,19 @@
         }
 
         case A.TURN_STAGE.MOVE:
+          // Bug E1 — wrap the movement narration (per-step pass-throughs,
+          // toll payments, dead-end forfeits) into a single phase entry.
+          this.game.beginPhase(`${this.player.name} — moves ${this.game.lastRoll} step(s)`);
           this.movement.begin(this.player, this.game.lastRoll);
-          this.game.log(`Move ${this.game.lastRoll} step(s) — use the arrow keys.`);
+          // Diagonals are reachable via Q/E/X/C or two arrow keys held
+          // together (Bug H1). Z still steps back (Bug H2).
+          this.game.log(`Move ${this.game.lastRoll} step(s) — arrows for cardinals, Q/E/X/C for diagonals, Z to undo.`);
           break;
 
         case A.TURN_STAGE.LANDING:
+          // Movement ended; close that phase and begin the landing phase.
+          this.game.endPhase();
+          this.game.beginPhase(`${this.player.name} — lands on ${this._cellLabel(this.player.currentCell)}`);
           this._handleLanding();
           break;
 
@@ -101,7 +117,12 @@
           break;
 
         case A.TURN_STAGE.END_TURN:
+          // Close any landing/menu phase that was active, then run end-of-turn
+          // bookkeeping inside its own phase entry.
+          this.game.endPhase();
+          this.game.beginPhase(`${this.player.name} — end of turn`);
           this.game.economy.runEndOfTurn(this.player);
+          this.game.endPhase();
           this.game._beginBetweenTurns();
           this.stage = A.TURN_STAGE.BETWEEN;
           break;
@@ -185,6 +206,12 @@
       const fee  = this._courierFee();
       const sorted = cfg.catalog.slice().sort((a, b) => a.cost - b.cost);
       const opts  = [];
+      // Bug C2 — keep the description for each catalog entry indexed by the
+      // entry type so the on-highlight tooltip below can find it cheaply.
+      const descByType = new Map();
+      sorted.forEach(entry => {
+        if (entry.description) descByType.set(entry.type, entry.description);
+      });
       cells.forEach(target => {
         const districtTag = target.district || '—';
         sorted.forEach(entry => {
@@ -195,8 +222,11 @@
           const reason = !cashOk ? `  — need $${totalCash - p.money}` :
                          missing  ? `  — need ${missing.missing} ${missing.res}` : '';
           opts.push({
-            label: `${entry.label} in ${districtTag} cell ${target.id} ($${entry.cost} + $${fee})${reason}`,
+            // (?) marker signals there's a tooltip explanation in the subtitle
+            // when the row is highlighted (Bug C2).
+            label: `${entry.label} in ${districtTag} cell ${target.id} ($${entry.cost} + $${fee})${reason}  (?)`,
             _disabled: !can,
+            meta: { entryType: entry.type },
             action: () => {
               p.addMoney(-(entry.cost + fee), `Built ${entry.label} from hand in ${districtTag}`);
               game.structures.build(target, entry.type, p.index);
@@ -207,8 +237,13 @@
         });
       });
       opts.push({ label: 'Back', action: () => this._showStartMenu() });
-      this.menu.show('Build from hand', opts,
-        `Cash $${p.money}  ·  Adjacent empty plots: ${cells.length}`);
+      const baseSubtitle = `Cash $${p.money}  ·  Adjacent empty plots: ${cells.length}`;
+      const onIndexChange = (opt) => {
+        const t = opt && opt.meta && opt.meta.entryType;
+        const desc = t && descByType.get(t);
+        this.menu.subtitle = desc || baseSubtitle;
+      };
+      this.menu.show('Build from hand', opts, baseSubtitle, { onIndexChange });
     }
 
     // ── Other submenu ─────────────────────────────────────────────────────
@@ -329,45 +364,72 @@
         `Have ${have}  ·  Sell price $${price} ea`, { layout: 'horizontal' });
     }
 
-    /** Paginated game-log viewer. Shows 14 entries per page in reverse
-     *  chronological order (newest first), with prev/next/close. Entries are
-     *  {turn,msg,count} objects (or legacy strings); the page header shows the
-     *  turn span of the visible slice. */
+    /** Bug E1 — scrollable chat-style game log. Top-level entries are
+     *  rendered one per row; phase entries (the new "one entry per action"
+     *  form, with an action header and bullet-point lines) expand into the
+     *  header row plus indented sub-rows for each bullet. Turn dividers are
+     *  inserted whenever the turn number changes. The cursor opens at the
+     *  bottom and the menu's existing maxVisible+scrollOffset machinery
+     *  handles smooth scrolling.  No prev/next paging buttons — the user just
+     *  arrow-keys through the list. */
     _showGameLog() {
       const game = this.game;
       const all  = (game.eventLog || []);
 
-      const fmt = (e) => {
-        if (typeof e === 'string') return { line: e, turn: null };
-        const txt = e.count > 1 ? `${e.msg} (×${e.count})` : e.msg;
-        return { line: txt, turn: e.turn };
+      const truncate = (s, n) => (s && s.length > n) ? s.slice(0, n - 1) + '…' : (s || '');
+      const fmtLine = (line) => {
+        if (typeof line === 'string') return line;
+        if (!line) return '';
+        return line.count > 1 ? `${line.msg} (×${line.count})` : (line.msg || '');
       };
 
-      // Group consecutive entries that share the same turn into one heading
-      // followed by sub-bullets (matches the user's request: "one log entry
-      // per action" with breakdown lines). Headings are disabled rows so
-      // confirm slides past them without firing an action; entries themselves
-      // are no-op rows the user can highlight without exiting the log.
       const opts = [];
-      let lastTurn = null;
       const noop = () => this._showGameLog();
+      let lastTurn = null;
+
       all.forEach(entry => {
-        const f = fmt(entry);
-        const text = f.line.length > 56 ? f.line.slice(0, 53) + '…' : f.line;
-        if (f.turn != null && f.turn !== lastTurn) {
-          opts.push({ label: `── Turn ${f.turn} ──`, action: noop, _disabled: true });
-          lastTurn = f.turn;
+        const turn = (entry && typeof entry === 'object') ? entry.turn : null;
+        if (turn != null && turn !== lastTurn) {
+          opts.push({
+            label: `── Turn ${turn} ──`,
+            action: noop, _disabled: true,
+          });
+          lastTurn = turn;
         }
-        opts.push({ label: '  · ' + text, action: noop });
+        // Phase entry: action header + bullets.
+        if (entry && entry.action) {
+          opts.push({
+            label: truncate(entry.action, 60),
+            action: noop, _disabled: true,
+          });
+          (entry.lines || []).forEach(line => {
+            opts.push({
+              label: '   · ' + truncate(fmtLine(line), 56),
+              action: noop,
+            });
+          });
+          if ((entry.lines || []).length === 0) {
+            opts.push({ label: '   · (no sub-events)', action: noop });
+          }
+          return;
+        }
+        // Legacy single-message entry.
+        const text = (typeof entry === 'string') ? entry
+          : (entry && entry.count > 1 ? `${entry.msg} (×${entry.count})` : (entry && entry.msg) || '');
+        opts.push({ label: truncate(text, 60), action: noop });
       });
+
       if (opts.length === 0) {
         opts.push({ label: '(no events yet)', action: () => this._showOtherMenu() });
       }
       opts.push({ label: 'Back', action: () => this._showOtherMenu() });
 
-      this.menu.show('Game log', opts, `${all.length} entries`,
-        { maxVisible: 14 });
-      // Open at the bottom — auto-scroll to latest entry like a chat window.
+      // maxVisible enables the scrollable window; the user navigates with
+      // up/down through the FULL list (not paged). 16 rows is a comfortable
+      // height that fits with the menu chrome.
+      this.menu.show('Game log', opts, `${all.length} entries · arrow keys to scroll`,
+        { maxVisible: 16 });
+      // Park the cursor at the bottom so newest events are visible first.
       this.menu.index = opts.length - 2 >= 0 ? opts.length - 2 : 0;
       this.menu._adjustScroll();
     }
@@ -607,6 +669,15 @@
 
       const opts = [];
 
+      // Bug G1 — the menu was previously about 18 rows long with the
+      // commit/reset rows at the bottom. On smaller screens those rows fell
+      // off the visible window so the trade was un-finishable. We now reserve
+      // a placeholder slot at the top of the list and fill it after preview
+      // runs (so it has access to giveVal/recvVal); a maxVisible window is
+      // also enabled below so very long lists scroll instead of overflowing.
+      const proposeIndex = opts.length;
+      opts.push({ label: '(building proposal…)', _disabled: true, action: () => {} });
+
       // Offer cash row
       opts.push({
         label: `Offer cash: $${draft.give.money}   (Enter cycles)`,
@@ -665,9 +736,12 @@
       const giveVal = preview.valA != null ? preview.valA : this._estimateSide(draft.give);
       const recvVal = preview.valB != null ? preview.valB : this._estimateSide(draft.receive);
 
-      opts.push({
+      // Bug G1 — fill the reserved top-of-list propose slot now that we know
+      // whether the proposal is valid. Putting the commit row first ensures
+      // the player can always reach it with one keypress.
+      opts[proposeIndex] = {
         label: preview.ok
-          ? `Propose trade   (~$${giveVal} → ~$${recvVal})`
+          ? `★ Propose trade   (~$${giveVal} → ~$${recvVal})`
           : `Cannot propose — ${preview.reason}`,
         _disabled: !preview.ok,
         action: () => {
@@ -680,7 +754,7 @@
           this._tradeDraft = null;
           this._showStartMenu();
         },
-      });
+      };
       opts.push({
         label: 'Reset proposal',
         action: () => { this._resetTradeDraft(target); this._showTradeBuilder(target); },
@@ -709,7 +783,11 @@
         ? '—'
         : ratio.toFixed(1) + '×';
       this.menu.show(`Trade with ${target.name}`, opts,
-        `You ~$${giveVal} ↔ ${target.name} ~$${recvVal}  ·  imbalance [${bar}] ${ratioStr} (max ${limit}×)`);
+        `You ~$${giveVal} ↔ ${target.name} ~$${recvVal}  ·  imbalance [${bar}] ${ratioStr} (max ${limit}×)`,
+        // Bug G1 — long resource lists now scroll instead of overflowing the
+        // canvas; the propose row sits at the top of the menu so it's always
+        // reachable with a single keypress.
+        { maxVisible: 14 });
     }
 
     /** Drop zero entries from a resource bag so the proposal validates cleanly
@@ -1071,21 +1149,41 @@
 
     _grantResource(cell, resource, qty, label) {
       const p = this.player;
-      p.resources[resource] = (p.resources[resource] || 0) + qty;
+      const game = this.game;
+      // Bug F2 — resource cells now hold a finite supply (set in
+      // BoardLoader). Each landing draws from that supply; the player's grant
+      // is clamped to whatever's left, and the cell's supply is decremented.
+      // Factories replenish cell supplies during start-of-turn production
+      // (see EconomyManager).
+      let granted = qty;
+      if (typeof cell.resourceSupply === 'number') {
+        const minOut = (cell.resourceSupplyMin != null) ? cell.resourceSupplyMin : 1;
+        granted = Math.max(0, Math.min(qty, cell.resourceSupply));
+        cell.resourceSupply = Math.max(0, cell.resourceSupply - granted);
+        // Token "trickle" so a fully-depleted cell still yields a single unit
+        // — players land here with the expectation of getting *something*,
+        // and the supply will be back-filled by factories shortly anyway.
+        if (granted === 0 && minOut > 0) {
+          granted = minOut;
+        }
+      }
+      p.resources[resource] = (p.resources[resource] || 0) + granted;
       // Resource-cell yield also tops up the global market pool — a small
       // share of what the cell produces ends up "available for trade." The
       // cellMarketShare config (default 0.5) controls how much of the player
       // yield mirrors into the pool. Keeps prices anchored when a popular
       // mine is being mined frequently.
-      const game = this.game;
       const share = (game.cfg.market && game.cfg.market.cellMarketShare != null)
         ? game.cfg.market.cellMarketShare
         : 0.5;
-      const dump = Math.max(0, Math.round(qty * share));
+      const dump = Math.max(0, Math.round(granted * share));
       if (dump > 0 && game.marketSys && game.marketSys.addStock) {
         game.marketSys.addStock(resource, dump, label);
       }
-      game.log(`${p.name} stops at the ${label} (+${qty} ${resource}).`);
+      const supplyTail = (typeof cell.resourceSupply === 'number')
+        ? `  (cell supply ${cell.resourceSupply}${cell.resourceSupplyMax ? '/' + cell.resourceSupplyMax : ''})`
+        : '';
+      game.log(`${p.name} stops at the ${label} (+${granted} ${resource})${supplyTail}.`);
       this.enter(A.TURN_STAGE.END_TURN);
     }
 
@@ -1155,9 +1253,6 @@
       const cost = Math.round(structure.currentValue * mul);
       const can  = p.money >= cost;
       const mulLabel = sabotaged ? `${sabMul}× value (sabotaged)` : `${baseMul}× value`;
-      const takeoverLabel = can
-        ? `Buy from ${owner.name}  ($${cost} = ${mulLabel})`
-        : `Buy from ${owner.name}  ($${cost} = ${mulLabel})  — need $${cost - p.money}`;
 
       // Sabotage row — only meaningful in competitive multiplayer; reuse
       // TradeSystem.canSabotage so we get the same affordability/oil/police
@@ -1165,14 +1260,16 @@
       const sabCheck = (game.cfg.mode !== 'cooperative' && game.tradeSys)
         ? game.tradeSys.canSabotage(p, structure, game.turnCounter)
         : { ok: false, reason: 'unavailable' };
-      const sabLabel = sabCheck.ok
-        ? `Sabotage  ($${cfgSab.cost} + ${cfgSab.oilCost} oil, ${cfgSab.duration} turns)`
-        : `Sabotage — ${sabCheck.reason}`;
 
-      const opts = [
-        {
-          label: takeoverLabel,
-          _disabled: !can,
+      const opts = [];
+      // Bug D1 — only surface the takeover row when the player can actually
+      // afford it. Showing it as a disabled-but-visible row caused players to
+      // confirm it and have the turn silently end (Menu hides on confirm even
+      // when the row is disabled if the action no-ops). Hiding the row makes
+      // the affordability gate explicit.
+      if (can) {
+        opts.push({
+          label: `Buy from ${owner.name}  ($${cost} = ${mulLabel})`,
           action: () => {
             const r = game.tradeSys.takeover(p, structure, game.players, game.turnCounter);
             game.log(r.ok
@@ -1180,10 +1277,12 @@
               : `Purchase refused: ${r.reason}.`);
             this.enter(A.TURN_STAGE.END_TURN);
           },
-        },
-        {
-          label: sabLabel,
-          _disabled: !sabCheck.ok,
+        });
+      }
+      // Sabotage row only when actually available (same UX rule).
+      if (sabCheck.ok) {
+        opts.push({
+          label: `Sabotage  ($${cfgSab.cost} + ${cfgSab.oilCost} oil, ${cfgSab.duration} turns)`,
           action: () => {
             const r = game.tradeSys.sabotage(p, structure, game.players, game.turnCounter);
             game.log(r.ok
@@ -1191,13 +1290,25 @@
               : `Sabotage refused: ${r.reason}.`);
             this.enter(A.TURN_STAGE.END_TURN);
           },
-        },
-        { label: 'Continue', action: () => this.enter(A.TURN_STAGE.END_TURN) },
+        });
+      }
+      opts.push({ label: 'Continue', action: () => this.enter(A.TURN_STAGE.END_TURN) });
+      // Subtitle reveals the would-be cost when the player can't afford the
+      // takeover, so the option's absence is explained rather than mysterious.
+      const subtitleParts = [
+        `Cell ${structure.cell.id}`,
+        `Value $${structure.currentValue}`,
       ];
+      if (!can) {
+        subtitleParts.push(`Takeover would cost $${cost} (${mulLabel}) — need $${cost - p.money} more`);
+      }
+      if (!sabCheck.ok && game.cfg.mode !== 'cooperative') {
+        subtitleParts.push(`Sabotage unavailable (${sabCheck.reason})`);
+      }
       this.menu.show(
         `${this._typeLabel(structure.type)} owned by ${owner.name}`,
         opts,
-        `Cell ${structure.cell.id}  ·  Value $${structure.currentValue}`
+        subtitleParts.join('  ·  ')
       );
     }
 
@@ -1250,8 +1361,11 @@
           let reason = '';
           if (!cashOk)       reason = `  — need $${entry.cost - p.money}`;
           else if (missing)  reason = `  — need ${missing.missing} ${missing.res}`;
+          // Bug C2 — `(?)` marker signals to the player that highlighting the
+          // row reveals a longer description in the subtitle area.
+          const tip = '  (?)';
           opts.push({
-            label: can ? `${cost}${tail}` : `${cost}${reason}`,
+            label: can ? `${cost}${tail}${tip}` : `${cost}${reason}${tip}`,
             _disabled: !can,
             action: () => {
               p.addMoney(-entry.cost, `Built ${entry.label} in ${cell.district}`);
@@ -1265,7 +1379,7 @@
       opts.push({ label: 'Skip', action: () => this.enter(A.TURN_STAGE.END_TURN) });
 
       const baseSubtitle = canAffordAnything
-        ? `Cash: $${p.money}  ·  Cheapest: $${cheapest}`
+        ? `Cash: $${p.money}  ·  Cheapest: $${cheapest}  ·  (?) — highlight a row for details`
         : `Cash: $${p.money}  ·  Cheapest build: $${cheapest}  — can't afford anything yet`;
       // Live tooltip: as the player moves through the catalog, swap the
       // subtitle to show the highlighted entry's longer description. The Skip
@@ -1288,6 +1402,34 @@
       const cfg = this.game.cfg.structures;
       const entry = cfg.catalog.find(c => c.type === type);
       return entry ? entry.label : type;
+    }
+
+    /** Bug E1 — short human label for a cell, used in the landing phase
+     *  header. Falls back through structure → cell.type → district. */
+    _cellLabel(cell) {
+      if (!cell) return 'unknown cell';
+      if (cell.structure) {
+        return `${this._typeLabel(cell.structure.type)} in ${cell.district || '—'}`;
+      }
+      switch (cell.type) {
+        case 'bank':        return 'the Bank';
+        case 'chance':      return 'a Chance cell';
+        case 'market':      return 'the Market';
+        case 'power_plant': return 'a Power Plant';
+        case 'well':        return 'a Well';
+        case 'forest':      return 'a Forest';
+        case 'farm':        return 'a Farm';
+        case 'oil_rig':     return 'an Oil Rig';
+        case 'mine': {
+          const sub = cell.subType || 'coal';
+          return `a ${sub.charAt(0).toUpperCase()}${sub.slice(1)} Mine`;
+        }
+        case 'buildable':   return `an empty plot in ${cell.district || '—'}`;
+        case 'structure':   return cell.structureType
+          ? this._typeLabel(cell.structureType)
+          : 'a fixed structure';
+        default:            return cell.district ? `cell in ${cell.district}` : 'an empty cell';
+      }
     }
 
     _handleChance() {
