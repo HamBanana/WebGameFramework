@@ -149,8 +149,41 @@
         return;
       }
       const districts = game.districtSys.list().sort((a, b) => a.id.localeCompare(b.id));
+      const cur = game.currentPlayer;
+      // Current player's district id (the one their token is in).
+      const playerDistId = (cur && cur.currentCell) ? cur.currentCell.district : null;
+      const focusId = game._focusDistrictId || null;
+      const minStruct = (game.cfg.district && game.cfg.district.mayorMinStructures != null)
+        ? game.cfg.district.mayorMinStructures : 2;
+      // Per-district: count of CURRENT PLAYER's structures, plus the highest count
+      // any other player has. Used for the "X more to claim" near-mayor hint.
+      const myCounts = new Map();
+      const rivalCounts = new Map();
+      districts.forEach(d => {
+        let mine = 0, rivalBest = 0;
+        d.cells.forEach(c => {
+          if (!c.structure || c.type !== 'buildable') return;
+          if (cur && c.structure.ownerIndex === cur.index) mine++;
+          else if (c.structure.ownerIndex >= 0) {
+            // tally per-rival to find their best
+          }
+        });
+        // Recompute rivalBest by tallying per-rival
+        const tally = new Map();
+        d.cells.forEach(c => {
+          if (!c.structure || c.type !== 'buildable') return;
+          if (cur && c.structure.ownerIndex === cur.index) return;
+          if (c.structure.ownerIndex < 0) return;
+          tally.set(c.structure.ownerIndex, (tally.get(c.structure.ownerIndex) || 0) + 1);
+        });
+        tally.forEach(v => { if (v > rivalBest) rivalBest = v; });
+        myCounts.set(d.id, mine);
+        rivalCounts.set(d.id, rivalBest);
+      });
       const sig = districts.map(d =>
-        `${d.id}:${d.population}:${Math.round(d.happiness)}:${d.mayorIndex}:${Math.round(d.taxRate * 100)}`
+        `${d.id}:${d.population}:${Math.round(d.happiness)}:${d.mayorIndex}:${Math.round(d.taxRate * 100)}` +
+        `:${d.id === playerDistId ? 1 : 0}:${d.id === focusId ? 1 : 0}` +
+        `:${myCounts.get(d.id)}:${rivalCounts.get(d.id)}`
       ).join('|');
       if (this._lastDistrictSig === sig) return;
       this._lastDistrictSig = sig;
@@ -164,12 +197,19 @@
                         : 'angry';
         const owned = d.cells.filter(c => c.structure).length;
         const total = d.cells.filter(c => c.type === 'buildable').length;
+        const isPlayerHere = d.id === playerDistId;
+        const isFocused    = d.id === focusId;
 
         const row = document.createElement('div');
-        row.className = 'dist-row';
+        row.className = 'dist-row' +
+          (isPlayerHere ? ' player-here' : '') +
+          (isFocused    ? ' focused'     : '');
+        row.dataset.districtId = d.id;
         row.innerHTML =
           `<div class="dist-header">` +
-            `<span class="dist-name" style="border-left-color:${d.color}">${d.id}</span>` +
+            `<span class="dist-name" style="border-left-color:${d.color}">${d.id}` +
+              (isPlayerHere ? ` <span class="dist-here" style="color:${cur.color}">● ${cur.name}</span>` : '') +
+            `</span>` +
             (d.specialty ? `<span class="dist-tag">${d.specialty}</span>` : '') +
           `</div>` +
           `<div class="dist-body">` +
@@ -177,10 +217,53 @@
             `<div class="dist-line">Tax <strong>${Math.round(d.taxRate * 100)}%</strong>&ensp;Bldg ${owned}/${total}</div>` +
             `<div class="dist-line dist-mayor-line">${mayor
               ? `<span class="dist-mayor-dot" style="background:${mayor.color}"></span><span style="color:${mayor.color}">${mayor.name}</span>`
-              : '<span class="dim">No mayor</span>'}</div>` +
+              : '<span class="dim">No mayor</span>'}` +
+              (() => {
+                // Near-mayor hint for the current player: show how many more
+                // structures they need to claim (or hold) the seat. Empty for
+                // the "no chance" case so the line stays terse.
+                if (!cur) return '';
+                const mine = myCounts.get(d.id) || 0;
+                const rival = rivalCounts.get(d.id) || 0;
+                if (d.mayorIndex === cur.index) return ' <span class="dist-hint" style="color:#7be07f">★ you</span>';
+                if (mine === 0) return '';
+                const needed = Math.max(0, Math.max(minStruct, rival + 1) - mine);
+                if (needed === 0 && mine > rival) return ' <span class="dist-hint" style="color:#ffe57a">→ recompute</span>';
+                if (needed > 0 && needed <= 2) {
+                  return ` <span class="dist-hint" style="color:#ffe57a">+${needed} to claim</span>`;
+                }
+                return '';
+              })() +
+            `</div>` +
           `</div>`;
         list.appendChild(row);
       });
+
+      // Bind hover/click handlers once per render — pin/unpin the focus district.
+      // Hover sets a transient focus; click pins it (toggles).
+      list.onmouseover = (e) => {
+        const row = e.target.closest('.dist-row');
+        if (!row || !row.dataset.districtId) return;
+        if (game._focusDistrictPinned) return;
+        game._focusDistrictId = row.dataset.districtId;
+      };
+      list.onmouseleave = () => {
+        if (game._focusDistrictPinned) return;
+        game._focusDistrictId = null;
+      };
+      list.onclick = (e) => {
+        const row = e.target.closest('.dist-row');
+        if (!row || !row.dataset.districtId) return;
+        const id = row.dataset.districtId;
+        if (game._focusDistrictPinned && game._focusDistrictId === id) {
+          // Toggle off when clicking the already-pinned row.
+          game._focusDistrictPinned = false;
+          game._focusDistrictId = null;
+        } else {
+          game._focusDistrictPinned = true;
+          game._focusDistrictId = id;
+        }
+      };
     }
   }
 

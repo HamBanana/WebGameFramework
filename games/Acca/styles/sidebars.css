@@ -35,7 +35,7 @@
   cursor: pointer;
   transition: background 0.18s ease;
 }
-.dist-row:hover { background: rgba(255, 255, 255, 0.025); }
+.dist-row:hover { background: rgba(255, 255, 255, 0.04); }
 .dist-row.active {
   background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 80%);
 }
@@ -46,6 +46,33 @@
   width: 3px;
   background: var(--accent);
   box-shadow: 0 0 8px var(--glow);
+}
+
+/* Current player is currently in this district. Adds a colored side bar plus
+ * a soft tint so the player can quickly find themselves on the map. */
+.dist-row.player-here {
+  background: linear-gradient(90deg, rgba(255,200,87,0.10) 0%, transparent 90%);
+}
+.dist-row.player-here::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--warn);
+  box-shadow: 0 0 8px rgba(255, 200, 87, 0.5);
+}
+.dist-here {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+  text-shadow: 0 0 6px currentColor;
+}
+
+/* Hover-or-click focus — pins the row and triggers the on-map outline pulse. */
+.dist-row.focused {
+  background: linear-gradient(90deg, rgba(98,205,255,0.14) 0%, transparent 90%);
+  box-shadow: inset 0 0 0 1px rgba(98,205,255,0.35);
 }
 
 .dist-header {
@@ -117,6 +144,79 @@
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 4px currentColor;
 }
 .dim { color: var(--ink-mute); }
+
+/* ── Price report overlay — shown during between-turns pause ───────────── */
+.price-report {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(11,19,32,0.97) 0%, rgba(7,12,22,0.98) 100%);
+  border: 1px solid var(--panel-line-hi);
+  border-radius: 6px;
+  padding: 14px 20px 16px;
+  min-width: 280px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.2,0.8,0.3,1);
+  transform: translateX(-50%) translateY(10px);
+  z-index: 30;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 16px 48px rgba(0,0,0,0.7),
+    0 0 32px rgba(28,146,232,0.12);
+}
+.price-report.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.price-report-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  text-align: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--panel-line);
+}
+.price-report-table {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 3px 14px;
+  font-size: 11.5px;
+  font-family: 'Consolas', 'Menlo', monospace;
+}
+.pr-row {
+  display: contents;
+}
+.pr-row.pr-changed .pr-name,
+.pr-row.pr-changed .pr-price,
+.pr-row.pr-changed .pr-delta {
+  background: rgba(255,200,87,0.06);
+}
+.pr-name {
+  color: var(--ink-dim);
+  padding: 2px 4px;
+  border-radius: 2px 0 0 2px;
+  text-transform: capitalize;
+}
+.pr-price {
+  text-align: right;
+  color: var(--ink);
+  font-weight: 700;
+  padding: 2px 4px;
+}
+.pr-delta {
+  text-align: right;
+  padding: 2px 6px 2px 0;
+  border-radius: 0 2px 2px 0;
+  min-width: 52px;
+}
+.pr-delta.up   { color: var(--loss); }
+.pr-delta.down { color: var(--gain); }
+.pr-delta.flat { color: var(--ink-mute); }
 
 /* ── Right sidebar — Notifications + Players ───────────────────────────── */
 #sidebar {

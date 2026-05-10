@@ -21,6 +21,9 @@
     property    : 'cell_property',
     power_plant : 'cell_power_plant',
     well        : 'cell_well',
+    forest      : 'cell_forest',
+    farm        : 'cell_farm',
+    oil_rig     : 'cell_oil_rig',
   };
 
   const GAMETYPE_FOR = {
@@ -30,6 +33,9 @@
     property    : 'buildable',
     power_plant : 'power_plant',
     well        : 'well',
+    forest      : 'forest',
+    farm        : 'farm',
+    oil_rig     : 'oil_rig',
   };
 
   const cardinalAngles = { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 };

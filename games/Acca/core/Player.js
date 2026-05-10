@@ -25,7 +25,18 @@
 
       this.ownedStructures   = []; // array of PlayerStructure
       this.resources         = {}; // resourceName → quantity
+      this.items             = {}; // itemId → quantity
       this.districtsMayoredOf = new Set(); // ids of districts this player is mayor of
+
+      // Item-driven turn flags. Set when an item is activated at the start of
+      // a turn; consumed by TurnManager during the ROLL stage and reset by
+      // EconomyManager on end-of-turn (with `shield` carrying across).
+      this.itemFlags = {
+        extraDice    : 0,           // additional dice rolled this turn (sum)
+        rollOverride : null,        // {min,max} clamp for the rolled value
+        sabotageShield: 0,          // # of sabotage attempts blocked
+        warpSteps    : 0,           // free chosen-direction steps to spend instead of rolling
+      };
 
       this.currentCell = startCell;
       this.moveOffset  = { x: 0, y: 0 };

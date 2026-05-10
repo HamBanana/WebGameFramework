@@ -18,7 +18,14 @@
       "Bash(node framework/build.js)",
       "Bash(node --check framework/systems/ModelSystem.js)",
       "Bash(xxd /c/Users/Ham/Documents/Claude/Projects/Games/GameFramework/framework/GameFramework.js)",
-      "WebFetch(domain:localhost)"
+      "WebFetch(domain:localhost)",
+      "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\\\\games\\\\Acca\\\\\" -Recurse -File | Select-Object FullName | Sort-Object FullName)",
+      "mcp__Claude_in_Chrome__tabs_create_mcp",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__get_page_text",
+      "Bash(node test_acca.js)",
+      "Bash(node serve.js 3000)"
     ]
   }
 }

@@ -76,9 +76,24 @@
     update() {
       if (!this.visible || this.options.length === 0) return;
 
+      const cur = this.options[this.index];
+      const onStepper = !!(cur && cur.stepper);
+
       let moved = false;
-      if (this._pressed('up')   || this._pressed('left'))  { this.index = (this.index - 1 + this.options.length) % this.options.length; moved = true; }
-      if (this._pressed('down') || this._pressed('right')) { this.index = (this.index + 1) % this.options.length; moved = true; }
+      // Up/down always navigates between options.
+      if (this._pressed('up'))   { this.index = (this.index - 1 + this.options.length) % this.options.length; moved = true; }
+      if (this._pressed('down')) { this.index = (this.index + 1) % this.options.length; moved = true; }
+
+      // Left/right: adjust the stepper value when on a stepper option,
+      // otherwise navigate (matches the previous behavior for vertical menus).
+      if (onStepper) {
+        if (this._pressed('left'))  this._stepperDelta(cur, -1);
+        if (this._pressed('right')) this._stepperDelta(cur, +1);
+      } else {
+        if (this._pressed('left'))  { this.index = (this.index - 1 + this.options.length) % this.options.length; moved = true; }
+        if (this._pressed('right')) { this.index = (this.index + 1) % this.options.length; moved = true; }
+      }
+
       if (moved) {
         this._adjustScroll();
         if (this.onIndexChange) {
@@ -97,9 +112,28 @@
       if (this._pressed('confirm')) {
         const opt = this.options[this.index];
         if (opt && opt._disabled) return;
+        // Stepper rows act on confirm using the current value rather than
+        // hiding the menu — this lets the player keep adjusting and apply
+        // multiple times (e.g. Buy several stacks before Done).
+        if (opt && opt.stepper) {
+          if (opt.action) opt.action(opt.stepper.value);
+          return;
+        }
         this.hide();
         if (opt && opt.action) opt.action();
       }
+    }
+
+    /** Adjust a stepper option's value, clamp to [min,max], rebuild label, fire onChange. */
+    _stepperDelta(opt, dir) {
+      const s = opt.stepper;
+      const cur  = (typeof s.value === 'number') ? s.value : (s.min || 0);
+      const step = s.step || 1;
+      const next = Math.max(s.min, Math.min(s.max, cur + dir * step));
+      if (next === cur) return;
+      s.value = next;
+      if (typeof s.format === 'function') opt.label = s.format(next);
+      if (typeof s.onChange === 'function') s.onChange(next);
     }
 
     _pressed(action) {

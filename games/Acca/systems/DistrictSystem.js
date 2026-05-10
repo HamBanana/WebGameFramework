@@ -78,9 +78,12 @@
     list() { return Array.from(this.districts.values()); }
     get(id) { return this.districts.get(id); }
 
-    /** Mayor = player with strict majority of buildable cells in the district.
-     *  Threshold = floor(buildable/2)+1, so the mayor seat is contested but
-     *  reachable in normal 4-player play (vs the v1 "owns all cells" rule). */
+    /** Mayor = player with the plurality of structures in the district, AND
+     *  owns at least mayorMinStructures (default 2). The strict-majority rule
+     *  was tested over 20 simulated games on the 42-district Denmark map and
+     *  fired only 8 times total — structures spread too thin for majority on a
+     *  fragmented map. Plurality + min-2 fires reliably while still requiring
+     *  meaningful presence in the district. Ties fall through to no mayor. */
     recomputeMayor(districtId) {
       const d = this.districts.get(districtId);
       if (!d) return;
@@ -99,12 +102,14 @@
         if (!s || s.ownerIndex < 0) return;
         tally.set(s.ownerIndex, (tally.get(s.ownerIndex) || 0) + 1);
       });
-      let bestIdx = -1, bestCount = 0;
+      let bestIdx = -1, bestCount = 0, tied = false;
       tally.forEach((count, idx) => {
-        if (count > bestCount) { bestIdx = idx; bestCount = count; }
+        if (count > bestCount) { bestIdx = idx; bestCount = count; tied = false; }
+        else if (count === bestCount) { tied = true; }
       });
-      const threshold = Math.floor(buildable.length / 2) + 1;
-      const newMayor = (bestCount >= threshold) ? bestIdx : -1;
+      const minStruct = (this.cfg && this.cfg.district && this.cfg.district.mayorMinStructures != null)
+        ? this.cfg.district.mayorMinStructures : 2;
+      const newMayor = (!tied && bestCount >= minStruct) ? bestIdx : -1;
       if (newMayor !== d.mayorIndex) {
         const old = d.mayorIndex;
         d.mayorIndex = newMayor;

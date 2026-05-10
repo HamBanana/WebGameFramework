@@ -118,10 +118,17 @@
       // Audio cues — keyed off the canonical event names (property:built was
       // renamed from property:bought in this rebalance).
       engine.events.on('property:built', () => { if (this.sfx) this.sfx.build(); });
+      this._turnPriceChanges = {};   // resource → { oldPrice, newPrice } for current turn
       engine.events.on('market:priceChanged', ({ resource, oldPrice, newPrice }) => {
         const ratio = (newPrice - oldPrice) / Math.max(1, oldPrice);
         if (Math.abs(ratio) >= 0.25) {
-          this.log(`Market: ${resource} ${oldPrice}→${newPrice}.`);
+          this.log(`Market: ${resource} $${oldPrice}→$${newPrice}.`);
+        }
+        // Track cumulative change for this turn (keep earliest oldPrice).
+        if (!this._turnPriceChanges[resource]) {
+          this._turnPriceChanges[resource] = { oldPrice, newPrice };
+        } else {
+          this._turnPriceChanges[resource].newPrice = newPrice;
         }
       });
       engine.events.on('business:sabotaged', ({ structure, attacker }) =>
@@ -139,6 +146,8 @@
         notifications    : document.getElementById('notifications'),
         playerList       : document.getElementById('playerList'),
         districtList     : document.getElementById('districtList'),
+        priceReport      : document.getElementById('price-report'),
+        priceReportTable : document.getElementById('price-report-table'),
       };
 
       engine.onUpdate((dt) => this._update(dt));
@@ -284,9 +293,62 @@
         : 1.7;
       this._zoomOutTimer      = animHoldSec;
       this._betweenTurnsTimer = animHoldSec + this.cfg.camera.betweenTurnsHold;
+      this._showPriceReport();
+    }
+
+    _showPriceReport() {
+      const dom = this.dom;
+      if (!dom.priceReport || !dom.priceReportTable || !this.marketSys) return;
+      const resources = (this.cfg.market && this.cfg.market.resources) || [];
+      const changes   = this._turnPriceChanges || {};
+
+      dom.priceReportTable.innerHTML = '';
+      resources.forEach(r => {
+        const price     = this.marketSys.priceOf(r);
+        const changed   = changes[r];
+        const oldPrice  = changed ? changed.oldPrice : price;
+        const delta     = price - oldPrice;
+        const pct       = oldPrice > 0 ? Math.round((delta / oldPrice) * 100) : 0;
+
+        const row = document.createElement('div');
+        row.className = 'pr-row' + (changed ? ' pr-changed' : '');
+
+        const name  = document.createElement('span');
+        name.className = 'pr-name';
+        name.textContent = r;
+
+        const priceEl = document.createElement('span');
+        priceEl.className = 'pr-price';
+        priceEl.textContent = `$${price}`;
+
+        const deltaEl = document.createElement('span');
+        if (!changed || delta === 0) {
+          deltaEl.className = 'pr-delta flat';
+          deltaEl.textContent = '—';
+        } else if (delta > 0) {
+          deltaEl.className = 'pr-delta up';
+          deltaEl.textContent = `▲ +${pct}%`;
+        } else {
+          deltaEl.className = 'pr-delta down';
+          deltaEl.textContent = `▼ ${pct}%`;
+        }
+
+        row.appendChild(name);
+        row.appendChild(priceEl);
+        row.appendChild(deltaEl);
+        dom.priceReportTable.appendChild(row);
+      });
+
+      dom.priceReport.classList.add('visible');
+    }
+
+    _hidePriceReport() {
+      if (this.dom.priceReport) this.dom.priceReport.classList.remove('visible');
+      this._turnPriceChanges = {};
     }
 
     _advanceToNextPlayer() {
+      this._hidePriceReport();
       const prevIdx = this.currentPlayerIndex;
       for (let i = 1; i <= this.players.length; i++) {
         const idx = (this.currentPlayerIndex + i) % this.players.length;

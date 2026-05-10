@@ -42,6 +42,9 @@
       }
 
       // District tinting — semi-transparent colour wash behind each district.
+      // The focused district (set by HUD hover/click) gets a stronger fill,
+      // a glowing outer halo, and an animated dashed outline for clarity.
+      const focusId = game._focusDistrictId || null;
       if (game.districtSys) {
         game.districtSys.list().forEach(d => {
           if (!d.cells || d.cells.length === 0) return;
@@ -53,12 +56,31 @@
             if (px.y < minY) minY = px.y;
             if (px.y > maxY) maxY = px.y;
           });
+          const x = minX - size / 2 - 4;
+          const y = minY - size / 2 - 4;
+          const w = (maxX - minX) + size + 8;
+          const h = (maxY - minY) + size + 8;
+
           ctx.save();
           ctx.fillStyle = d.color;
-          ctx.globalAlpha = 0.10;
-          ctx.fillRect(minX - size / 2 - 4, minY - size / 2 - 4,
-                       (maxX - minX) + size + 8, (maxY - minY) + size + 8);
+          ctx.globalAlpha = (d.id === focusId) ? 0.30 : 0.10;
+          ctx.fillRect(x, y, w, h);
           ctx.restore();
+
+          if (d.id === focusId) {
+            // Strong dashed outline animated by performance.now() so the focus
+            // district reads instantly even on large maps.
+            ctx.save();
+            const pulse = 0.7 + 0.3 * Math.abs(Math.sin(performance.now() / 320));
+            ctx.shadowColor = d.color;
+            ctx.shadowBlur  = 14 * pulse;
+            ctx.strokeStyle = d.color;
+            ctx.lineWidth   = 3;
+            ctx.setLineDash([10, 6]);
+            ctx.lineDashOffset = -performance.now() / 80;
+            ctx.strokeRect(x, y, w, h);
+            ctx.restore();
+          }
         });
       }
 
@@ -116,9 +138,12 @@
         bank: 'Bank +$200',
         chance: 'Chance',
         market: 'Market',
-        power_plant: 'Power Plant',
-        well: 'Well',
-        mine: 'Mine',
+        power_plant: 'Power Plant (+elec)',
+        well: 'Well (+water)',
+        mine: 'Mine (+coal/steel)',
+        forest: 'Forest (+wood)',
+        farm: 'Farm (+food)',
+        oil_rig: 'Oil Rig (+oil)',
         empty: '',
       };
       if (cell.type === 'buildable') {

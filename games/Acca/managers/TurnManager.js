@@ -44,11 +44,21 @@
           break;
 
         case A.TURN_STAGE.ROLL: {
-          // Honor any chance-event die override on this player.
+          // Roll-overrides stack: chance-event override OR item-driven override.
+          // Item override wins when both are present (items are activated by
+          // the player intentionally; chance is involuntary).
           let override = null;
-          if (this.game.chanceSys) {
+          const flags = this.player.itemFlags || {};
+          if (flags.rollOverride) {
+            override = flags.rollOverride;
+            flags.rollOverride = null;
+          } else if (this.game.chanceSys) {
             override = this.game.chanceSys.consumeDieOverride(this.player.index);
           }
+          // Extra-die items add additional d6 rolls on top of the animated one.
+          const extraDice = flags.extraDice || 0;
+          if (extraDice > 0) flags.extraDice = 0;
+
           if (this.game.sfx) this.game.sfx.roll();
           this.die.roll(this.game.cfg.turn.rollDuration, (value) => {
             if (override) {
@@ -57,6 +67,16 @@
               this.game.log(`Lucky die! Rolled a ${value} (range ${override.min}-${override.max}).`);
             } else {
               this.game.log(`Rolled a ${value}.`);
+            }
+            // Add extra-die yields. Each extra die adds another 1–6.
+            if (extraDice > 0) {
+              const extras = [];
+              for (let i = 0; i < extraDice; i++) {
+                extras.push(1 + Math.floor(Math.random() * 6));
+              }
+              const sum = extras.reduce((s, v) => s + v, 0);
+              value += sum;
+              this.game.log(`Extra dice rolled ${extras.join('+')} = +${sum} (total ${value}).`);
             }
             this.game.lastRoll = value;
             if (this.game.engine && this.game.engine.events) {
@@ -95,9 +115,16 @@
     // ── Start-of-turn menu (horizontal bottom bar) ───────────────────────
     _showStartMenu() {
       const p    = this.player;
+      const totalItems = Object.values(p.items || {}).reduce((s, n) => s + (n || 0), 0);
       const opts = [
         { label: 'Roll', action: () => this.enter(A.TURN_STAGE.ROLL) },
       ];
+      if (totalItems > 0) {
+        opts.push({
+          label: `Use Item (${totalItems})`,
+          action: () => this._showItemUseMenu(),
+        });
+      }
       // Promote the Mayor menu to the top level when this player holds any
       // mayoral district — saves two menu transitions for the most-common
       // mid-game action (Festival / Investment grant). When the player only
@@ -118,8 +145,70 @@
       }
       opts.push({ label: 'Manage properties',  action: () => this._showManageMenu() });
       opts.push({ label: 'Sell assets',        action: () => this._showSellAssetsMenu() });
+      // Phase 5.2 — Build-from-hand. Adjacent empty buildable cells become
+      // available targets at a flat courier surcharge over the structure cost.
+      // Gives cash-rich passive players a way to spend without waiting for the
+      // dice to put them on a plot.
+      const adjEmpty = this._adjacentEmptyBuildables(p);
+      if (adjEmpty.length > 0) {
+        opts.push({
+          label: `Build from hand (+$${this._courierFee()} fee)`,
+          action: () => this._showBuildFromHandMenu(adjEmpty),
+        });
+      }
       opts.push({ label: 'Other',              action: () => this._showOtherMenu() });
       this.menu.show(`${p.name}  •  $${p.money}`, opts, null, { layout: 'horizontal' });
+    }
+
+    _courierFee() {
+      const cfg = this.game.cfg.structures || {};
+      return (cfg.buildFromHandFee != null) ? cfg.buildFromHandFee : 50;
+    }
+
+    _adjacentEmptyBuildables(player) {
+      const seen = new Set();
+      const out = [];
+      const cell = player.currentCell;
+      if (!cell) return out;
+      [cell.up, cell.down, cell.left, cell.right].forEach(n => {
+        if (!n || seen.has(n.id)) return;
+        seen.add(n.id);
+        if (n.type === 'buildable' && !n.structure) out.push(n);
+      });
+      return out;
+    }
+
+    _showBuildFromHandMenu(cells) {
+      const p    = this.player;
+      const game = this.game;
+      const cfg  = game.cfg.structures;
+      const fee  = this._courierFee();
+      const sorted = cfg.catalog.slice().sort((a, b) => a.cost - b.cost);
+      const opts  = [];
+      cells.forEach(target => {
+        const districtTag = target.district || '—';
+        sorted.forEach(entry => {
+          const totalCash = entry.cost + fee;
+          const cashOk    = p.money >= totalCash;
+          const missing   = game.structures.missingBuildResources(p, entry);
+          const can       = cashOk && !missing;
+          const reason = !cashOk ? `  — need $${totalCash - p.money}` :
+                         missing  ? `  — need ${missing.missing} ${missing.res}` : '';
+          opts.push({
+            label: `${entry.label} in ${districtTag} cell ${target.id} ($${entry.cost} + $${fee})${reason}`,
+            _disabled: !can,
+            action: () => {
+              p.addMoney(-(entry.cost + fee), `Built ${entry.label} from hand in ${districtTag}`);
+              game.structures.build(target, entry.type, p.index);
+              if (game.districtSys) game.districtSys.recomputeMayor(districtTag);
+              this._showStartMenu();
+            },
+          });
+        });
+      });
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      this.menu.show('Build from hand', opts,
+        `Cash $${p.money}  ·  Adjacent empty plots: ${cells.length}`);
     }
 
     // ── Other submenu ─────────────────────────────────────────────────────
@@ -660,14 +749,47 @@
       const p    = this.player;
       const M    = game.marketSys;
       if (!M) { this._showStartMenu(); return; }
-      const opts = game.cfg.market.resources.map(r => {
+      const opts = [];
+      // Trade-with-player shortcut (Phase 4.1) — surface the trade flow on the
+      // Market cell where players are already thinking about exchange. Buried
+      // under Other → Trade in the original UI; almost no players found it.
+      const liveOpponents = game.players.filter(o => o !== p && !o.isBankrupt);
+      if (game.cfg.mode !== 'cooperative' && game.tradeSys && liveOpponents.length > 0) {
+        opts.push({
+          label: `Trade with another player (${liveOpponents.length} available)`,
+          action: () => this._showTradeTargetMenu(),
+        });
+        opts.push({ label: '── Resources ──', _disabled: true, action: () => {} });
+      }
+      // Resources section.
+      game.cfg.market.resources.forEach(r => {
         const stock = (M.stock && M.stock[r] != null) ? M.stock[r] : '?';
-        return {
+        opts.push({
           label: `${r}  $${M.priceOf(r)} ea  (pool: ${stock} · you: ${p.resources[r] || 0})`,
           action: () => this._showMarketResource(r),
-        };
+        });
       });
-      opts.push({ label: 'Done', action: () => this.enter(A.TURN_STAGE.END_TURN) });
+      // Items section — only if item catalog configured.
+      const itemsCfg = game.cfg.items && game.cfg.items.catalog;
+      if (itemsCfg && itemsCfg.length > 0) {
+        opts.push({ label: '── Items ──', _disabled: true, action: () => {} });
+        itemsCfg.forEach(it => {
+          const owned = p.items[it.id] || 0;
+          opts.push({
+            label: `${it.label}  $${it.price}  (you: ${owned})`,
+            action: () => this._showMarketItem(it),
+          });
+        });
+      }
+      opts.push({ label: 'Done', action: () => {
+        // Returning from a landed-on Market cell ends the turn; returning from
+        // a self-initiated browse goes back to the start menu.
+        if (this.stage === A.TURN_STAGE.LAND_PROMPT) {
+          this.enter(A.TURN_STAGE.END_TURN);
+        } else {
+          this._showStartMenu();
+        }
+      } });
       this.menu.show('Market', opts, `Cash $${p.money}`);
     }
 
@@ -675,32 +797,190 @@
       const game = this.game;
       const p    = this.player;
       const M    = game.marketSys;
+      const refresh = () => this._showMarketResource(resource);
+
+      // Buy stepper — clamped to what the player can afford and what's in pool.
+      const buyMax = () => {
+        const price = M.priceOf(resource);
+        const byCash = price > 0 ? Math.floor(p.money / price) : 0;
+        const byPool = (M.stock && M.stock[resource]) || 0;
+        return Math.max(0, Math.min(byCash, byPool));
+      };
+      const sellMax = () => Math.max(0, p.resources[resource] || 0);
+
+      const buyState  = { value: Math.min(1, buyMax())  };
+      const sellState = { value: Math.min(1, sellMax()) };
+
+      const buyLabel  = (n) => `◀ Buy  ${String(n).padStart(3, ' ')}  ▶   ($${M.priceOf(resource) * n})`;
+      const sellLabel = (n) => `◀ Sell ${String(n).padStart(3, ' ')}  ▶   ($${M.priceOf(resource) * n})`;
+
       const opts = [
-        { label: `Buy 1`, action: () => {
-          const r = M.buy(p, resource, 1);
-          game.log(r.ok ? `+1 ${resource} for $${r.totalCost}.` : `Buy refused: ${r.reason}.`);
-          this._showMarketResource(resource);
-        } },
-        { label: `Buy 5`, action: () => {
-          const r = M.buy(p, resource, 5);
-          game.log(r.ok ? `+5 ${resource} for $${r.totalCost}.` : `Buy refused: ${r.reason}.`);
-          this._showMarketResource(resource);
-        } },
-        { label: `Sell 1`, action: () => {
-          const r = M.sell(p, resource, 1);
-          game.log(r.ok ? `-1 ${resource} for $${r.totalProceeds}.` : `Sell refused: ${r.reason}.`);
-          this._showMarketResource(resource);
-        } },
-        { label: `Sell 5`, action: () => {
-          const r = M.sell(p, resource, 5);
-          game.log(r.ok ? `-5 ${resource} for $${r.totalProceeds}.` : `Sell refused: ${r.reason}.`);
-          this._showMarketResource(resource);
-        } },
+        {
+          label: buyLabel(buyState.value),
+          stepper: { value: buyState.value, min: 0, max: buyMax(), step: 1, format: buyLabel,
+                     onChange: v => { buyState.value = v; } },
+          action: (qty) => {
+            if (qty <= 0) { refresh(); return; }
+            const r = M.buy(p, resource, qty);
+            game.log(r.ok ? `+${qty} ${resource} for $${r.totalCost}.` : `Buy refused: ${r.reason}.`);
+            refresh();
+          },
+        },
+        {
+          label: sellLabel(sellState.value),
+          stepper: { value: sellState.value, min: 0, max: sellMax(), step: 1, format: sellLabel,
+                     onChange: v => { sellState.value = v; } },
+          action: (qty) => {
+            if (qty <= 0) { refresh(); return; }
+            const r = M.sell(p, resource, qty);
+            game.log(r.ok ? `-${qty} ${resource} for $${r.totalProceeds}.` : `Sell refused: ${r.reason}.`);
+            refresh();
+          },
+        },
         { label: 'Back', action: () => this._showMarketMenu() },
       ];
       const stock = (M.stock && M.stock[resource] != null) ? M.stock[resource] : '?';
-      this.menu.show(`${resource}`, opts,
-        `Spot $${M.priceOf(resource)} · Pool ${stock} · Have ${p.resources[resource] || 0}`);
+      this.menu.show(`${resource}  —  ◀ ▶ to set quantity, Enter to confirm`, opts,
+        `Spot $${M.priceOf(resource)} · Pool ${stock} · Have ${p.resources[resource] || 0} · Cash $${p.money}`);
+    }
+
+    _showMarketItem(itemDef) {
+      const game = this.game;
+      const p    = this.player;
+      const refresh = () => this._showMarketItem(itemDef);
+      const maxStack = (game.cfg.items && game.cfg.items.maxStack) || 5;
+      const owned    = p.items[itemDef.id] || 0;
+      const buyMax   = () => Math.max(0, Math.min(maxStack - owned, Math.floor(p.money / itemDef.price)));
+      const sellMax  = () => owned;
+
+      const buyState  = { value: Math.min(1, buyMax())  };
+      const sellState = { value: Math.min(1, sellMax()) };
+      // Items resell at half the catalog price (no market price spread for items).
+      const sellPrice = Math.max(1, Math.round(itemDef.price * 0.5));
+
+      const buyLabel  = (n) => `◀ Buy  ${String(n).padStart(2, ' ')}  ▶   ($${itemDef.price * n})`;
+      const sellLabel = (n) => `◀ Sell ${String(n).padStart(2, ' ')}  ▶   ($${sellPrice * n})`;
+
+      const opts = [
+        {
+          label: buyLabel(buyState.value),
+          stepper: { value: buyState.value, min: 0, max: buyMax(), step: 1, format: buyLabel,
+                     onChange: v => { buyState.value = v; } },
+          action: (qty) => {
+            if (qty <= 0) { refresh(); return; }
+            const cost = itemDef.price * qty;
+            if (p.money < cost)               { game.log(`Cannot afford ${qty} ${itemDef.label}.`); refresh(); return; }
+            if (owned + qty > maxStack)       { game.log(`Stack limit ${maxStack} reached.`);       refresh(); return; }
+            p.addMoney(-cost, `Bought ${qty} × ${itemDef.label}`);
+            p.items[itemDef.id] = (p.items[itemDef.id] || 0) + qty;
+            game.log(`+${qty} ${itemDef.label}.`);
+            refresh();
+          },
+        },
+        {
+          label: sellLabel(sellState.value),
+          stepper: { value: sellState.value, min: 0, max: sellMax(), step: 1, format: sellLabel,
+                     onChange: v => { sellState.value = v; } },
+          action: (qty) => {
+            if (qty <= 0)        { refresh(); return; }
+            if (qty > owned)     { refresh(); return; }
+            p.addMoney(sellPrice * qty, `Sold ${qty} × ${itemDef.label}`);
+            p.items[itemDef.id] = owned - qty;
+            game.log(`-${qty} ${itemDef.label}.`);
+            refresh();
+          },
+        },
+        { label: 'Back', action: () => this._showMarketMenu() },
+      ];
+      this.menu.show(`${itemDef.label}  —  ◀ ▶ to set qty, Enter to confirm`, opts,
+        `${itemDef.description}  ·  Have ${owned}/${maxStack}  ·  Cash $${p.money}`);
+    }
+
+    /** Submenu shown from the start-of-turn bar when the player owns at least
+     *  one item — lets them activate an item before rolling. */
+    _showItemUseMenu() {
+      const game = this.game;
+      const p    = this.player;
+      const cat  = (game.cfg.items && game.cfg.items.catalog) || [];
+      const opts = [];
+      cat.forEach(it => {
+        const owned = p.items[it.id] || 0;
+        if (owned <= 0) return;
+        opts.push({
+          label: `Use ${it.label}  (you have ${owned})`,
+          action: () => this._activateItem(it),
+        });
+      });
+      if (opts.length === 0) {
+        opts.push({ label: 'No items to use', _disabled: true, action: () => {} });
+      }
+      opts.push({ label: 'Back', action: () => this._showStartMenu() });
+      this.menu.show('Use Item', opts, 'Items take effect on this turn.');
+    }
+
+    /** Apply an item's pre-roll effect, decrement inventory, return to start menu. */
+    _activateItem(itemDef) {
+      const game = this.game;
+      const p    = this.player;
+      if ((p.items[itemDef.id] || 0) <= 0) { this._showStartMenu(); return; }
+      p.items[itemDef.id] -= 1;
+
+      switch (itemDef.id) {
+        case 'extra_die':
+          p.itemFlags.extraDice = (p.itemFlags.extraDice || 0) + 1;
+          game.log(`${p.name} activates Extra Die — next roll uses ${1 + p.itemFlags.extraDice} dice.`);
+          break;
+        case 'lucky_charm':
+          p.itemFlags.rollOverride = { min: 5, max: 6 };
+          game.log(`${p.name} activates Lucky Charm — next roll will be 5 or 6.`);
+          break;
+        case 'loaded_die':
+          p.itemFlags.rollOverride = { min: 4, max: 4 };
+          game.log(`${p.name} activates Loaded Die — next roll will be 4.`);
+          break;
+        case 'shield':
+          p.itemFlags.sabotageShield = (p.itemFlags.sabotageShield || 0) + 1;
+          game.log(`${p.name} activates Sabotage Shield.`);
+          break;
+        case 'warp_token': {
+          // Skip the dice and just give the player a free roll value of their
+          // choosing (1–12) via a stepper. Implemented in-line so the warp
+          // doesn't need its own state machine entry.
+          const refresh = () => this._showWarpPicker();
+          this._warpPicker = refresh;
+          refresh();
+          return; // don't go back to start menu yet
+        }
+      }
+      this._showStartMenu();
+    }
+
+    /** Stepper UI for choosing how far to warp (1–12 steps). Confirms by
+     *  setting lastRoll and entering the MOVE stage directly. */
+    _showWarpPicker() {
+      const game = this.game;
+      const p    = this.player;
+      const state = { value: 6 };
+      const fmt = (n) => `◀ Warp  ${String(n).padStart(2, ' ')}  steps  ▶`;
+      const opts = [
+        {
+          label: fmt(state.value),
+          stepper: { value: state.value, min: 1, max: 12, step: 1, format: fmt,
+                     onChange: v => { state.value = v; } },
+          action: (qty) => {
+            game.lastRoll = qty;
+            game.log(`${p.name} warps ${qty} step(s).`);
+            this.enter(A.TURN_STAGE.MOVE);
+          },
+        },
+        { label: 'Cancel — return item', action: () => {
+          // Refund the consumed Warp Token if the player backs out.
+          p.items.warp_token = (p.items.warp_token || 0) + 1;
+          this._showStartMenu();
+        } },
+      ];
+      this.menu.show('Warp Token  —  ◀ ▶ to choose distance, Enter to confirm', opts,
+        'Skip the dice and move 1–12 steps in the direction(s) you choose.');
     }
 
     // ── Landing dispatch ──────────────────────────────────────────────────
@@ -751,6 +1031,15 @@
           this._grantResource(cell, resource, 3, `${sub.charAt(0).toUpperCase()}${sub.slice(1)} Mine`);
           break;
         }
+        case 'forest':
+          this._grantResource(cell, 'wood', 3, 'Forest');
+          break;
+        case 'farm':
+          this._grantResource(cell, 'food', 3, 'Farm');
+          break;
+        case 'oil_rig':
+          this._grantResource(cell, 'oil', 3, 'Oil Rig');
+          break;
         case 'market':
           // Visiting a market cell shortcuts the player into the market UI.
           this.game.log(`${this.player.name} stops at the Market.`);
@@ -1004,6 +1293,11 @@
     _handleChance() {
       const game = this.game;
       const p = this.player;
+
+      // Snapshot state before applying so we can show concrete dollar/qty deltas.
+      const moneyBefore = p.money;
+      const resBefore   = Object.assign({}, p.resources);
+
       let event;
       if (game.chanceSys) {
         event = game.chanceSys.draw(p, game.players);
@@ -1011,11 +1305,71 @@
         const pool = (game.cfg.chance && game.cfg.chance.pool) || [];
         event = pool[Math.floor(Math.random() * pool.length)] || { label: 'Nothing', message: 'A quiet day.' };
       }
+
+      // Build a concrete "what just happened" summary for the card body.
+      const details = this._chanceDetails(event, p, moneyBefore, resBefore);
+      const subtitle = details || event.message || '';
+
       game.log(`Chance — ${event.label}: ${event.message}`);
       this.stage = A.TURN_STAGE.LAND_PROMPT;
       this.menu.show(event.label, [
         { label: 'OK', action: () => this.enter(A.TURN_STAGE.END_TURN) },
-      ], event.category ? `[${event.category}]` : '');
+      ], subtitle);
+    }
+
+    /** Build a human-readable effect line from the card data + post-apply state. */
+    _chanceDetails(event, player, moneyBefore, resBefore) {
+      const game = this.game;
+      const scopeLabel = {
+        self   : 'You',
+        all    : 'All players',
+        mayor  : 'You (as mayor)',
+        leader : 'The leader',
+        lowest : 'The player with least cash',
+      }[event.scope] || 'You';
+
+      switch (event.effect) {
+        case 'money': {
+          const sign = event.value >= 0 ? '+' : '';
+          const target = event.scope === 'self' ? '' : ` (${scopeLabel})`;
+          return `${event.message}${target}  [${sign}$${event.value}]`;
+        }
+        case 'money_pct': {
+          const delta = player.money - moneyBefore;
+          const sign  = delta >= 0 ? '+' : '';
+          const pct   = Math.round(event.value * 100);
+          return `${event.message}  [${pct}% = ${sign}$${delta}]`;
+        }
+        case 'resource': {
+          const v = event.value || {};
+          const qty = v.qty || 0;
+          const res = v.resource === 'random' ? 'a random resource' : v.resource;
+          const sign = qty >= 0 ? '+' : '';
+          const target = event.scope === 'all' ? ' (all players)' : '';
+          return `${event.message}  [${sign}${qty} ${res}${target}]`;
+        }
+        case 'happiness': {
+          const sign = event.value >= 0 ? '+' : '';
+          const scope = event.scope === 'all' ? 'every district' : 'your districts';
+          return `${event.message}  [${sign}${event.value} happiness in ${scope}]`;
+        }
+        case 'migration_in': {
+          return `${event.message}  [+${event.value} population]`;
+        }
+        case 'sabotage': {
+          const dur = event.duration || 3;
+          const victim = event.scope === 'leader' ? 'the leader' : 'another player';
+          return `${event.message}  [sabotages ${victim}'s property for ${dur} turns]`;
+        }
+        case 'modify_die': {
+          const v = event.value || { min: 1, max: 6 };
+          return `${event.message}  [next roll: ${v.min}–${v.max}]`;
+        }
+        case 'free_property':
+          return `${event.message}  [you receive an unowned plot]`;
+        default:
+          return event.message || '';
+      }
     }
   }
 

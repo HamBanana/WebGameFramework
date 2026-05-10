@@ -33,6 +33,7 @@
 
       this._runResourceUpkeep(player);
       game.structures.endOfTurnFor(player);
+      this._runEndgameEscalation(player);
       this._resolveDebt(player);
       this._checkBankruptcy(player);
 
@@ -356,6 +357,25 @@
       if (summary.length > 0) {
         game.log(`Upkeep for ${player.name}: ${summary.join(', ')}.`);
       }
+
+      // Phase 1.1 — flat cash upkeep per structure. Bleeds players who over-build
+      // without income, giving every build decision real weight.
+      const flatPer = upkeep.flatCashPerStructure || 0;
+      if (flatPer > 0 && player.ownedStructures.length > 0) {
+        const cost = player.ownedStructures.length * flatPer;
+        player.addMoney(-cost,
+          `Structure maintenance (${player.ownedStructures.length} × $${flatPer})`);
+      }
+
+      // Phase 1.2 — no-build penalty. Players who haven't built anything past
+      // a grace period bleed cash so passive cash-hoarding becomes unviable.
+      const noBuildPen   = upkeep.noBuildPenalty || 0;
+      const noBuildAfter = upkeep.noBuildPenaltyAfterTurn || 0;
+      if (noBuildPen > 0
+          && player.ownedStructures.length === 0
+          && (game.turnCounter || 0) >= noBuildAfter) {
+        player.addMoney(-noBuildPen, `Idle citizen tax (no structures owned)`);
+      }
     }
 
     // ── Debt resolution ──────────────────────────────────────────────────
@@ -428,6 +448,31 @@
         // Recovery (rare but possible if sabotage decay restored value).
         player.isBankrupt = false;
         game.log(`${player.name} is no longer bankrupt.`);
+      }
+    }
+
+    /** Phase 5.1 — endgame escalation. After a configurable turn threshold,
+     *  apply a cumulative inflation pressure on structure values so net worth
+     *  rises faster and a winner is forced. Prevents the 224-turn slog
+     *  observed in the playtest baseline (game 9). Compounding +0.5%/turn
+     *  past the threshold means a 100-turn overrun roughly +60% on values. */
+    _runEndgameEscalation(player) {
+      const game = this.game;
+      const cfg  = game.cfg.win || {};
+      const threshold = cfg.escalationAfterTurn || 150;
+      const ratePerTurn = cfg.escalationValueRatePerTurn || 0.005;
+      const currentTurn = game.turnCounter || 0;
+      if (currentTurn < threshold) return;
+      // Apply once per (player) end-of-turn — each structure compounds slightly.
+      player.ownedStructures.forEach(s => {
+        if (typeof s.currentValue === 'number') {
+          s.currentValue = Math.round(s.currentValue * (1 + ratePerTurn));
+        }
+      });
+      // One-shot announcement when the threshold is first crossed.
+      if (currentTurn === threshold && player === game.players[0]) {
+        game.log(`Boom! Land values are surging — endgame escalation begins (turn ${threshold}).`,
+          { noCoalesce: true });
       }
     }
 

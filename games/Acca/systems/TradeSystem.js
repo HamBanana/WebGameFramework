@@ -226,6 +226,11 @@
         const hasPolice = owner.ownedStructures.some(o =>
           o.type === 'police_station' && o.cell && o.cell.district === structure.cell.district);
         if (hasPolice) return { ok: false, reason: 'protected by police station' };
+        // Sabotage Shield item — consumes one charge to fully block the attempt.
+        if (owner.itemFlags && owner.itemFlags.sabotageShield > 0) {
+          owner.itemFlags.sabotageShield -= 1;
+          return { ok: false, reason: 'blocked by Sabotage Shield' };
+        }
       }
       if (!check.ok) return check;
       attacker.addMoney(-check.cost, `Sabotage of ${structure.type}`);

@@ -7,7 +7,10 @@
 //   cell_mine        — generic mine cell
 //   cell_mine_coal   — coal mine cell
 //   cell_mine_iron   — iron mine cell
-//   cell_mine_oil    — oil rig cell
+//   cell_mine_oil    — oil rig cell (mine sub-type)
+//   cell_forest      — forest resource cell (yields wood)
+//   cell_farm        — farm resource cell (yields food)
+//   cell_oil_rig     — oil rig resource cell (yields oil)
 //
 // Same 64×64 tile base as cells.js / structures.js; origin centered.
 
@@ -20,12 +23,15 @@
   const ORIGIN = SIZE / 2;
 
   const EXTRA_THEMES = {
-    cell_power_plant: { base: '#5a4a1f', trim: '#b08c40', accent: '#ffe57a', glyph: 'power' },
-    cell_well       : { base: '#1f3a5a', trim: '#3a6db0', accent: '#9fd6ff', glyph: 'well'  },
-    cell_mine       : { base: '#2a2a2a', trim: '#6a6a6a', accent: '#cfcfcf', glyph: 'mine'  },
-    cell_mine_coal  : { base: '#1a1a1a', trim: '#5a5a5a', accent: '#b8b8b8', glyph: 'mine'  },
-    cell_mine_iron  : { base: '#3a4a5a', trim: '#7a8aa0', accent: '#cfdde9', glyph: 'mine'  },
-    cell_mine_oil   : { base: '#1a0a1f', trim: '#5a4ada', accent: '#b6a8ff', glyph: 'oil'   },
+    cell_power_plant: { base: '#5a4a1f', trim: '#b08c40', accent: '#ffe57a', glyph: 'power'  },
+    cell_well       : { base: '#1f3a5a', trim: '#3a6db0', accent: '#9fd6ff', glyph: 'well'   },
+    cell_mine       : { base: '#2a2a2a', trim: '#6a6a6a', accent: '#cfcfcf', glyph: 'mine'   },
+    cell_mine_coal  : { base: '#1a1a1a', trim: '#5a5a5a', accent: '#b8b8b8', glyph: 'mine'   },
+    cell_mine_iron  : { base: '#3a4a5a', trim: '#7a8aa0', accent: '#cfdde9', glyph: 'mine'   },
+    cell_mine_oil   : { base: '#1a0a1f', trim: '#5a4ada', accent: '#b6a8ff', glyph: 'oil'    },
+    cell_forest     : { base: '#1a3d20', trim: '#3a8a4a', accent: '#7ed87e', glyph: 'forest' },
+    cell_farm       : { base: '#3a5018', trim: '#8ab030', accent: '#d8e870', glyph: 'farm'   },
+    cell_oil_rig    : { base: '#0f0a20', trim: '#4a30a0', accent: '#c0a0ff', glyph: 'oil'    },
   };
 
   // ── Tile base (matches cells.js / structures.js look) ─────────────────────
@@ -151,11 +157,56 @@
     ctx.fill();
   }
 
+  function glyph_forest(ctx, theme) {
+    const cx = ORIGIN, cy = ORIGIN;
+    ctx.fillStyle = theme.accent;
+    // Three overlapping trees: back-left, back-right, front-center.
+    function drawTree(tx, ty, w, h) {
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - h);
+      ctx.lineTo(tx - w, ty);
+      ctx.lineTo(tx + w, ty);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(tx - 2, ty, 4, 5);
+    }
+    ctx.globalAlpha = 0.65;
+    drawTree(cx - 8, cy + 4, 9, 14);
+    drawTree(cx + 8, cy + 4, 9, 14);
+    ctx.globalAlpha = 1;
+    drawTree(cx, cy + 6, 11, 16);
+    ctx.globalAlpha = 1;
+  }
+
+  function glyph_farm(ctx, theme) {
+    const cx = ORIGIN, cy = ORIGIN;
+    ctx.fillStyle = theme.accent;
+    // Wheat stalks — five vertical stems with grain heads.
+    const stalks = [-10, -5, 0, 5, 10];
+    stalks.forEach(ox => {
+      const x = cx + ox;
+      // Stem
+      ctx.fillRect(x - 1, cy - 2, 2, 14);
+      // Grain head (tapered rectangle)
+      ctx.beginPath();
+      ctx.moveTo(x, cy - 14);
+      ctx.lineTo(x - 3, cy - 6);
+      ctx.lineTo(x + 3, cy - 6);
+      ctx.closePath();
+      ctx.fill();
+    });
+    // Ground line
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(cx - 14, cy + 12, 28, 2);
+  }
+
   const GLYPH_FNS = {
-    power: glyph_power,
-    well : glyph_well,
-    mine : glyph_mine,
-    oil  : glyph_oil,
+    power : glyph_power,
+    well  : glyph_well,
+    mine  : glyph_mine,
+    oil   : glyph_oil,
+    forest: glyph_forest,
+    farm  : glyph_farm,
   };
 
   // ── Build & register sprites ────────────────────────────────────────────

@@ -1,16 +1,9 @@
 // GameFramework/framework/build.js
-// Concatenates all framework modules into GameFramework.bundle.js.
-// Sprite loader files are bundled separately into GameFramework.sprites.bundle.js
-// so games only pay the asset-load cost for sprites they actually need.
-//
-// Usage:  node framework/build.js
-
 var fs   = require('fs');
 var path = require('path');
 
 var ROOT = __dirname;
 
-// --- Core bundle: engine + systems + scene templates -----------------------
 var CORE = [
   'utils/MathUtils.js',
   'utils/ProceduralAudio.js',
@@ -31,27 +24,20 @@ var CORE = [
   'systems/DebugOverlay.js',
   'systems/DialogueSystem.js',
   'systems/ModelSystem.js',
+  'systems/Three3DScene.js',
   'systems/GridSystem.js',
   'systems/TurnBasedBattleSystem.js',
   'systems/MenuSystem.js',
-  // Promoted from games (v2.3.0)
   'systems/StateMachine.js',
   'systems/PlayerController.js',
   'systems/ScoreManager.js',
   'systems/WaveSpawner.js',
   'systems/ParallaxSystem.js',
-  // Reusable scene templates
   'scenes/TitleScene.js',
   'scenes/GameOverScene.js',
   'GameFramework.js',
 ];
 
-// --- Optional sprites bundle: loads every built-in sprite sheet eagerly. ---
-// Games that want all sprites can include this AFTER the core bundle:
-//   <script src="../../framework/GameFramework.bundle.js"></script>
-//   <script src="../../framework/GameFramework.sprites.bundle.js"></script>
-// Games that only need a subset can include individual files:
-//   <script src="../../framework/sprites/monsters.js"></script>
 var SPRITES = [
   'sprites/claude.js',
   'sprites/claudia.js',

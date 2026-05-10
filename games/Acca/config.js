@@ -16,7 +16,7 @@
     "rightWall": 768
   },
   "board": {
-    "map": "maps/default.json",
+    "map": "maps/denmark.json",
     "cellSize": 64,
     "originX": 32,
     "originY": 32
@@ -64,7 +64,9 @@
     "type": "NetWorthOrLastStanding",
     "target": 5000,
     "turnCap": 300,
-    "tiebreaker": "TotalValue"
+    "tiebreaker": "TotalValue",
+    "escalationAfterTurn": 110,
+    "escalationValueRatePerTurn": 0.01
   },
   "mode": "competitive",
   "catchUp": {
@@ -156,9 +158,6 @@
         "type": "vault",
         "label": "Vault",
         "cost": 750,
-        "resourceCost": {
-          "steel": 2
-        },
         "description": "5 levels — deposit cash up to capacity, earns interest each turn. Stored money counts toward net worth."
       }
     ],
@@ -171,6 +170,7 @@
       "police_station": "cell_police_station",
       "vault": "cell_vault"
     },
+    "buildFromHandFee": 50,
     "shopBaseCap": 800,
     "shopCapPerStructure": 200,
     "shopVisitRate": 0.2,
@@ -231,15 +231,18 @@
     "upkeep": {
       "houseFood": 1,
       "houseWater": 1,
-      "shopElectricity": 1,
-      "houseElectricity": 1,
+      "shopElectricity": 2,
+      "houseElectricity": 2,
       "factoryOil": 1,
       "factoryCoal": 1,
       "policeElectricity": 1,
       "tollElectricity": 0,
       "teleporterElectricity": 1,
       "vaultElectricity": 0,
-      "shortagePenalty": 4
+      "shortagePenalty": 4,
+      "flatCashPerStructure": 5,
+      "noBuildPenalty": 20,
+      "noBuildPenaltyAfterTurn": 20
     }
   },
   "market": {
@@ -300,7 +303,8 @@
     "grantPopulation": 5,
     "grantCooldown": 5,
     "festivalCooldown": 5,
-    "happinessGrowthMultiplier": 1.5
+    "happinessGrowthMultiplier": 1.5,
+    "mayorMinStructures": 2
   },
   "chance": {
     "repeatGuard": 3,
@@ -315,7 +319,7 @@
         "effect": "money_pct",
         "value": -0.1,
         "scope": "self",
-        "message": "Stock market crash! You lose 10% of your cash."
+        "message": "Panic selling hits the exchange — 10% of your cash evaporates."
       },
       {
         "id": "festival",
@@ -325,7 +329,7 @@
         "effect": "money",
         "value": 150,
         "scope": "self",
-        "message": "A regional festival boosts your earnings by $150."
+        "message": "Merchants flock to the celebration — a windfall for your businesses."
       },
       {
         "id": "bonus_pay",
@@ -335,7 +339,7 @@
         "effect": "money",
         "value": 100,
         "scope": "self",
-        "message": "You receive a $100 bonus payment."
+        "message": "The city rewards your development activity with a cash bonus."
       },
       {
         "id": "tax_audit",
@@ -345,7 +349,7 @@
         "effect": "money",
         "value": -120,
         "scope": "self",
-        "message": "A surprise tax audit costs you $120."
+        "message": "Inspectors flag irregularities in your accounts — back taxes are due."
       },
       {
         "id": "oil_strike",
@@ -358,7 +362,7 @@
           "qty": 3
         },
         "scope": "self",
-        "message": "You strike oil! Gain 3 oil."
+        "message": "Wildcatters strike crude beneath your land — barrels ready to sell."
       },
       {
         "id": "repair_bill",
@@ -368,7 +372,7 @@
         "effect": "money",
         "value": -80,
         "scope": "self",
-        "message": "Repair bills come in. You pay $80."
+        "message": "Unexpected maintenance bills land on your desk — pay up or face decline."
       },
       {
         "id": "supplier_discount",
@@ -378,7 +382,7 @@
         "effect": "money",
         "value": 80,
         "scope": "self",
-        "message": "A supplier offers you a kickback of $80."
+        "message": "A supply chain partner cuts you a discreet deal below market rate."
       },
       {
         "id": "trade_embargo",
@@ -388,7 +392,7 @@
         "effect": "money",
         "value": -200,
         "scope": "all",
-        "message": "A trade embargo costs every player $200."
+        "message": "International sanctions freeze trade — every player takes a financial hit."
       },
       {
         "id": "regional_festival",
@@ -398,7 +402,7 @@
         "effect": "happiness",
         "value": 10,
         "scope": "mayor",
-        "message": "+10 happiness in your mayoral regions."
+        "message": "A street festival lifts spirits across every district you govern."
       },
       {
         "id": "plague",
@@ -409,7 +413,7 @@
         "value": -10,
         "scope": "all",
         "duration": 3,
-        "message": "A plague drops happiness in every region by 10."
+        "message": "Disease spreads unchecked — happiness collapses across all districts."
       },
       {
         "id": "boom_town",
@@ -419,7 +423,7 @@
         "effect": "migration_in",
         "value": 20,
         "scope": "self",
-        "message": "20 residents migrate to your lowest-population region."
+        "message": "Word of your developments draws settlers — new residents arrive in your smallest district."
       },
       {
         "id": "resource_boom",
@@ -432,7 +436,7 @@
           "qty": 5
         },
         "scope": "self",
-        "message": "A windfall delivers 5 of a random resource."
+        "message": "A commodity surplus arrives unexpectedly — your stockpile grows."
       },
       {
         "id": "industrial_surge",
@@ -445,7 +449,7 @@
           "qty": 5
         },
         "scope": "self",
-        "message": "Steel surge: +5 steel."
+        "message": "New blast furnaces come online — regional steel output spikes."
       },
       {
         "id": "coal_seam",
@@ -458,7 +462,7 @@
           "qty": 5
         },
         "scope": "self",
-        "message": "A coal seam is uncovered: +5 coal."
+        "message": "Surveyors expose a rich seam — coal flows directly into your stores."
       },
       {
         "id": "energy_surplus",
@@ -471,7 +475,7 @@
           "qty": 10
         },
         "scope": "self",
-        "message": "A surplus delivers 10 electricity."
+        "message": "The grid is overproducing — excess electricity is diverted to your account."
       },
       {
         "id": "rainy_season",
@@ -484,7 +488,7 @@
           "qty": 5
         },
         "scope": "all",
-        "message": "Rains gift +5 water to every player."
+        "message": "Prolonged rains replenish every player's water reserves — a rising tide."
       },
       {
         "id": "drought",
@@ -497,7 +501,7 @@
           "qty": -5
         },
         "scope": "all",
-        "message": "Drought! -5 water for every player."
+        "message": "A punishing dry spell drains every player's water reserves."
       },
       {
         "id": "rivalry",
@@ -508,7 +512,7 @@
         "value": 1,
         "scope": "leader",
         "duration": 2,
-        "message": "A rival sabotages a property of the leader."
+        "message": "An anonymous tip triggers a targeted attack — the current leader's property is sabotaged."
       },
       {
         "id": "philanthropy",
@@ -518,7 +522,7 @@
         "effect": "money",
         "value": 200,
         "scope": "lowest",
-        "message": "$200 gift to the player with the least cash."
+        "message": "An anonymous donor takes pity on the player falling furthest behind."
       },
       {
         "id": "lucky_die",
@@ -531,12 +535,12 @@
           "max": 6
         },
         "scope": "self",
-        "message": "Your next roll is between 4 and 6."
+        "message": "Fortune smiles — your next move is guaranteed to land somewhere prime."
       }
     ]
   },
   "sabotage": {
-    "cost": 300,
+    "cost": 150,
     "oilCost": 1,
     "duration": 3,
     "cooldown": 4,
@@ -546,6 +550,46 @@
   "trade": {
     "maxImbalanceRatio": 5,
     "allowImbalanced": false
+  },
+  "items": {
+    "maxStack": 5,
+    "catalog": [
+      {
+        "id": "extra_die",
+        "label": "Extra Die",
+        "price": 120,
+        "useAt": "pre_roll",
+        "description": "Roll 2 dice on your next move. Sum determines the steps."
+      },
+      {
+        "id": "lucky_charm",
+        "label": "Lucky Charm",
+        "price": 90,
+        "useAt": "pre_roll",
+        "description": "Your next roll is guaranteed to be 5 or 6."
+      },
+      {
+        "id": "loaded_die",
+        "label": "Loaded Die",
+        "price": 70,
+        "useAt": "pre_roll",
+        "description": "Your next roll is guaranteed to be exactly 4."
+      },
+      {
+        "id": "shield",
+        "label": "Sabotage Shield",
+        "price": 180,
+        "useAt": "pre_roll",
+        "description": "Activate before rolling. Blocks the next sabotage attempt against you."
+      },
+      {
+        "id": "warp_token",
+        "label": "Warp Token",
+        "price": 250,
+        "useAt": "pre_roll",
+        "description": "Skip the dice. Move 1 to 12 steps in any direction of your choosing."
+      }
+    ]
   },
   "theMan": {
     "enabled": true,

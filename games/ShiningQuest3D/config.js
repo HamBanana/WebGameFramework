@@ -1,15 +1,17 @@
-// GameFramework/games/ShiningQuest/config.js
-// Shining Force-style RPG configuration. Sprite NAMES only — no asset paths.
+// GameFramework/games/ShiningQuest3D/config.js
+// Configuration for Shining Quest 3D — sprite NAMES only, no asset paths.
+// Three3DScene renders behind the engine canvas, so backgroundColor must be
+// 'transparent' for the 3D world to be visible.
 
 (function (GF) {
   'use strict';
 
   GF.GAME_CONFIG = {
   "engine": {
-    "width": 832,
-    "height": 480,
+    "width": 960,
+    "height": 540,
     "canvasId": "gameCanvas",
-    "backgroundColor": "#0a0a14"
+    "backgroundColor": "transparent"
   },
   "physics": {
     "gravity": 0,
@@ -17,16 +19,15 @@
     "leftWall": 0,
     "rightWall": 99999
   },
+  "world3d": {
+    "cellSize": 1,
+    "unitYOffset": 0,
+    "cameraTilt": 0.85,
+    "cameraOrbit": 0,
+    "townFollowDist": 7.5,
+    "townFollowHeight": 5.5
+  },
   "battle": {
-    "cellSize": 32,
-    "gridOffset": {
-      "x": 16,
-      "y": 32
-    },
-    "hpBarOffset": {
-      "x": -14,
-      "y": -42
-    },
     "terrainCost": {
       "0": 1,
       "1": 1,
@@ -41,13 +42,15 @@
     ],
     "damageVariance": 0.2,
     "critMultiplier": 2,
-    "enemyTurnDelayMs": 350
+    "enemyTurnDelayMs": 350,
+    "moveStepSeconds": 0.18,
+    "attackDuration": 0.55,
+    "spellDuration": 0.7
   },
   "town": {
     "cols": 26,
     "rows": 15,
-    "cellSize": 32,
-    "playerSpeed": 130,
+    "playerSpeed": 4.5,
     "partyName": "Force of the Sunrise"
   },
   "ui": {
@@ -57,13 +60,13 @@
     "hudColor": "#ffffff",
     "hudFont": "14px monospace",
     "titleFont": "bold 22px monospace",
-    "bigTitleFont": "bold 38px monospace",
+    "bigTitleFont": "bold 44px monospace",
     "enemyTeamColor": "#ff5566",
     "playerTeamColor": "#66ccff",
-    "moveTileColor": "rgba(80,160,255,0.35)",
-    "attackTileColor": "rgba(255,80,80,0.40)",
-    "pathTileColor": "rgba(255,220,80,0.60)",
-    "cursorColor": "#ffdd44"
+    "moveTileColor": 4491519,
+    "attackTileColor": 16733508,
+    "pathTileColor": 16768324,
+    "cursorColor": 16768324
   },
   "debug": {
     "enabled": false,
@@ -104,7 +107,7 @@
 };
 
   window.addEventListener('GF:ready', function () {
-    GF.applyLauncherConfig('ShiningQuest');
+    GF.applyLauncherConfig('ShiningQuest3D');
   }, { once: true });
 
 })(window.GF = window.GF || {});

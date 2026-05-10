@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Shining Quest 3D – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050510;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    #gameContainer {
+      position: relative;
+      width: 960px;
+      height: 540px;
+    }
+    #gameCanvas {
+      display: block;
+      border: 2px solid rgba(136, 170, 255, 0.4);
+      box-shadow: 0 0 40px rgba(80, 120, 220, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+  </div>
+
+  <!-- Three.js (required by Three3DScene) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Game config -->
+  <script src="config.js"></script>
+
+  <!-- GameFramework bundle -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- Game data + portraits -->
+  <script src="data/gameData.js"></script>
+  <script src="sprites/portraits.js"></script>
+
+  <!-- Game logic -->
+  <script src="ShiningQuest3DGame.js"></script>
+</body>
+</html>
