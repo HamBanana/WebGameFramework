@@ -163,6 +163,13 @@
 
       engine.onUpdate((dt) => this._update(dt));
       engine.onRender((ctx) => this._render(ctx));
+
+      // Map → district-list hover sync. Pointing at a cell on the board sets
+      // the same _focusDistrictId the HUD row hover/click drives, so the
+      // matching .dist-row picks up the .focused style and the on-map
+      // dashed-outline pulse fires together. Skips when the user has pinned
+      // a district by clicking a row — pinning is sticky on purpose.
+      this._initMapHover();
     }
 
     start() { this.engine.start(); }
@@ -425,6 +432,67 @@
       // eslint-disable-next-line no-unused-expressions
       void el.offsetWidth;
       el.classList.add('show');
+    }
+
+    /** Wire mousemove/leave on the engine canvas so hovering a cell on the
+     *  board highlights its district in the right-hand district list (and
+     *  triggers the on-map dashed outline). The HUD already keys both pieces
+     *  off `_focusDistrictId`, so this just feeds that same channel.
+     *
+     *  Skips when `_focusDistrictPinned` is true — clicking a row pins the
+     *  focus, and casual mouse movement over the map shouldn't override that. */
+    _initMapHover() {
+      const canvas = this.engine && this.engine.canvas;
+      if (!canvas) return;
+
+      const updateFromEvent = (e) => {
+        if (this._focusDistrictPinned) return;
+        if (this.gameState !== A.GAME_STATE.PLAYING) return;
+        if (!this.cells || this.cells.length === 0) return;
+        if (typeof this._toPixel !== 'function' || !this._cellSize) return;
+
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        // Client → internal canvas coords (the canvas is CSS-scaled).
+        const sx = (e.clientX - rect.left) * (canvas.width  / rect.width);
+        const sy = (e.clientY - rect.top)  * (canvas.height / rect.height);
+
+        // Internal canvas coords → world coords. The board renderer applies:
+        //   translate(W/2, H/2); scale(cam.scale); translate(-cam.cx, -cam.cy)
+        // so the inverse is the obvious one.
+        const W = this.cfg.engine.width, H = this.cfg.engine.height;
+        const cam = this._camera;
+        const wx = (sx - W / 2) / cam.scale + cam.cx;
+        const wy = (sy - H / 2) / cam.scale + cam.cy;
+
+        // Find the nearest cell whose square contains the cursor. Cells are
+        // free-form (not a regular grid on Denmark-style maps), so a linear
+        // scan is the simple correct option — only a few hundred cells.
+        const half = this._cellSize / 2;
+        let bestId = null, bestDist = Infinity;
+        for (const c of this.cells) {
+          const px = this._toPixel(c);
+          const dx = wx - px.x, dy = wy - px.y;
+          if (Math.abs(dx) > half || Math.abs(dy) > half) continue;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestDist) {
+            bestDist = d2;
+            bestId   = c.district || null;
+          }
+        }
+        // Only assign when the value actually changes — avoids needless HUD
+        // signature churn during long mouse drags inside one district.
+        if (bestId !== this._focusDistrictId) {
+          this._focusDistrictId = bestId;
+        }
+      };
+
+      canvas.addEventListener('mousemove', updateFromEvent);
+      canvas.addEventListener('mouseleave', () => {
+        if (this._focusDistrictPinned) return;
+        if (this._focusDistrictId !== null) this._focusDistrictId = null;
+      });
     }
 
     // ── Per-frame ───────────────────────────────────────────────────────
