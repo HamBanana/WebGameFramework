@@ -384,6 +384,7 @@
 
       State.chapterIdx = 0;
       State.visitedChapters.clear();
+      State.world = null;     // reset open-world progress on title
       clonePartyFromTemplate();
 
       // Build castle silhouette + stars
@@ -487,7 +488,7 @@
         align: 'center', baseline: 'middle',
         glow: '#ffaa22', glowBlur: 28, stroke: '#332200', strokeWidth: 4,
       });
-      ui.drawText(ctx, 'A tactical RPG, now in three dimensions', W / 2, H * 0.22 + 42, {
+      ui.drawText(ctx, 'An open-world tactical RPG, in three dimensions', W / 2, H * 0.22 + 42, {
         font: '14px monospace', color: '#aab8d8',
         align: 'center', baseline: 'middle',
       });
@@ -517,83 +518,245 @@
   // Town tile types
   const T_GRASS=0, T_PATH=1, T_WATER=2, T_WALL=3, T_FLOWER=4;
 
-  function buildTownMap() {
-    const cols = CFG().town.cols, rows = CFG().town.rows;
-    const grid = Array.from({ length: rows }, () => Array(cols).fill(T_GRASS));
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── OPEN WORLD ─────────────────────────────────────────────────────────────
+  //
+  // Replaces the old "small castle town hub". The whole game now happens in a
+  // single large 3D world. Random encounters fire as the player traverses
+  // biomes, and scripted boss tiles trigger the per-chapter set-piece battles.
+  // The class is still named TownScene3D so BattleScene3D's existing
+  // `replaceWithTransition(new TownScene3D(), …)` continues to drop the
+  // player back into the world after combat.
+  // ════════════════════════════════════════════════════════════════════════════
 
-    // Castle keep
-    for (let r = 0; r < 5; r++) for (let c = 9; c < 17; c++) grid[r][c] = T_WALL;
-    grid[4][12] = T_PATH; grid[4][13] = T_PATH;
+  // World tile types (re-uses the battle terrain palette in TERRAIN_3D).
+  const W_GRASS    = 0;
+  const W_PATH     = 1;
+  const W_FOREST   = 2;
+  const W_WATER    = 3;
+  const W_WALL     = 4;
+  const W_MOUNTAIN = 5;
 
-    // Path leading from gate to bottom
-    for (let r = 4; r < rows; r++) { grid[r][12] = T_PATH; grid[r][13] = T_PATH; }
-    for (let c = 2; c < cols - 2; c++) grid[10][c] = T_PATH;
+  // World size — one of the largest the framework has ever rendered.
+  const WORLD_COLS = 60;
+  const WORLD_ROWS = 40;
 
-    // Side houses
-    for (let r = 7; r < 10; r++) for (let c = 3; c < 6; c++) grid[r][c] = T_WALL;
-    grid[9][4] = T_PATH;
-    for (let r = 7; r < 10; r++) for (let c = 19; c < 22; c++) grid[r][c] = T_WALL;
-    grid[9][20] = T_PATH;
+  function isWorldWalkable(tile) {
+    return tile !== W_WATER && tile !== W_WALL;
+  }
 
-    // Moat
-    for (let c = 8; c < 18; c++) grid[5][c] = T_WATER;
-    grid[5][12] = T_PATH; grid[5][13] = T_PATH;
+  // Encounter zones bounded by inclusive [c0,c1] × [r0,r1] cell rects.
+  // Each zone has a list of enemy template IDs (drawn from QuestData.enemies)
+  // that it samples 2-3 of when an ambush triggers, and its own intro line.
+  const WORLD_ZONES = [
+    {
+      id   : 'green',
+      label: 'Greenfields',
+      box  : { c0: 13, r0: 8,  c1: 30, r1: 25 },
+      pool : ['goblin', 'goblin', 'bat'],
+      battleTerrain: W_GRASS,
+      battleSize   : { cols: 6, rows: 5 },
+      intro: [
+        { type:'text', speaker:'Kestra', portrait:'kestra',
+          text:'These greenfields used to be safe. Goblins again — get ready.' },
+      ],
+      victory: [
+        { type:'text', speaker:'Nori', portrait:'nori',
+          text:'Another raiding party. Someone is paying them well.' },
+      ],
+    },
+    {
+      id   : 'crypt',
+      label: 'Crypt Approach',
+      box  : { c0: 18, r0: 22, c1: 30, r1: 38 },
+      pool : ['skeleton', 'skeleton', 'bat'],
+      battleTerrain: W_WALL,    // stone interior
+      battleSize   : { cols: 6, rows: 6 },
+      intro: [
+        { type:'text', speaker:'Nori', portrait:'nori',
+          text:'The dead stir near the crypt. Brace yourselves.' },
+      ],
+      victory: [
+        { type:'text', speaker:'Barrat', portrait:'barrat',
+          text:'They keep climbing back out. Something is feeding them magic.' },
+      ],
+    },
+    {
+      id   : 'mountain',
+      label: 'Mountain Pass',
+      box  : { c0: 32, r0: 5,  c1: 55, r1: 25 },
+      pool : ['darkMage', 'bat', 'bat'],
+      battleTerrain: W_MOUNTAIN,
+      battleSize   : { cols: 7, rows: 5 },
+      intro: [
+        { type:'text', speaker:'Kestra', portrait:'kestra',
+          text:'Watchers in the rocks. Move fast or we get pinned.' },
+      ],
+      victory: [
+        { type:'text', speaker:'Kestra', portrait:'kestra',
+          text:'The dragon is close. We must be near its lair.' },
+      ],
+    },
+  ];
 
-    // Flowers
-    grid[7][12] = T_FLOWER; grid[7][13] = T_FLOWER;
-    grid[12][6] = T_FLOWER; grid[12][19] = T_FLOWER;
-    grid[13][2] = T_FLOWER; grid[13][cols - 3] = T_FLOWER;
+  // Boss tiles: standing on them and pressing CONFIRM triggers a chapter
+  // battle (using QuestData.chapters as the existing battle layouts).
+  const WORLD_BOSSES = [
+    { id: 'b1', col: 28, row: 21, chapterIdx: 0, requires: null,
+      label: 'Goblin Camp',
+      gateMessage: 'A goblin warband is dug in here. Press SPACE to engage.' },
+    { id: 'b2', col: 23, row: 35, chapterIdx: 1, requires: 'b1',
+      label: 'Crypt Altar',
+      gateMessage: 'The crypt door is sealed by the goblin chieftain\'s charm — defeat the warband first.' },
+    { id: 'b3', col: 55, row: 14, chapterIdx: 2, requires: 'b2',
+      label: "Dragon's Maw",
+      gateMessage: 'A dread aura keeps you out. The crypt must fall before you face the dragon.' },
+  ];
 
-    // Outer wall
-    for (let c = 0; c < cols; c++) { grid[0][c] = T_WALL; grid[rows-1][c] = T_WALL; }
-    for (let r = 0; r < rows; r++) { grid[r][0] = T_WALL; grid[r][cols-1] = T_WALL; }
-    grid[rows-1][12] = T_PATH; grid[rows-1][13] = T_PATH;
+  // Build the open-world map procedurally. Biomes are blocked out by
+  // hand-tuned rectangles, then forests/mountains scatter on top with a
+  // stable random seed so the layout is identical every play.
+  function buildWorldMap() {
+    const grid = Array.from({ length: WORLD_ROWS }, () => Array(WORLD_COLS).fill(W_GRASS));
+
+    // Outer wall border
+    for (let c = 0; c < WORLD_COLS; c++) { grid[0][c] = W_WALL; grid[WORLD_ROWS-1][c] = W_WALL; }
+    for (let r = 0; r < WORLD_ROWS; r++) { grid[r][0] = W_WALL; grid[r][WORLD_COLS-1] = W_WALL; }
+
+    // Castle keep (NW)
+    for (let r = 2; r < 8; r++) for (let c = 4; c < 13; c++) grid[r][c] = W_WALL;
+    grid[7][8] = W_PATH; grid[7][9] = W_PATH; // gate
+
+    // Castle interior path
+    for (let r = 3; r < 7; r++) for (let c = 5; c < 12; c++) grid[r][c] = W_PATH;
+    // Throne room (slight inner wall)
+    grid[3][8] = W_WALL; grid[3][9] = W_WALL;
+
+    // Path south from castle
+    for (let r = 8; r < 15; r++) { grid[r][8] = W_PATH; grid[r][9] = W_PATH; }
+    // East fork into greenfields
+    for (let c = 9; c < 32; c++) grid[14][c] = W_PATH;
+
+    // Greenfields scattered forest
+    const forestSpots = [
+      [11,15],[12,17],[15,18],[18,20],[19,17],[22,16],[24,18],[26,15],[28,17],
+      [13,20],[15,22],[20,22],[24,21],[27,22],[28,23],
+      [16,11],[20,11],[24,12],[28,12],
+    ];
+    for (const [r, c] of forestSpots) if (grid[r] && grid[r][c] === W_GRASS) grid[r][c] = W_FOREST;
+
+    // Crypt approach: forest funnels south
+    for (let r = 14; r < 25; r++) { grid[r][22] = W_PATH; grid[r][23] = W_PATH; }
+    for (let r = 18; r < 30; r++) for (let c = 18; c < 28; c++) {
+      if (grid[r][c] === W_GRASS && (r % 3 === 0)) grid[r][c] = W_FOREST;
+    }
+
+    // Crypt interior chamber (stone walls)
+    for (let r = 30; r < 38; r++) for (let c = 17; c < 30; c++) {
+      if (r === 30 || r === 37 || c === 17 || c === 29) grid[r][c] = W_WALL;
+      else if (grid[r][c] === W_GRASS) grid[r][c] = W_PATH;
+    }
+    grid[30][22] = W_PATH; grid[30][23] = W_PATH;   // entrance from approach
+    // Inner pillars
+    for (const [r,c] of [[33,20],[33,26],[35,20],[35,26]]) grid[r][c] = W_WALL;
+
+    // Mountain pass (east)
+    for (let r = 5; r < 26; r++) for (let c = 32; c < 56; c++) {
+      // Rocky mix: mountain cells around the edges, path through middle
+      if (r === 5 || r === 25 || c === 55) grid[r][c] = W_MOUNTAIN;
+      else if ((r + c) % 7 === 0) grid[r][c] = W_MOUNTAIN;
+      else grid[r][c] = W_GRASS;
+    }
+    // Path through the pass
+    for (let c = 30; c < 55; c++) grid[14][c] = W_PATH;
+    // Bridge across the gap
+    for (let c = 28; c < 33; c++) grid[14][c] = W_PATH;
+    // Dragon's lair platform
+    for (let r = 12; r < 17; r++) for (let c = 53; c < 57; c++) grid[r][c] = W_PATH;
+    // Surround with mountains
+    for (const [r,c] of [[12,52],[13,52],[14,52],[15,52],[16,52],[17,53],[17,54],[17,55],[17,56],[11,53],[11,54],[11,55],[11,56]]) {
+      if (grid[r] && grid[r][c] !== undefined) grid[r][c] = W_MOUNTAIN;
+    }
+
+    // River south of greenfields, with a bridge
+    for (let c = 14; c < 30; c++) grid[26][c] = W_WATER;
+    grid[26][22] = W_PATH; grid[26][23] = W_PATH;
 
     return grid;
   }
 
-  function isTownWalkable(tile) {
-    return tile !== T_WALL && tile !== T_WATER;
-  }
-
-  function buildTownTileMesh(THREE, type, x, z, size) {
-    const g = new THREE.Group();
-    if (type === T_GRASS) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(size, 0.10, size),
-        new THREE.MeshStandardMaterial({ color: 0x3d8a3a, roughness: 0.95 }));
-      m.position.set(x, -0.05, z); m.receiveShadow = true; g.add(m);
-    } else if (type === T_PATH) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(size, 0.08, size),
-        new THREE.MeshStandardMaterial({ color: 0xc8a474, roughness: 0.95 }));
-      m.position.set(x, -0.04, z); m.receiveShadow = true; g.add(m);
-    } else if (type === T_WATER) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(size, 0.18, size),
-        new THREE.MeshStandardMaterial({ color: 0x234abd, roughness: 0.3, metalness: 0.4 }));
-      m.position.set(x, -0.18, z); m.receiveShadow = true; g.add(m);
-    } else if (type === T_WALL) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(size, 1.5, size),
-        new THREE.MeshStandardMaterial({ color: 0x66667a, roughness: 0.9 }));
-      m.position.set(x, 0.7, z); m.castShadow = true; m.receiveShadow = true; g.add(m);
-      const cap = new THREE.Mesh(new THREE.BoxGeometry(size * 0.85, 0.15, size * 0.85),
-        new THREE.MeshStandardMaterial({ color: 0x44445a }));
-      cap.position.set(x, 1.5, z); g.add(cap);
-    } else if (type === T_FLOWER) {
-      const base = new THREE.Mesh(new THREE.BoxGeometry(size, 0.10, size),
-        new THREE.MeshStandardMaterial({ color: 0x3d8a3a, roughness: 0.95 }));
-      base.position.set(x, -0.05, z); base.receiveShadow = true; g.add(base);
-      const colors = [0xff5577, 0xffdd55, 0xffffff, 0xaa55ff];
-      for (let i = 0; i < 4; i++) {
-        const fx = x - size/4 + (i % 2) * size/2;
-        const fz = z - size/4 + Math.floor(i/2) * size/2;
-        const flower = new THREE.Mesh(
-          new THREE.SphereGeometry(0.08, 8, 8),
-          new THREE.MeshStandardMaterial({ color: colors[i] })
-        );
-        flower.position.set(fx, 0.10, fz); g.add(flower);
+  // Build the 3D meshes for the world. Returns the root Group plus an array
+  // of per-cell terrain types (so collision can use the same matrix without
+  // rebuilding it).
+  function buildWorldMeshes(THREE, grid, cs) {
+    const root = new THREE.Group();
+    for (let r = 0; r < WORLD_ROWS; r++) {
+      for (let c = 0; c < WORLD_COLS; c++) {
+        const w = gridToWorld(c, r, WORLD_COLS, WORLD_ROWS, cs);
+        root.add(buildTerrainCell(THREE, grid[r][c], w.x, w.z, cs));
       }
     }
-    return g;
+    return root;
   }
+
+  // Synthesise a small mini-map "chapter" for a random encounter — we feed
+  // this straight to BattleScene3D, which already accepts the same shape as
+  // the hand-written chapters. The encounter pulls 2-3 enemies from the zone
+  // pool, places them on a small grid of the zone's biome terrain, and
+  // installs an `onVictory` callback that returns the player to the world.
+  function makeEncounterChapter(zone, savedWorldPos, encounterIndex) {
+    const cols = zone.battleSize.cols;
+    const rows = zone.battleSize.rows;
+    const terrain = Array.from({ length: rows }, (_, r) =>
+      Array.from({ length: cols }, (_, c) => {
+        // Tiny variation for visual interest
+        if (zone.battleTerrain === W_WALL) {
+          // Stone room — walls on the outer ring
+          return (r === 0 || r === rows-1 || c === 0 || c === cols-1) ? W_WALL : W_PATH;
+        }
+        if (zone.battleTerrain === W_MOUNTAIN) {
+          if ((r + c) % 5 === 0) return W_MOUNTAIN;
+          return W_GRASS;
+        }
+        // Greenfields default
+        if ((r * 7 + c) % 11 === 0) return W_FOREST;
+        return W_GRASS;
+      }));
+
+    // Pick 2-3 enemies from the pool
+    const enemyCount = 2 + Math.floor(Math.random() * 2); // 2 or 3
+    const enemies = [];
+    for (let i = 0; i < enemyCount; i++) {
+      const type = zone.pool[Math.floor(Math.random() * zone.pool.length)];
+      const col = Math.max(2, Math.min(cols - 2, cols - 2 - (i % 2)));
+      const row = Math.max(1, Math.min(rows - 2, 1 + i));
+      enemies.push({ type, col, row });
+    }
+
+    // Player spawns on the left side
+    const playerSpawns = [
+      { col: 1, row: Math.floor(rows / 2) },
+      { col: 0, row: Math.max(0, Math.floor(rows / 2) - 1) },
+      { col: 0, row: Math.min(rows - 1, Math.floor(rows / 2) + 1) },
+    ];
+
+    return {
+      id     : zone.id + '_enc_' + encounterIndex,
+      title  : zone.label + ' — Ambush',
+      cols, rows, terrain, playerSpawns, enemies,
+      intro  : zone.intro,
+      victory: zone.victory,
+      // BattleScene3D._onComplete checks for these:
+      _isEncounter   : true,
+      _zoneId        : zone.id,
+      _returnPos     : savedWorldPos,
+      nextChapter    : null,
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── TownScene3D (now an OPEN-WORLD overworld) ──────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
 
   class TownScene3D extends GF.Scene {
     init(engine) {
@@ -603,6 +766,7 @@
       this._dialogue = engine.getSystem('DialogueSystem');
       this._scenes   = engine.getSystem('SceneManager');
       this._audio    = engine.getSystem('AudioSystem');
+      this._tweens   = engine.getSystem('TweenSystem');
 
       engine.input.bind('up',      ...cfg.controls.up);
       engine.input.bind('down',    ...cfg.controls.down);
@@ -615,96 +779,132 @@
       this._dialogue._getPortraitCb = name => GF.portraits[name] || null;
 
       const THREE = window.THREE;
-      this._three.setBackground(0x4488cc);
+      this._three.setBackground(0x6688bb);
 
-      // Build town grid
-      this._mapGrid = buildTownMap();
+      // Build the world
+      this._mapGrid = buildWorldMap();
       const cs = 1.0;
-      const cols = cfg.town.cols, rows = cfg.town.rows;
-      this._mapMeta = { cols, rows, cs };
-
-      const root = new THREE.Group();
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const w = gridToWorld(c, r, cols, rows, cs);
-          root.add(buildTownTileMesh(THREE, this._mapGrid[r][c], w.x, w.z, cs));
-        }
-      }
+      this._cs = cs;
+      this._mapMeta = { cols: WORLD_COLS, rows: WORLD_ROWS, cs };
+      const root = buildWorldMeshes(THREE, this._mapGrid, cs);
       this._three.add(root);
 
-      // Sky-ish backdrop and lights
+      // Lights
       const amb = new THREE.AmbientLight(0xffffff, 0.55);
       this._three.add(amb);
-      const sun = new THREE.DirectionalLight(0xfff4cc, 1.1);
-      sun.position.set(8, 14, 6);
+      const sun = new THREE.DirectionalLight(0xfff4cc, 1.0);
+      sun.position.set(20, 30, 14);
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
-      sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
-      sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
+      sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+      sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
       this._three.add(sun);
 
-      // Player avatar (Kestra, knight)
+      // Init persistent overworld state lazily
+      State.world = State.world || {
+        encountersWonByZone: { green: 0, crypt: 0, mountain: 0 },
+        bossesCleared      : { b1: false, b2: false, b3: false },
+        savedPos           : null,
+        zonesEntered       : new Set(),
+      };
+
+      // Player avatar
       const playerTpl = State.party.find(p => p.id === 'kestra') || State.party[0];
       const playerMesh = buildUnitMesh(THREE, playerTpl);
-      // Spawn at the town gate (rows-2)
-      const spawn = gridToWorld(cols / 2 | 0, rows - 2, cols, rows, cs);
+      let spawn;
+      if (State.world.savedPos) {
+        spawn = State.world.savedPos;
+      } else {
+        // Default spawn: just outside the castle gate
+        const w = gridToWorld(8, 9, WORLD_COLS, WORLD_ROWS, cs);
+        spawn = { x: w.x, z: w.z };
+      }
       playerMesh.position.set(spawn.x, 0, spawn.z);
       this._three.add(playerMesh);
       this._player = {
         mesh: playerMesh,
         x: spawn.x, z: spawn.z,
-        facing: -Math.PI / 2,  // facing +Z (towards the castle gate up north)
+        facing: 0,
       };
 
-      // NPCs
-      const villagerTpl = { team: 'enemy', sprite: 'goblin' }; // placeholder ignored — we override mesh
+      // Friendly NPCs around the castle
+      this._npcs = [];
       const kingMesh = buildKingMesh(THREE);
-      const w1 = gridToWorld(12, 5, cols, rows, cs);
-      kingMesh.position.set(w1.x, 0, w1.z);
+      const kw = gridToWorld(8, 5, WORLD_COLS, WORLD_ROWS, cs);
+      kingMesh.position.set(kw.x, 0, kw.z);
       this._three.add(kingMesh);
+      this._npcs.push({ id: 'king', col: 8, row: 5, mesh: kingMesh,
+        script: () => this._talkToKing() });
 
-      const villagerMeshA = buildVillagerMesh(THREE, 0xc36a3a);
-      const wA = gridToWorld(4, 11, cols, rows, cs);
-      villagerMeshA.position.set(wA.x, 0, wA.z);
-      this._three.add(villagerMeshA);
+      const villager1 = buildVillagerMesh(THREE, 0xc36a3a);
+      const v1 = gridToWorld(11, 9, WORLD_COLS, WORLD_ROWS, cs);
+      villager1.position.set(v1.x, 0, v1.z);
+      this._three.add(villager1);
+      this._npcs.push({ id: 'villager', col: 11, row: 9, mesh: villager1,
+        script: () => this._showRandomVillagerLine() });
 
-      const villagerMeshB = buildVillagerMesh(THREE, 0x3a8a8a);
-      const wB = gridToWorld(21, 11, cols, rows, cs);
-      villagerMeshB.position.set(wB.x, 0, wB.z);
-      this._three.add(villagerMeshB);
+      const villager2 = buildVillagerMesh(THREE, 0x3a8a8a);
+      const v2 = gridToWorld(5, 12, WORLD_COLS, WORLD_ROWS, cs);
+      villager2.position.set(v2.x, 0, v2.z);
+      this._three.add(villager2);
+      this._npcs.push({ id: 'villager', col: 5, row: 12, mesh: villager2,
+        script: () => this._showRandomVillagerLine() });
 
-      this._npcs = [
-        { id: 'king', col: 12, row: 5, mesh: kingMesh,
-          script: () => this._talkToKing() },
-        { id: 'villager', col: 4, row: 11, mesh: villagerMeshA,
-          script: () => this._showRandomVillagerLine() },
-        { id: 'villager', col: 21, row: 11, mesh: villagerMeshB,
-          script: () => this._showRandomVillagerLine() },
-      ];
+      // Boss markers — tall glowing pillars that pulse
+      this._bossMarkers = [];
+      for (const b of WORLD_BOSSES) {
+        const w = gridToWorld(b.col, b.row, WORLD_COLS, WORLD_ROWS, cs);
+        const cleared = !!State.world.bossesCleared[b.id];
+        const colorHex = cleared ? 0x44ff66 : 0xffaa44;
+        const pillar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.22, 1.6, 12),
+          new THREE.MeshStandardMaterial({
+            color: colorHex,
+            emissive: colorHex, emissiveIntensity: 0.6,
+            transparent: true, opacity: 0.85,
+          })
+        );
+        pillar.position.set(w.x, 0.8, w.z);
+        this._three.add(pillar);
+        this._bossMarkers.push({ def: b, mesh: pillar, baseY: 0.8 });
+      }
 
-      // Camera (3rd person follow)
-      const cam = new THREE.PerspectiveCamera(50, engine.canvas.width / engine.canvas.height, 0.1, 200);
+      // Camera
+      const cam = new THREE.PerspectiveCamera(55, engine.canvas.width / engine.canvas.height, 0.1, 200);
       this._three.setCamera(cam);
       this._cam = cam;
       this._updateCamera(0);
 
-      this._showIntro = !State.visitedChapters.has('town_intro');
-      this._signLine = `Chapter ${State.chapterIdx + 1} awaits — speak to the King.`;
+      // Encounter timing
+      this._encTimer    = 0;        // accumulates while moving in a zone
+      this._encCooldown = 4;        // seconds of grace after a battle / on first entry
       this._t = 0;
       this._walkBob = 0;
-    }
 
-    enter(engine) {
-      if (this._showIntro) {
-        this._showIntro = false;
-        State.visitedChapters.add('town_intro');
-        this._dialogue.start(DATA().townIntro);
+      // Intro on first ever entry
+      if (!State.visitedChapters.has('world_intro')) {
+        State.visitedChapters.add('world_intro');
+        this._dialogue.start([
+          { type:'text', speaker:'Kestra', portrait:'kestra',
+            text:'The realm is in trouble. Goblins, undead, and worse stalk the lands.' },
+          { type:'text', speaker:'Nori', portrait:'nori',
+            text:'Walk the world. Each region has a warband — find the chieftain at the orange marker to break their hold.' },
+          { type:'text',
+            text:'(WASD/arrows to walk. Press SPACE on a glowing pillar to begin a boss fight. Watch out for ambushes in the wild.)' },
+        ]);
       }
     }
 
+    enter(engine) {
+      // Clear saved pos so subsequent re-entries spawn at last battle site or
+      // the default spawn (handled in init).
+    }
+
+    // ── Dialogue scripts ────────────────────────────────────────────────────
+
     _talkToKing() {
-      const ch = DATA().chapters[State.chapterIdx];
-      if (!ch) {
+      const allCleared = State.world.bossesCleared.b1 && State.world.bossesCleared.b2 && State.world.bossesCleared.b3;
+      if (allCleared) {
         this._dialogue.start(DATA().finale);
         const off = this._engine.events.on('dialogue:end', () => {
           off();
@@ -713,12 +913,21 @@
         });
         return;
       }
-      this._dialogue.start(ch.intro);
-      const off = this._engine.events.on('dialogue:end', () => {
-        off();
-        this._scenes.replaceWithTransition(new BattleScene3D(ch),
-          { type: 'wipe', duration: 0.9, color: '#000000' });
-      });
+      // Quest summary tailored to current progression
+      const lines = [];
+      lines.push({ type:'text', speaker:'King Aric', portrait:'king',
+        text:'My realm bleeds. Walk the lands and quench every threat you find.' });
+      if (!State.world.bossesCleared.b1) {
+        lines.push({ type:'text', speaker:'King Aric', portrait:'king',
+          text:'Begin in the greenfields east of the castle. Goblins have made camp at the marker pillar.' });
+      } else if (!State.world.bossesCleared.b2) {
+        lines.push({ type:'text', speaker:'King Aric', portrait:'king',
+          text:'The crypt to the south stirs. The dead rise — silence them at their altar.' });
+      } else if (!State.world.bossesCleared.b3) {
+        lines.push({ type:'text', speaker:'King Aric', portrait:'king',
+          text:'Only the dragon remains. Climb the mountain pass and end its reign.' });
+      }
+      this._dialogue.start(lines);
     }
 
     _showRandomVillagerLine() {
@@ -726,11 +935,22 @@
       this._dialogue.start(lines[Math.floor(Math.random() * lines.length)]);
     }
 
+    // ── Update ──────────────────────────────────────────────────────────────
+
     update(dt, engine) {
       this._t += dt;
+      // Pulse the boss markers
+      for (const m of this._bossMarkers) {
+        m.mesh.position.y = m.baseY + Math.sin(this._t * 2 + m.def.col) * 0.12;
+        const cleared = !!State.world.bossesCleared[m.def.id];
+        if (m.mesh.material) {
+          m.mesh.material.emissiveIntensity = cleared ? 0.4 : (0.5 + Math.sin(this._t * 3) * 0.25);
+        }
+      }
+
       if (this._dialogue.isActive) return;
 
-      const { cols, rows, cs } = this._mapMeta;
+      const cs = this._cs;
       const speed = CFG().town.playerSpeed;
 
       let dx = 0, dz = 0;
@@ -745,11 +965,10 @@
         dx /= len; dz /= len;
         const nx = this._player.x + dx * speed * dt;
         const nz = this._player.z + dz * speed * dt;
-        // Convert world to grid for collision check
-        const col = Math.round(nx / cs + (cols - 1) / 2);
-        const row = Math.round(nz / cs + (rows - 1) / 2);
-        if (col >= 0 && row >= 0 && row < rows && col < cols
-            && isTownWalkable(this._mapGrid[row][col])) {
+        const col = Math.round(nx / cs + (WORLD_COLS - 1) / 2);
+        const row = Math.round(nz / cs + (WORLD_ROWS - 1) / 2);
+        if (col >= 0 && row >= 0 && row < WORLD_ROWS && col < WORLD_COLS
+            && isWorldWalkable(this._mapGrid[row][col])) {
           this._player.x = nx;
           this._player.z = nz;
         }
@@ -759,27 +978,55 @@
         this._walkBob *= 0.9;
       }
 
-      // Apply transform
       this._player.mesh.position.set(this._player.x,
         Math.abs(Math.sin(this._walkBob)) * 0.05, this._player.z);
       this._player.mesh.rotation.y = this._player.facing;
 
       this._updateCamera(dt);
 
+      // Encounter accumulator
+      if (this._encCooldown > 0) {
+        this._encCooldown -= dt;
+      } else if (moving) {
+        const zone = this._currentZone();
+        if (zone) {
+          // Walk into a zone for the first time → play its intro once
+          if (!State.world.zonesEntered.has(zone.id)) {
+            State.world.zonesEntered.add(zone.id);
+            this._dialogue.start(zone.intro);
+            return;
+          }
+          this._encTimer += dt;
+          // Trigger an encounter when timer crosses a zone-aware threshold.
+          // Random extra so two passes don't trigger at the same step count.
+          const threshold = 8 + Math.random() * 4;
+          if (this._encTimer >= threshold) {
+            this._encTimer = 0;
+            this._encCooldown = 1000;        // suppress until we return
+            this._triggerRandomEncounter(zone);
+            return;
+          }
+        }
+      }
+
+      // Confirm to interact: nearby NPC OR boss marker
       if (engine.input.wasPressed('confirm')) {
         const npc = this._nearbyNpc();
         if (npc) {
           this._audio.play('confirm');
           npc.script();
+          return;
+        }
+        const boss = this._nearbyBoss();
+        if (boss) {
+          this._audio.play('confirm');
+          this._tryStartBossBattle(boss);
         }
       }
     }
 
     _updateCamera(dt) {
-      // Fixed-direction follow camera: the camera always sits at the same
-      // offset south of (and above) the player, looking north towards the
-      // castle. This keeps the orientation stable when the character turns —
-      // the world doesn't spin around them.
+      // Fixed-direction follow camera: south of player, looking north.
       const w3 = CFG().world3d;
       this._cam.position.set(
         this._player.x,
@@ -789,51 +1036,159 @@
       this._cam.lookAt(this._player.x, 0.5, this._player.z);
     }
 
+    _currentZone() {
+      const cs = this._cs;
+      const col = Math.round(this._player.x / cs + (WORLD_COLS - 1) / 2);
+      const row = Math.round(this._player.z / cs + (WORLD_ROWS - 1) / 2);
+      for (const z of WORLD_ZONES) {
+        const b = z.box;
+        if (col >= b.c0 && col <= b.c1 && row >= b.r0 && row <= b.r1) return z;
+      }
+      return null;
+    }
+
     _nearbyNpc() {
-      const { cols, rows, cs } = this._mapMeta;
       const px = this._player.x, pz = this._player.z;
+      const cs = this._cs;
       for (const n of this._npcs) {
-        const w = gridToWorld(n.col, n.row, cols, rows, cs);
+        const w = gridToWorld(n.col, n.row, WORLD_COLS, WORLD_ROWS, cs);
         if (Math.hypot(px - w.x, pz - w.z) < cs * 1.6) return n;
       }
       return null;
     }
 
+    _nearbyBoss() {
+      const px = this._player.x, pz = this._player.z;
+      const cs = this._cs;
+      for (const m of this._bossMarkers) {
+        const w = gridToWorld(m.def.col, m.def.row, WORLD_COLS, WORLD_ROWS, cs);
+        if (Math.hypot(px - w.x, pz - w.z) < cs * 1.4) return m;
+      }
+      return null;
+    }
+
+    _tryStartBossBattle(marker) {
+      const def = marker.def;
+      if (State.world.bossesCleared[def.id]) {
+        this._dialogue.start([{ type:'text',
+          text:`The ${def.label} is already cleared. The realm is safer here now.` }]);
+        return;
+      }
+      if (def.requires && !State.world.bossesCleared[def.requires]) {
+        this._dialogue.start([{ type:'text', text: def.gateMessage }]);
+        return;
+      }
+      const ch = DATA().chapters[def.chapterIdx];
+      if (!ch) return;
+      // Save spawn position so we return to the same spot after the fight
+      State.world.savedPos = { x: this._player.x, z: this._player.z };
+
+      // Annotate the chapter for BattleScene3D's onComplete so it knows this
+      // was a boss kill (not an encounter) and updates progression.
+      const bossChapter = Object.assign({}, ch, {
+        _isBoss      : true,
+        _bossId      : def.id,
+        _isFinalBoss : (def.id === 'b3'),
+        _returnPos   : State.world.savedPos,
+        nextChapter  : null,
+      });
+
+      this._scenes.replaceWithTransition(new BattleScene3D(bossChapter),
+        { type: 'wipe', duration: 0.9, color: '#000000' });
+    }
+
+    _triggerRandomEncounter(zone) {
+      State.world.savedPos = { x: this._player.x, z: this._player.z };
+      const idx = (State.world.encountersWonByZone[zone.id] || 0);
+      const ch = makeEncounterChapter(zone, State.world.savedPos, idx + 1);
+      this._scenes.replaceWithTransition(new BattleScene3D(ch),
+        { type: 'fade', duration: 0.6, color: '#000000' });
+    }
+
+    // ── Render (2D HUD) ────────────────────────────────────────────────────
+
     render(ctx, engine) {
       const W = engine.canvas.width, H = engine.canvas.height;
       const cfg = CFG();
       const ui = GF.UISystem;
+      const THREE = window.THREE;
 
-      // NPC interaction prompt — projected from 3D position
+      // Floating prompts on NPCs / boss markers
+      const drawPrompt = (mesh, text, color, yOffset) => {
+        const v = new THREE.Vector3();
+        mesh.getWorldPosition(v); v.y += yOffset;
+        const sp = this._three.worldToScreen(v);
+        if (sp.depth < -1 || sp.depth > 1) return;
+        const pulse = (Math.sin(Date.now() / 180) * 0.4 + 0.6);
+        ctx.globalAlpha = pulse;
+        ui.drawText(ctx, text, sp.x, sp.y, {
+          font: 'bold 14px monospace', color,
+          align: 'center', baseline: 'middle',
+          stroke: '#000000', strokeWidth: 3,
+        });
+        ctx.globalAlpha = 1;
+      };
+
       const npc = this._nearbyNpc();
-      if (npc) {
-        const v3 = new window.THREE.Vector3();
-        npc.mesh.getWorldPosition(v3);
-        v3.y += 1.4;
-        const sp = this._three.worldToScreen(v3);
-        if (sp.depth > -1 && sp.depth < 1) {
-          const pulse = (Math.sin(Date.now() / 180) * 0.4 + 0.6);
-          ctx.globalAlpha = pulse;
-          ui.drawText(ctx, '▼ SPACE', sp.x, sp.y, {
-            font: 'bold 14px monospace', color: '#ffdd44',
-            align: 'center', baseline: 'middle',
-            stroke: '#000000', strokeWidth: 3,
-          });
-          ctx.globalAlpha = 1;
-        }
+      if (npc) drawPrompt(npc.mesh, '▼ SPACE', '#ffdd44', 1.4);
+      const boss = this._nearbyBoss();
+      if (boss) drawPrompt(boss.mesh, '▼ ' + boss.def.label, '#ffaa44', 1.6);
+
+      // Boss labels visible from a distance (always-on)
+      for (const m of this._bossMarkers) {
+        if (boss && m === boss) continue; // already shown closer
+        const cleared = !!State.world.bossesCleared[m.def.id];
+        const tag = cleared ? '✔ ' + m.def.label : '★ ' + m.def.label;
+        const v = new THREE.Vector3();
+        m.mesh.getWorldPosition(v); v.y += 1.6;
+        const sp = this._three.worldToScreen(v);
+        if (sp.depth < -1 || sp.depth > 1) continue;
+        ctx.globalAlpha = 0.85;
+        ui.drawText(ctx, tag, sp.x, sp.y, {
+          font: '11px monospace', color: cleared ? '#88ffaa' : '#ffcc88',
+          align: 'center', baseline: 'middle',
+          stroke: '#000000', strokeWidth: 2,
+        });
+        ctx.globalAlpha = 1;
       }
 
       // Bottom HUD
+      const zone = this._currentZone();
+      const where = zone ? zone.label : (this._isInCastle() ? 'Castle Aric' : 'The Realm');
       ui.drawPanel(ctx, 8, H - 36, W - 16, 28, {
         bgColor: cfg.ui.panelBg, borderColor: cfg.ui.panelBorder, radius: 4,
       });
-      ui.drawText(ctx, this._signLine, 16, H - 22, {
+      ui.drawText(ctx, `▣ ${where}`, 16, H - 22, {
         font: cfg.ui.hudFont, color: cfg.ui.hudColor, baseline: 'middle',
       });
       const partyStr = State.party.map(p => `${p.name.slice(0,3)} ${p.hp}/${p.maxHp}`).join('  ');
       ui.drawText(ctx, `Party: ${partyStr}`, W - 16, H - 22, {
         font: cfg.ui.hudFont, color: cfg.ui.hudColor, align: 'right', baseline: 'middle',
       });
+
+      // Top progress chip
+      const cleared = ['b1','b2','b3'].filter(id => State.world.bossesCleared[id]).length;
+      ui.drawText(ctx, `Bosses cleared: ${cleared} / 3`, 16, 14, {
+        font: cfg.ui.hudFont, color: '#ffdd66', baseline: 'middle',
+      });
+      // Random-encounter "danger" hint
+      if (zone && this._encCooldown <= 0) {
+        const danger = Math.min(1, this._encTimer / 8);
+        ctx.fillStyle = `rgba(255, ${Math.round(180 - danger * 140)}, 80, 0.85)`;
+        ctx.fillRect(W - 116, 8, 100 * danger, 4);
+        ctx.strokeStyle = '#553300'; ctx.lineWidth = 1;
+        ctx.strokeRect(W - 116, 8, 100, 4);
+        ui.drawText(ctx, 'Ambush risk', W - 16, 14, {
+          font: '11px monospace', color: '#ffcc88', align: 'right', baseline: 'middle',
+        });
+      }
+    }
+
+    _isInCastle() {
+      const cs = this._cs;
+      const col = Math.round(this._player.x / cs + (WORLD_COLS - 1) / 2);
+      const row = Math.round(this._player.z / cs + (WORLD_ROWS - 1) / 2);
+      return col >= 4 && col <= 12 && row >= 2 && row <= 7;
     }
 
     destroy(engine) {
@@ -1169,21 +1524,47 @@
 
     _onComplete(result) {
       if (result === 'victory') {
+        // Sync HP back to persistent party
         State.party.forEach(p => {
           const battleU = this._units.find(u => u.id === p.id);
           if (battleU) { p.hp = battleU.hp; p.dead = battleU.dead; }
         });
-        State.party.forEach(p => { if (!p.dead) p.hp = Math.min(p.maxHp, p.hp + 6); });
-        State.chapterIdx = this._chapter.nextChapter !== null
-          ? this._chapter.nextChapter
-          : State.chapterIdx + 1;
+        // Heal a little between fights
+        State.party.forEach(p => { if (!p.dead) p.hp = Math.min(p.maxHp, p.hp + 4); });
+
+        // Update progression: random encounter vs boss vs legacy chapter
+        const ch = this._chapter;
+        if (ch._isBoss && State.world) {
+          State.world.bossesCleared[ch._bossId] = true;
+        } else if (ch._isEncounter && State.world) {
+          State.world.encountersWonByZone[ch._zoneId] =
+            (State.world.encountersWonByZone[ch._zoneId] || 0) + 1;
+        } else {
+          // Legacy linear-chapter behaviour kept for completeness
+          State.chapterIdx = ch.nextChapter !== null
+            ? ch.nextChapter
+            : State.chapterIdx + 1;
+        }
+
         this._audio.play('victory');
         this._phase = PHASE.OUTRO;
-        this._dialogue.start(this._chapter.victory);
+        this._dialogue.start(ch.victory || []);
         const off = this._engine.events.on('dialogue:end', () => {
           off();
+          // Final-boss kill -> finale + victory scene
+          if (ch._isFinalBoss) {
+            this._dialogue.start(DATA().finale);
+            const off2 = this._engine.events.on('dialogue:end', () => {
+              off2();
+              this._scenes.replaceWithTransition(new VictoryScene3D(),
+                { type: 'iris', duration: 1.0, color: '#000000' });
+            });
+            return;
+          }
+          // Otherwise: drop the player back into the open world at the spot
+          // where they triggered the fight.
           this._scenes.replaceWithTransition(new TownScene3D(),
-            { type: 'fade', duration: 0.7, color: '#000000' });
+            { type: 'fade', duration: 0.6, color: '#000000' });
         });
       } else {
         this._audio.play('defeat');
