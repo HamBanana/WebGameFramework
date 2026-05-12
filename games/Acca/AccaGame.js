@@ -379,7 +379,7 @@
       // Hold the camera zoomed in long enough for money animations to play out,
       // then zoom out and hold the board view for betweenTurnsHold seconds.
       // MoneyAnimations.FLOAT_LIFETIME_MS is the floating-text lifetime (ms).
-      const animHoldSec = (A.MoneyAnimations && A.MoneyAnimations.FLOAT_LIFETIME_MS)
+      const animHoldSec = (A.MoneyAnimations && A.MoneyAnimations.FLOAT_LIFETIME_MS != null)
         ? A.MoneyAnimations.FLOAT_LIFETIME_MS / 1000
         : 1.7;
       this._zoomOutTimer      = animHoldSec;

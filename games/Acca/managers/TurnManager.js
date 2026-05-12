@@ -1351,13 +1351,23 @@
           } else {
             hint = '';
           }
+          // Upkeep cost so players see running cost before committing.
+          const up = cfg.upkeep || {};
+          const flat = up.flatCashPerStructure || 0;
+          const resUp = [];
+          if (entry.type === 'house')           { if (up.houseFood) resUp.push(`${up.houseFood}food`); if (up.houseWater) resUp.push(`${up.houseWater}water`); if (up.houseElectricity) resUp.push(`${up.houseElectricity}elec`); }
+          else if (entry.type === 'shop')        { if (up.shopElectricity)     resUp.push(`${up.shopElectricity}elec`); }
+          else if (entry.type === 'factory')     { if (up.factoryOil) resUp.push(`${up.factoryOil}oil`); if (up.factoryCoal) resUp.push(`${up.factoryCoal}coal`); }
+          else if (entry.type === 'police_station') { if (up.policeElectricity) resUp.push(`${up.policeElectricity}elec`); }
+          else if (entry.type === 'teleporter')  { if (up.teleporterElectricity) resUp.push(`${up.teleporterElectricity}elec`); }
+          const upkeepStr = `upkeep $${flat}${resUp.length ? '+'+resUp.join('+') : ''}/turn`;
           // Resource cost suffix — appears alongside the cash cost so the
           // material requirement is visible upfront.
           const resCost = entry.resourceCost
             ? ' + ' + Object.entries(entry.resourceCost).map(([r, q]) => `${q} ${r}`).join(', ')
             : '';
           const cost = `Build ${entry.label} ($${entry.cost}${resCost})`;
-          const tail = hint ? ` — ${hint}` : '';
+          const tail = hint ? ` — ${hint}  ·  ${upkeepStr}` : `  ·  ${upkeepStr}`;
           let reason = '';
           if (!cashOk)       reason = `  — need $${entry.cost - p.money}`;
           else if (missing)  reason = `  — need ${missing.missing} ${missing.res}`;

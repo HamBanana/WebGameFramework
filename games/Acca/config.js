@@ -50,7 +50,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 2,
+  "numberOfPlayers": 4,
   "startingMoney": 1500,
   "startingResources": {
     "wood": 0,
@@ -72,8 +72,8 @@
   "mode": "competitive",
   "catchUp": {
     "enabled": true,
-    "threshold": 0.55,
-    "amount": 120
+    "threshold": 0.35,
+    "amount": 60
   },
   "cooperative": {
     "targetMultiplier": 2.5,
@@ -83,7 +83,7 @@
     "threatPerLowHappiness": 1
   },
   "property": {
-    "basePrice": 200,
+    "basePrice": 300,
     "baseRent": 30,
     "baseRentRate": 0.15,
     "mayorBonus": 50,
@@ -241,9 +241,9 @@
       "teleporterElectricity": 1,
       "vaultElectricity": 0,
       "shortagePenalty": 4,
-      "flatCashPerStructure": 5,
-      "noBuildPenalty": 20,
-      "noBuildPenaltyAfterTurn": 20
+      "flatCashPerStructure": 7,
+      "noBuildPenalty": 30,
+      "noBuildPenaltyAfterTurn": 30
     }
   },
   "market": {
@@ -265,7 +265,7 @@
       "coal": 40,
       "oil": 80
     },
-    "sellSpread": 1.0,
+    "sellSpread": 1,
     "defaultStockBasis": 12,
     "factoryDumpShare": 0.5,
     "cellMarketShare": 0.5,
@@ -631,7 +631,7 @@
     }
   },
   "turn": {
-    "rollDuration": 1.4,
+    "rollDuration": 0.4,
     "moveStepDelay": 0
   },
   "audio": {

@@ -25,19 +25,31 @@
       if (cap > 0 && game.turnCounter >= cap && live.length > 0) {
         const sorted = live.slice().sort((a, b) => game.netWorth(b) - game.netWorth(a));
         game.log(`Turn cap (${cap}) reached — ${sorted[0].name} wins by net worth!`);
+        game.endReason = 'turncap';
         return sorted[0];
       }
 
+      const setReason = (winner, byTarget) => {
+        if (winner) game.endReason = byTarget ? 'networth' : 'laststanding';
+        return winner;
+      };
+
       switch (w.type) {
-        case 'MoneyOnHand':
-          return game.players.find(p => p.money >= w.target) || lastStanding;
+        case 'MoneyOnHand': {
+          const byT = game.players.find(p => p.money >= w.target);
+          return setReason(byT || lastStanding, !!byT);
+        }
         case 'NetWorth':
-        case 'TotalValue':
-          return game.players.find(p => game.netWorth(p) >= w.target) || lastStanding;
-        case 'Level':
-          return game.players.find(p => p.level >= w.target) || lastStanding;
+        case 'TotalValue': {
+          const byT = game.players.find(p => game.netWorth(p) >= w.target);
+          return setReason(byT || lastStanding, !!byT);
+        }
+        case 'Level': {
+          const byT = game.players.find(p => p.level >= w.target);
+          return setReason(byT || lastStanding, !!byT);
+        }
         case 'LastManStanding':
-          return lastStanding;
+          return setReason(lastStanding, false);
         case 'NetWorthOrLastStanding':
         default: {
           const target = w.target || 50000;
@@ -51,7 +63,7 @@
             game.netWorth(p) >= target &&
             (p.ownedStructures && p.ownedStructures.length > 0)
           );
-          return byWealth || lastStanding;
+          return setReason(byWealth || lastStanding, !!byWealth);
         }
       }
     }
