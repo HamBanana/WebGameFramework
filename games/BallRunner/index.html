@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ball Runner</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; user-select: none; }
+canvas { display: block; cursor: crosshair; border: 2px solid #333; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = 1280;
+canvas.height = 640;
+
+// ── Input ─────────────────────────────────────────────────────────────────
+const keys = {};
+const mouse = { x: 640, y: 320, down: false, pressed: false };
+document.addEventListener('keydown', e => { keys[e.code] = true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+canvas.addEventListener('mousemove', e => { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
+canvas.addEventListener('mousedown', e => { if (e.button === 0) { mouse.down = true; mouse.pressed = true; } });
+canvas.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── Physics constants ─────────────────────────────────────────────────────
+const GRAVITY = 3500;          // ups²  (reaches ~1000 ups terminal quickly)
+const TERMINAL_VEL = 1000;     // ups
+const PLAYER_SPEED = 280;      // horizontal accel input
+const MAX_VX = 520;            // horizontal cap (ups)
+const JUMP_VEL = 680;          // initial jump ups
+const PLAYER_R = 20;           // radius px
+const FRICTION = 0.82;         // ground friction per frame
+
+// ── Weapon specs ──────────────────────────────────────────────────────────
+const WEAPONS = {
+  rocket:  { speed: 900, explodeR: 110, knockback: 1100, color: '#ff4422', r: 7 },
+  grenade: { speed: 560, explodeR: 130, knockback: 900,  color: '#44ff22', r: 6, fuse: 3, bounce: true },
+  plasma:  { speed: 1400, explodeR: 55,  kbR: 200, knockback: 600, color: '#cc44ff', r: 4, auto: true, rof: 0.06 },
+};
+
+// ── Levels ────────────────────────────────────────────────────────────────
+// All coords in world space. y increases downward. Canvas view = 1280×640.
+const PICKUP_S = 22;        // half-size of pickup square (full square is 44×44)
+const PICKUP_FULL = PICKUP_S * 2;
+// Pickup y so the square sits flush on top of a platform at platform_y.
+const pkY = (platformY) => platformY - PICKUP_FULL - 2;
+
+const LEVELS = [
+  {
+    name: 'SPEEDRUN',
+    worldW: 9200,
+    worldH: 960,
+    spawn: { x: 80, y: 700 },
+    goal: { x: 8900, y: 770, w: 80, h: 130 },
+    platforms: [
+      // Continuous safety floor — runs the whole map
+      { x: 0,    y: 900, w: 9200, h: 60 },
+      // Section 1 — Spawn ground
+      { x: 0,    y: 740, w: 600,  h: 30 },
+      // Section 2 — Stair climb up to the high plateau
+      { x: 720,  y: 700, w: 180,  h: 25 },
+      { x: 970,  y: 620, w: 180,  h: 25 },
+      { x: 1220, y: 540, w: 180,  h: 25 },
+      { x: 1470, y: 460, w: 180,  h: 25 },
+      // Section 3 — HIGH PLATEAU (drop-launch setup)
+      { x: 1700, y: 380, w: 850,  h: 30 },
+      // Section 4 — Landing platform (directly beneath plateau for a straight drop)
+      { x: 2300, y: 620, w: 900,  h: 30 },
+      // Section 5 — Tall wall blocking progress (needs double-rocket combo)
+      { x: 3300, y: 340, w: 400,  h: 30 },   // wall top — landing target
+      { x: 3300, y: 370, w: 30,   h: 530 },  // vertical wall down to the floor
+      // Section 6 — Plateau past the wall
+      { x: 3700, y: 340, w: 500,  h: 30 },
+      // Section 7 — Stepped descent
+      { x: 4450, y: 460, w: 200,  h: 25 },
+      { x: 4700, y: 560, w: 200,  h: 25 },
+      { x: 4950, y: 660, w: 200,  h: 25 },
+      { x: 5200, y: 760, w: 300,  h: 25 },
+      // Section 8 — Plasma climb (open zigzag)
+      { x: 5550, y: 760, w: 350,  h: 25 },   // base
+      { x: 5570, y: 620, w: 130,  h: 25 },   // step 1
+      { x: 5770, y: 500, w: 130,  h: 25 },   // step 2
+      { x: 5570, y: 380, w: 130,  h: 25 },   // step 3
+      { x: 5770, y: 260, w: 280,  h: 25 },   // top landing
+      // Section 9 — Long elevated run + descent
+      { x: 6100, y: 260, w: 1100, h: 25 },
+      { x: 7250, y: 380, w: 200,  h: 25 },
+      { x: 7500, y: 500, w: 200,  h: 25 },
+      { x: 7750, y: 620, w: 200,  h: 25 },
+      { x: 8000, y: 740, w: 300,  h: 25 },
+    ],
+    pickups: [
+      { x: 200,  y: pkY(740), type: 'rocket'  },
+      { x: 770,  y: pkY(700), type: 'grenade' },
+      { x: 1020, y: pkY(620), type: 'rocket'  },
+      { x: 1270, y: pkY(540), type: 'grenade' },
+      { x: 1520, y: pkY(460), type: 'rocket'  },
+      { x: 1800, y: pkY(380), type: 'rocket'  },
+      { x: 2050, y: pkY(380), type: 'rocket'  },
+      { x: 2250, y: pkY(380), type: 'grenade' },
+      { x: 2450, y: pkY(380), type: 'rocket'  },
+      { x: 2450, y: pkY(620), type: 'rocket'  },
+      { x: 2750, y: pkY(620), type: 'grenade' },
+      { x: 3050, y: pkY(620), type: 'rocket'  },
+      { x: 3500, y: pkY(340), type: 'rocket'  },
+      { x: 3950, y: pkY(340), type: 'plasma'  },
+      { x: 5050, y: pkY(660), type: 'grenade' },
+      { x: 5700, y: pkY(760), type: 'plasma'  },
+      { x: 5870, y: pkY(260), type: 'rocket'  },
+      { x: 7300, y: pkY(380), type: 'grenade' },
+      { x: 7800, y: pkY(620), type: 'plasma'  },
+      { x: 8400, y: pkY(900), type: 'rocket'  },
+    ],
+  },
+
+  // ── TOWER — focused on vertical space ─────────────────────────────────
+  {
+    name: 'TOWER',
+    worldW: 1280,
+    worldH: 2800,
+    spawn: { x: 80, y: 2620 },
+    goal: { x: 560, y: 130, w: 80, h: 130 },
+    platforms: [
+      // Continuous safety floor
+      { x: 0, y: 2740, w: 1280, h: 60 },
+      // Spawn ground
+      { x: 0, y: 2680, w: 420,  h: 30 },
+
+      // First climb — easy jumps (60-70px gaps, no weapons needed)
+      { x: 500,  y: 2620, w: 160, h: 25 },
+      { x: 730,  y: 2560, w: 160, h: 25 },
+      { x: 960,  y: 2500, w: 160, h: 25 },
+      { x: 750,  y: 2440, w: 160, h: 25 },
+      { x: 500,  y: 2380, w: 160, h: 25 },
+      { x: 250,  y: 2320, w: 160, h: 25 },
+
+      // Rocket-jump section — 130-140px gaps require weapon-assisted leaps
+      { x: 100,  y: 2180, w: 240, h: 25 },
+      { x: 500,  y: 2050, w: 240, h: 25 },
+      { x: 900,  y: 1920, w: 240, h: 25 },
+      { x: 500,  y: 1790, w: 240, h: 25 },
+      { x: 100,  y: 1660, w: 240, h: 25 },
+
+      // Plasma climb tower — zigzag with 130px vertical gaps
+      { x: 100,  y: 1520, w: 130, h: 25 },
+      { x: 350,  y: 1390, w: 130, h: 25 },
+      { x: 100,  y: 1260, w: 130, h: 25 },
+      { x: 350,  y: 1130, w: 130, h: 25 },
+      { x: 100,  y: 1000, w: 130, h: 25 },
+      { x: 350,  y: 870,  w: 130, h: 25 },
+
+      // Mid landing — catch your breath
+      { x: 100,  y: 760,  w: 500, h: 25 },
+
+      // Higher rocket-jump section — alternating sides
+      { x: 750,  y: 640,  w: 300, h: 25 },
+      { x: 200,  y: 510,  w: 300, h: 25 },
+      { x: 750,  y: 380,  w: 300, h: 25 },
+
+      // Goal platform
+      { x: 450,  y: 260,  w: 400, h: 25 },
+    ],
+    pickups: [
+      // Spawn area
+      { x: 200, y: pkY(2680), type: 'rocket'  },
+      // Stair tops
+      { x: 540, y: pkY(2620), type: 'grenade' },
+      { x: 990, y: pkY(2500), type: 'rocket'  },
+      { x: 290, y: pkY(2320), type: 'rocket'  },
+      // Rocket-jump section
+      { x: 160, y: pkY(2180), type: 'rocket'  },
+      { x: 560, y: pkY(2050), type: 'rocket'  },
+      { x: 960, y: pkY(1920), type: 'grenade' },
+      { x: 560, y: pkY(1790), type: 'rocket'  },
+      { x: 160, y: pkY(1660), type: 'plasma'  },
+      // Plasma tower — refill at top
+      { x: 380, y: pkY(870),  type: 'plasma'  },
+      // Mid landing
+      { x: 300, y: pkY(760),  type: 'rocket'  },
+      // Upper section
+      { x: 820, y: pkY(640),  type: 'rocket'  },
+      { x: 270, y: pkY(510),  type: 'grenade' },
+      { x: 820, y: pkY(380),  type: 'rocket'  },
+    ],
+  },
+];
+
+// Mutable per-level state (populated by loadLevel)
+let WORLD_W, WORLD_H, platforms, pickupDefs, GOAL, BOUNDS, allPlatforms, currentLevel = 0;
+
+function loadLevel(idx) {
+  const lvl = LEVELS[((idx % LEVELS.length) + LEVELS.length) % LEVELS.length];
+  currentLevel = LEVELS.indexOf(lvl);
+  WORLD_W = lvl.worldW;
+  WORLD_H = lvl.worldH;
+  platforms = lvl.platforms;
+  pickupDefs = lvl.pickups;
+  GOAL = lvl.goal;
+  BOUNDS = [
+    { x: -60,     y: 0,       w: 60,      h: WORLD_H }, // left wall
+    { x: WORLD_W, y: 0,       w: 60,      h: WORLD_H }, // right wall
+    { x: 0,       y: -60,     w: WORLD_W, h: 60 },      // top ceiling
+  ];
+  allPlatforms = [...platforms, ...BOUNDS];
+}
+loadLevel(0);
+
+// ── Game state ─────────────────────────────────────────────────────────────
+let player, projectiles, particles, pickups, camera;
+let timer, bestTime, gameState, plasmaTimer, onGround;
+let jumpBufferTimer = 0;
+
+const WEAPON_ORDER = ['rocket', 'grenade', 'plasma'];
+const AMMO_PER_PICKUP = { rocket: 6, grenade: 8, plasma: 120 };
+const FIRE_COOLDOWN = { rocket: 0, grenade: 0.7, plasma: 0 }; // seconds between shots (plasma uses its own rof)
+
+function initGame() {
+  const lvl = LEVELS[currentLevel];
+  player = {
+    x: lvl.spawn.x, y: lvl.spawn.y, vx: 0, vy: 0,
+    weapon: null,
+    ammo: { rocket: 0, grenade: 0, plasma: 0 },
+    fireTimer: { rocket: 0, grenade: 0, plasma: 0 },
+    r: PLAYER_R, dead: false
+  };
+  projectiles = [];
+  particles = [];
+  pickups = pickupDefs.map(p => ({ ...p, collected: false }));
+  camera = { x: 0, y: 0 };
+  timer = 0;
+  plasmaTimer = 0;
+  onGround = false;
+  jumpBufferTimer = 0;
+  gameState = 'playing'; // 'playing' | 'won' | 'dead'
+}
+bestTime = bestTime || {}; // map from level name → best time
+initGame();
+
+// ── Collision helpers ──────────────────────────────────────────────────────
+function circleVsRect(cx, cy, cr, rx, ry, rw, rh) {
+  const nearX = Math.max(rx, Math.min(cx, rx + rw));
+  const nearY = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nearX, dy = cy - nearY;
+  return dx * dx + dy * dy < cr * cr;
+}
+
+function resolveCircleRect(p, rect) {
+  const nearX = Math.max(rect.x, Math.min(p.x, rect.x + rect.w));
+  const nearY = Math.max(rect.y, Math.min(p.y, rect.y + rect.h));
+  const dx = p.x - nearX, dy = p.y - nearY;
+  const dist2 = dx * dx + dy * dy;
+  if (dist2 >= p.r * p.r || dist2 === 0) return null;
+  const dist = Math.sqrt(dist2);
+  const nx = dx / dist, ny = dy / dist;
+  const pen = p.r - dist;
+  return { nx, ny, pen };
+}
+
+function segmentVsRect(x0, y0, x1, y1, rect) {
+  // Simple AABB segment check: expand rect by projectile radius omitted for speed
+  const minX = Math.min(x0, x1), maxX = Math.max(x0, x1);
+  const minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+  if (maxX < rect.x || minX > rect.x + rect.w) return false;
+  if (maxY < rect.y || minY > rect.y + rect.h) return false;
+  return true;
+}
+
+function pointInRect(x, y, r) {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+// ── Explosion ──────────────────────────────────────────────────────────────
+function explode(ex, ey, spec, color) {
+  // Shockwave particles
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    const spd = 300 + Math.random() * 500;
+    particles.push({ x: ex, y: ey, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+      life: 0.4 + Math.random() * 0.3, maxLife: 0.7, r: 4 + Math.random() * 5, color });
+  }
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2, spd = 80 + Math.random() * 200;
+    particles.push({ x: ex + (Math.random()-0.5)*40, y: ey + (Math.random()-0.5)*40,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 200,
+      life: 0.6 + Math.random()*0.5, maxLife: 1.1, r: 6 + Math.random()*8, color: '#ffcc44' });
+  }
+  // Flash ring
+  particles.push({ x: ex, y: ey, vx: 0, vy: 0, life: 0.12, maxLife: 0.12,
+    r: spec.explodeR, color: '#ffffff', ring: true });
+
+  // Knockback player
+  const kbR = spec.kbR || spec.explodeR;
+  const dx = player.x - ex, dy = player.y - ey;
+  const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+  if (dist < kbR + PLAYER_R + 30) {
+    const falloff = 1 - Math.max(0, (dist - PLAYER_R) / (kbR + 30));
+    const force = spec.knockback * falloff;
+    player.vx += (dx / dist) * force;
+    player.vy += (dy / dist) * force;
+    player.vy = Math.max(player.vy, -2400); // cap upward kick (leaves headroom for rocket-stacking)
+  }
+}
+
+// ── Firing ────────────────────────────────────────────────────────────────
+function fire() {
+  if (!player.weapon || player.dead) return;
+  const spec = WEAPONS[player.weapon];
+  // Direction toward mouse in world space
+  const wx = camera.x + mouse.x;
+  const wy = camera.y + mouse.y;
+  const dx = wx - player.x, dy = wy - player.y;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  const nvx = dx / len, nvy = dy / len;
+
+  if (player.ammo[player.weapon] <= 0) return;
+  if (player.fireTimer[player.weapon] > 0) return;  // cooldown still active
+  player.ammo[player.weapon]--;
+  player.fireTimer[player.weapon] = FIRE_COOLDOWN[player.weapon];
+
+  if (player.weapon === 'rocket') {
+    projectiles.push({ type: 'rocket', x: player.x, y: player.y,
+      vx: nvx * spec.speed, vy: nvy * spec.speed, r: spec.r, color: spec.color });
+    // Recoil
+    player.vx -= nvx * 180;
+    player.vy -= nvy * 180;
+  } else if (player.weapon === 'grenade') {
+    projectiles.push({ type: 'grenade', x: player.x, y: player.y,
+      vx: nvx * spec.speed, vy: nvy * spec.speed, r: spec.r, color: spec.color,
+      fuse: spec.fuse, bounces: 6 });
+  } else if (player.weapon === 'plasma') {
+    projectiles.push({ type: 'plasma', x: player.x, y: player.y,
+      vx: nvx * spec.speed + player.vx * 0.3,
+      vy: nvy * spec.speed + player.vy * 0.3,
+      r: spec.r, color: spec.color });
+    // Small recoil
+    player.vx -= nvx * 55;
+    player.vy -= nvy * 55;
+  }
+}
+
+// Switch to a weapon if the player has ammo for it. Returns true on success.
+function switchWeapon(w) {
+  if (!WEAPON_ORDER.includes(w)) return false;
+  if (player.ammo[w] <= 0) return false;
+  player.weapon = w;
+  plasmaTimer = 0;
+  return true;
+}
+
+// Cycle to the next/previous weapon that has ammo.
+function cycleWeapon(dir) {
+  const start = WEAPON_ORDER.indexOf(player.weapon);
+  for (let i = 1; i <= WEAPON_ORDER.length; i++) {
+    const idx = ((start + dir * i) % WEAPON_ORDER.length + WEAPON_ORDER.length) % WEAPON_ORDER.length;
+    if (player.ammo[WEAPON_ORDER[idx]] > 0) {
+      switchWeapon(WEAPON_ORDER[idx]);
+      return;
+    }
+  }
+}
+
+// ── Update ────────────────────────────────────────────────────────────────
+let lastT = null;
+function update(ts) {
+  if (!lastT) lastT = ts;
+  let dt = Math.min((ts - lastT) / 1000, 0.05);
+  lastT = ts;
+
+  if (gameState === 'playing') {
+    timer += dt;
+    updatePlayer(dt);
+    updateProjectiles(dt);
+    updateParticles(dt);
+    checkPickups();
+    checkGoal();
+  }
+
+  updateCamera();
+  draw();
+  mouse.pressed = false;
+  requestAnimationFrame(update);
+}
+
+function updatePlayer(dt) {
+  if (player.dead) return;
+
+  // Decrement fire cooldowns
+  for (const w of WEAPON_ORDER) {
+    if (player.fireTimer[w] > 0) player.fireTimer[w] -= dt;
+  }
+
+  // Horizontal movement
+  const moving = keys['KeyA'] || keys['KeyD'];
+  if (keys['KeyA']) player.vx -= PLAYER_SPEED * 8 * dt;
+  if (keys['KeyD']) player.vx += PLAYER_SPEED * 8 * dt;
+  if (!moving) player.vx *= Math.pow(onGround ? FRICTION : 0.94, dt * 60);
+  player.vx = Math.max(-MAX_VX, Math.min(MAX_VX, player.vx));
+
+  // Gravity
+  if (player.vy < TERMINAL_VEL) {
+    player.vy += GRAVITY * dt;
+    if (player.vy > TERMINAL_VEL) player.vy = TERMINAL_VEL;
+  }
+
+  // Jump
+  jumpBufferTimer -= dt;
+  if ((keys['KeyW'] || keys['Space']) && onGround) {
+    player.vy = -JUMP_VEL;
+    onGround = false;
+  }
+
+  // Integrate
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  // Platform collisions
+  onGround = false;
+  for (const plat of allPlatforms) {
+    const res = resolveCircleRect(player, plat);
+    if (!res) continue;
+    player.x += res.nx * res.pen;
+    player.y += res.ny * res.pen;
+    // Bounce off
+    const dot = player.vx * res.nx + player.vy * res.ny;
+    if (dot < 0) {
+      player.vx -= dot * res.nx;
+      player.vy -= dot * res.ny;
+    }
+    if (res.ny < -0.5) {
+      onGround = true;
+      player.vy = Math.min(player.vy, 0);
+    }
+    if (res.ny > 0.5) player.vy = Math.max(player.vy, 0); // hit ceiling
+  }
+
+  // Death (fell below world or into void)
+  if (player.y > WORLD_H + 200) die();
+
+  // Plasma auto-fire
+  if (player.weapon === 'plasma' && mouse.down && player.ammo.plasma > 0) {
+    plasmaTimer -= dt;
+    if (plasmaTimer <= 0) {
+      fire();
+      plasmaTimer = WEAPONS.plasma.rof;
+    }
+  }
+  // Single-shot fire on click
+  if (mouse.pressed && player.weapon && player.weapon !== 'plasma') {
+    fire();
+  }
+  // Auto-cycle away from an empty weapon
+  if (player.weapon && player.ammo[player.weapon] <= 0) cycleWeapon(1);
+}
+
+function updateProjectiles(dt) {
+  const spec_grenade = WEAPONS.grenade;
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    const prevX = p.x, prevY = p.y;
+
+    if (p.type === 'grenade') {
+      p.vy += GRAVITY * dt;
+      if (p.vy > TERMINAL_VEL) p.vy = TERMINAL_VEL;
+      p.fuse -= dt;
+      if (p.fuse <= 0) {
+        explode(p.x, p.y, WEAPONS.grenade, '#44ff22');
+        projectiles.splice(i, 1);
+        continue;
+      }
+    }
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    // Collide with platforms
+    let hit = false;
+    for (const plat of allPlatforms) {
+      if (!circleVsRect(p.x, p.y, p.r + 2, plat.x, plat.y, plat.w, plat.h)) continue;
+
+      if (p.type === 'grenade') {
+        // Grenades always bounce — they only ever explode on the fuse, never
+        // on impact (otherwise rapid bouncing could detonate inside the cooldown).
+        const nearX = Math.max(plat.x, Math.min(p.x, plat.x + plat.w));
+        const nearY = Math.max(plat.y, Math.min(p.y, plat.y + plat.h));
+        const dx = p.x - nearX, dy = p.y - nearY;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          p.vx *= -0.6;
+          p.x = prevX;
+        } else {
+          p.vy *= -0.6;
+          p.vx *= 0.8;
+          p.y = prevY;
+        }
+        break;
+      } else {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) {
+      const spec = WEAPONS[p.type];
+      explode(p.x, p.y, spec, p.color);
+      projectiles.splice(i, 1);
+    }
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    if (!p.ring) {
+      p.vx *= 0.97;
+      p.vy += 400 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+    }
+  }
+}
+
+function checkPickups() {
+  for (const pk of pickups) {
+    if (pk.collected) continue;
+    const dx = player.x - (pk.x + PICKUP_S), dy = player.y - (pk.y + PICKUP_S);
+    if (dx*dx + dy*dy < (PLAYER_R + PICKUP_S) * (PLAYER_R + PICKUP_S)) {
+      pk.collected = true;
+      player.ammo[pk.type] += AMMO_PER_PICKUP[pk.type];
+      player.weapon = pk.type;  // auto-switch to the picked-up weapon
+      plasmaTimer = 0;
+    }
+  }
+}
+
+function checkGoal() {
+  if (circleVsRect(player.x, player.y, player.r, GOAL.x, GOAL.y, GOAL.w, GOAL.h)) {
+    gameState = 'won';
+    const name = LEVELS[currentLevel].name;
+    if (bestTime[name] === undefined || timer < bestTime[name]) bestTime[name] = timer;
+  }
+}
+
+function die() {
+  if (player.dead) return;
+  player.dead = true;
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * Math.PI * 2, spd = 150 + Math.random() * 300;
+    particles.push({ x: player.x, y: player.y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 100,
+      life: 0.8 + Math.random()*0.4, maxLife: 1.2, r: 5 + Math.random()*8, color: '#88aaff' });
+  }
+  setTimeout(() => initGame(), 1200);
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────
+function updateCamera() {
+  const tx = player.x - canvas.width * 0.35;
+  const ty = player.y - canvas.height * 0.5;
+  camera.x += (tx - camera.x) * 0.1;
+  camera.y += (ty - camera.y) * 0.1;
+  camera.x = Math.max(0, Math.min(WORLD_W - canvas.width, camera.x));
+  camera.y = Math.max(0, Math.min(WORLD_H - canvas.height, camera.y));
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────
+const PICKUP_COLORS = { rocket: '#ff3311', grenade: '#33ff44', plasma: '#cc44ff' };
+const PICKUP_GLOW   = { rocket: '#ff6633', grenade: '#66ff66', plasma: '#ee88ff' };
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Sky gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, '#0a0a1a');
+  grad.addColorStop(1, '#111130');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+
+  // ── Platforms ──
+  for (const plat of platforms) {
+    ctx.fillStyle = '#2a3a4a';
+    ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+    ctx.fillStyle = '#3a5a6a';
+    ctx.fillRect(plat.x, plat.y, plat.w, 4);
+    ctx.fillStyle = '#1a2a35';
+    ctx.fillRect(plat.x, plat.y + plat.h - 4, plat.w, 4);
+  }
+
+  // ── Goal ──
+  ctx.fillStyle = '#ffdd00';
+  ctx.fillRect(GOAL.x, GOAL.y, GOAL.w, GOAL.h);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 18px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('GOAL', GOAL.x + GOAL.w / 2, GOAL.y + GOAL.h / 2 + 6);
+
+  // ── Pickups ──
+  const t = performance.now() / 1000;
+  for (const pk of pickups) {
+    if (pk.collected) continue;
+    const s = PICKUP_S * 2;
+    const bob = Math.sin(t * 2 + pk.x * 0.01) * 4;
+    const glow = PICKUP_GLOW[pk.type];
+    ctx.save();
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 14 + Math.sin(t * 3) * 4;
+    ctx.fillStyle = PICKUP_COLORS[pk.type];
+    ctx.fillRect(pk.x, pk.y + bob, s, s);
+    ctx.strokeStyle = glow;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pk.x, pk.y + bob, s, s);
+    ctx.restore();
+    // Label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px Courier New';
+    ctx.textAlign = 'center';
+    const label = pk.type === 'rocket' ? 'RKT' : pk.type === 'grenade' ? 'GRN' : 'PLZ';
+    ctx.fillText(label, pk.x + PICKUP_S, pk.y + PICKUP_S + bob + 4);
+  }
+
+  // ── Particles ──
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    if (p.ring) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (1 - alpha + 0.1), 0, Math.PI * 2);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Projectiles ──
+  for (const p of projectiles) {
+    ctx.save();
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    if (p.type === 'grenade') {
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#44ff22';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Fuse indicator
+      const ratio = Math.max(0, p.fuse / WEAPONS.grenade.fuse);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r + 5, -Math.PI/2, -Math.PI/2 + ratio * Math.PI * 2);
+      ctx.strokeStyle = ratio < 0.3 ? '#ff4400' : '#ffcc00';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (p.type === 'rocket') {
+      // Body
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff4422';
+      ctx.fill();
+      // Trail
+      const angle = Math.atan2(p.vy, p.vx);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - Math.cos(angle) * 18, p.y - Math.sin(angle) * 18);
+      ctx.strokeStyle = '#ffaa22';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else {
+      // Plasma bolt
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ee88ff';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ── Player ──
+  if (!player.dead) {
+    ctx.save();
+    ctx.shadowColor = '#6688ff';
+    ctx.shadowBlur = 16;
+    // Body
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    const pg = ctx.createRadialGradient(player.x - 6, player.y - 6, 2, player.x, player.y, player.r);
+    pg.addColorStop(0, '#99bbff');
+    pg.addColorStop(1, '#2244aa');
+    ctx.fillStyle = pg;
+    ctx.fill();
+    ctx.strokeStyle = '#aaccff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Eye (tracks mouse)
+    const wx = camera.x + mouse.x, wy = camera.y + mouse.y;
+    const ex = player.x - wx, ey = player.y - wy;
+    const el = Math.sqrt(ex*ex + ey*ey) || 1;
+    const epx = player.x + (-ex/el) * 8;
+    const epy = player.y + (-ey/el) * 8;
+    ctx.beginPath();
+    ctx.arc(epx, epy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(epx + (-ex/el)*2, epy + (-ey/el)*2, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#112266';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore(); // end camera transform
+
+  // ── HUD ──
+  drawHUD();
+
+  // ── Overlays ──
+  if (gameState === 'won') drawWin();
+}
+
+function drawHUD() {
+  // Level name + Timer
+  const lvlName = LEVELS[currentLevel].name;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(10, 10, 240, 36);
+  ctx.fillStyle = '#88bbff';
+  ctx.font = 'bold 12px Courier New';
+  ctx.textAlign = 'left';
+  ctx.fillText('[' + (currentLevel + 1) + '/' + LEVELS.length + '] ' + lvlName, 18, 24);
+  ctx.fillStyle = '#ffdd66';
+  ctx.font = 'bold 20px Courier New';
+  ctx.fillText(timer.toFixed(2) + 's', 18, 42);
+
+  // Best time + UPS counter
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(10, 50, 240, 56);
+  const best = bestTime[lvlName];
+  ctx.fillStyle = '#66ffcc';
+  ctx.font = '13px Courier New';
+  ctx.fillText('BEST ' + (best === undefined ? '—' : best.toFixed(2) + 's'), 18, 68);
+  // UPS counter (current velocity magnitude and components)
+  const ups = Math.round(Math.sqrt(player.vx * player.vx + player.vy * player.vy));
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 16px Courier New';
+  ctx.fillText(ups + ' ups', 18, 90);
+  ctx.fillStyle = '#888888';
+  ctx.font = '11px Courier New';
+  ctx.fillText('vx ' + Math.round(player.vx) + '  vy ' + Math.round(player.vy), 18, 102);
+
+  // Weapon slots (1/2/3)
+  const slotW = 118, slotH = 50, slotGap = 6;
+  const slotsTotal = slotW * WEAPON_ORDER.length + slotGap * (WEAPON_ORDER.length - 1);
+  let sx = canvas.width - slotsTotal - 10;
+  for (let i = 0; i < WEAPON_ORDER.length; i++) {
+    const w = WEAPON_ORDER[i];
+    const x = sx + i * (slotW + slotGap);
+    const y = 10;
+    const active = player.weapon === w;
+    const hasAmmo = player.ammo[w] > 0;
+    ctx.fillStyle = active ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x, y, slotW, slotH);
+    ctx.strokeStyle = active ? PICKUP_COLORS[w] : (hasAmmo ? '#555' : '#222');
+    ctx.lineWidth = active ? 3 : 1;
+    ctx.strokeRect(x, y, slotW, slotH);
+    ctx.globalAlpha = hasAmmo ? 1.0 : 0.35;
+    ctx.fillStyle = PICKUP_COLORS[w];
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'left';
+    ctx.fillText('[' + (i + 1) + '] ' + w.toUpperCase(), x + 8, y + 18);
+    ctx.fillStyle = '#dddddd';
+    ctx.font = 'bold 18px Courier New';
+    ctx.textAlign = 'right';
+    ctx.fillText('×' + player.ammo[w], x + slotW - 8, y + 40);
+    ctx.globalAlpha = 1;
+  }
+
+  // Controls hint (fades after 10s)
+  if (timer < 10) {
+    const alpha = Math.max(0, 1 - timer / 8);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(canvas.width/2 - 220, canvas.height - 60, 440, 44);
+    ctx.fillStyle = '#cccccc';
+    ctx.font = '14px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('WASD Move/Jump   LMB Fire   1/2/3 or Q Switch   R Reset   N Next Map', canvas.width/2, canvas.height - 32);
+    ctx.globalAlpha = 1;
+  }
+
+  // Persistent reset badge
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(canvas.width - 110, canvas.height - 32, 100, 22);
+  ctx.fillStyle = '#ffaaaa';
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('[R] RESET', canvas.width - 60, canvas.height - 16);
+}
+
+function drawWin() {
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffdd44';
+  ctx.font = 'bold 56px Courier New';
+  ctx.fillText('YOU WIN!', canvas.width/2, canvas.height/2 - 60);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '28px Courier New';
+  ctx.fillText('Time: ' + timer.toFixed(2) + 's', canvas.width/2, canvas.height/2);
+  const best = bestTime[LEVELS[currentLevel].name];
+  if (best !== undefined) {
+    ctx.fillStyle = '#66ffcc';
+    ctx.font = '20px Courier New';
+    ctx.fillText('Best: ' + best.toFixed(2) + 's', canvas.width/2, canvas.height/2 + 38);
+  }
+  ctx.fillStyle = '#aaaaaa';
+  ctx.font = '18px Courier New';
+  ctx.fillText('R: restart    N: next map', canvas.width/2, canvas.height/2 + 90);
+}
+
+// Restart + weapon switching + level switching
+document.addEventListener('keydown', e => {
+  if (e.code === 'KeyR') initGame();
+  if (e.code === 'KeyN') { loadLevel(currentLevel + 1); initGame(); }
+  if (e.code === 'KeyB') { loadLevel(currentLevel - 1); initGame(); }
+  if (e.code === 'Digit1') switchWeapon('rocket');
+  if (e.code === 'Digit2') switchWeapon('grenade');
+  if (e.code === 'Digit3') switchWeapon('plasma');
+  if (e.code === 'KeyQ') cycleWeapon(1);
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cycleWeapon(e.deltaY > 0 ? 1 : -1);
+}, { passive: false });
+canvas.addEventListener('click', () => {
+  if (gameState === 'won') initGame();
+});
+
+requestAnimationFrame(update);
+</script>
+</body>
+</html>

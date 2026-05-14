@@ -50,8 +50,8 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 4,
-  "startingMoney": 1500,
+  "numberOfPlayers": 2,
+  "startingMoney": 1000,
   "startingResources": {
     "wood": 0,
     "steel": 0,
@@ -63,7 +63,7 @@
   },
   "win": {
     "type": "NetWorthOrLastStanding",
-    "target": 5000,
+    "target": 7500,
     "turnCap": 300,
     "tiebreaker": "TotalValue",
     "escalationAfterTurn": 110,
@@ -83,7 +83,7 @@
     "threatPerLowHappiness": 1
   },
   "property": {
-    "basePrice": 300,
+    "basePrice": 200,
     "baseRent": 30,
     "baseRentRate": 0.15,
     "mayorBonus": 50,
