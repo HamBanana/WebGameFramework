@@ -224,6 +224,7 @@ let jumpBufferTimer = 0;
 let coyoteTimer = 0;       // seconds remaining to allow jump after leaving ground
 let jumpPressedTimer = 0;  // seconds remaining to buffer a jump input before landing
 let screenShake = 0;       // pixels of camera shake, decays each frame
+let winDismissArmed = false; // only allow win-screen dismiss after a fresh mouse press
 
 const WEAPON_ORDER = ['rocket', 'grenade', 'plasma'];
 const AMMO_PER_PICKUP = { rocket: 6, grenade: 8, plasma: 120 };
@@ -325,7 +326,7 @@ function explode(ex, ey, spec, color) {
     const force = spec.knockback * falloff;
     player.vx += (dx / dist) * force;
     player.vy += (dy / dist) * force;
-    player.vy = Math.max(player.vy, -2400); // cap upward kick (leaves headroom for rocket-stacking)
+    // No per-explosion cap — simultaneous explosions accumulate their full combined impulse.
   }
 }
 
@@ -345,12 +346,10 @@ function fire() {
   player.ammo[player.weapon]--;
   player.fireTimer[player.weapon] = FIRE_COOLDOWN[player.weapon];
 
+  // Firing itself produces no knockback — only the resulting explosion does.
   if (player.weapon === 'rocket') {
     projectiles.push({ type: 'rocket', x: player.x, y: player.y,
       vx: nvx * spec.speed, vy: nvy * spec.speed, r: spec.r, color: spec.color });
-    // Recoil
-    player.vx -= nvx * 180;
-    player.vy -= nvy * 180;
   } else if (player.weapon === 'grenade') {
     projectiles.push({ type: 'grenade', x: player.x, y: player.y,
       vx: nvx * spec.speed, vy: nvy * spec.speed, r: spec.r, color: spec.color,
@@ -360,9 +359,6 @@ function fire() {
       vx: nvx * spec.speed + player.vx * 0.3,
       vy: nvy * spec.speed + player.vy * 0.3,
       r: spec.r, color: spec.color });
-    // Small recoil
-    player.vx -= nvx * 55;
-    player.vy -= nvy * 55;
   }
 }
 
@@ -402,6 +398,10 @@ function update(ts) {
     checkPickups();
     checkCheckpoints();
     checkGoal();
+  } else if (gameState === 'won') {
+    // Allow dismiss only after a fresh mouse press — ignore a button held over from gameplay.
+    if (!mouse.down) winDismissArmed = true;
+    if (winDismissArmed && mouse.pressed) initGame();
   }
 
   updateCamera();
@@ -595,6 +595,11 @@ function checkGoal() {
     gameState = 'won';
     const name = LEVELS[currentLevel].name;
     if (bestTime[name] === undefined || timer < bestTime[name]) bestTime[name] = timer;
+    // Clear progress for the next attempt: checkpoints reset, next initGame will reset timer.
+    activeCheckpoint = null;
+    checkpointDefs.forEach(c => c.hit = false);
+    // Require a fresh mouse press to dismiss the win screen (so held LMB doesn't auto-skip it).
+    winDismissArmed = false;
   }
 }
 
@@ -751,27 +756,15 @@ function draw() {
     ctx.globalAlpha = 1;
   }
 
-  // ── Projectiles ──
+  // ── Projectiles (non-grenade) ──
+  // Grenades render after the player so the fuse ring stays visible when the ball is standing on one.
   for (const p of projectiles) {
+    if (p.type === 'grenade') continue;
     ctx.save();
     ctx.shadowColor = p.color;
     ctx.shadowBlur = 12;
     ctx.beginPath();
-    if (p.type === 'grenade') {
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = '#44ff22';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      // Fuse indicator
-      const ratio = Math.max(0, p.fuse / WEAPONS.grenade.fuse);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r + 5, -Math.PI/2, -Math.PI/2 + ratio * Math.PI * 2);
-      ctx.strokeStyle = ratio < 0.3 ? '#ff4400' : '#ffcc00';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    } else if (p.type === 'rocket') {
+    if (p.type === 'rocket') {
       // Body
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fillStyle = '#ff4422';
@@ -823,6 +816,29 @@ function draw() {
     ctx.arc(epx + (-ex/el)*2, epy + (-ey/el)*2, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = '#112266';
     ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Grenades (drawn on top of the player so the fuse ring is always visible) ──
+  for (const p of projectiles) {
+    if (p.type !== 'grenade') continue;
+    ctx.save();
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#44ff22';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Fuse indicator
+    const ratio = Math.max(0, p.fuse / WEAPONS.grenade.fuse);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r + 5, -Math.PI/2, -Math.PI/2 + ratio * Math.PI * 2);
+    ctx.strokeStyle = ratio < 0.3 ? '#ff4400' : '#ffcc00';
+    ctx.lineWidth = 2;
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -950,9 +966,6 @@ canvas.addEventListener('wheel', e => {
   e.preventDefault();
   cycleWeapon(e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
-canvas.addEventListener('click', () => {
-  if (gameState === 'won') initGame();
-});
 
 requestAnimationFrame(update);
 </script>
