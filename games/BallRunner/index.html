@@ -6,7 +6,7 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; user-select: none; }
-canvas { display: block; cursor: crosshair; border: 2px solid #333; }
+canvas { display: block; cursor: crosshair; border: 2px solid #333; max-height: calc(100vh - 4px); max-width: 100%; }
 </style>
 </head>
 <body>
@@ -32,9 +32,9 @@ const GRAVITY = 3500;          // ups²  (reaches ~1000 ups terminal quickly)
 const TERMINAL_VEL = 1000;     // ups
 const PLAYER_SPEED = 280;      // horizontal accel input
 const MAX_VX = 520;            // horizontal cap (ups)
-const JUMP_VEL = 680;          // initial jump ups
+const JUMP_VEL = 800;          // initial jump ups
 const PLAYER_R = 20;           // radius px
-const FRICTION = 0.82;         // ground friction per frame
+const FRICTION = 0.88;         // ground friction per frame
 
 // ── Weapon specs ──────────────────────────────────────────────────────────
 const WEAPONS = {
@@ -57,6 +57,10 @@ const LEVELS = [
     worldH: 960,
     spawn: { x: 80, y: 700 },
     goal: { x: 8900, y: 770, w: 80, h: 130 },
+    checkpoints: [
+      { x: 3750, y: 290, w: 40, h: 60 },   // after the wall — Section 6 plateau
+      { x: 6150, y: 210, w: 40, h: 60 },   // top of plasma climb — Section 9 run
+    ],
     platforms: [
       // Continuous safety floor — runs the whole map
       { x: 0,    y: 900, w: 9200, h: 60 },
@@ -72,8 +76,8 @@ const LEVELS = [
       // Section 4 — Landing platform (directly beneath plateau for a straight drop)
       { x: 2300, y: 620, w: 900,  h: 30 },
       // Section 5 — Tall wall blocking progress (needs double-rocket combo)
-      { x: 3300, y: 340, w: 400,  h: 30 },   // wall top — landing target
-      { x: 3300, y: 370, w: 30,   h: 530 },  // vertical wall down to the floor
+      { x: 3300, y: 340, w: 400,  h: 30 },               // wall top — landing target
+      { x: 3300, y: 370, w: 30,   h: 530, wall: true },  // vertical wall down to the floor
       // Section 6 — Plateau past the wall
       { x: 3700, y: 340, w: 500,  h: 30 },
       // Section 7 — Stepped descent
@@ -192,6 +196,7 @@ const LEVELS = [
 
 // Mutable per-level state (populated by loadLevel)
 let WORLD_W, WORLD_H, platforms, pickupDefs, GOAL, BOUNDS, allPlatforms, currentLevel = 0;
+let checkpointDefs, activeCheckpoint; // null = respawn at spawn
 
 function loadLevel(idx) {
   const lvl = LEVELS[((idx % LEVELS.length) + LEVELS.length) % LEVELS.length];
@@ -201,6 +206,8 @@ function loadLevel(idx) {
   platforms = lvl.platforms;
   pickupDefs = lvl.pickups;
   GOAL = lvl.goal;
+  checkpointDefs = (lvl.checkpoints || []).map(c => ({ ...c, hit: false }));
+  activeCheckpoint = null;
   BOUNDS = [
     { x: -60,     y: 0,       w: 60,      h: WORLD_H }, // left wall
     { x: WORLD_W, y: 0,       w: 60,      h: WORLD_H }, // right wall
@@ -214,6 +221,9 @@ loadLevel(0);
 let player, projectiles, particles, pickups, camera;
 let timer, bestTime, gameState, plasmaTimer, onGround;
 let jumpBufferTimer = 0;
+let coyoteTimer = 0;       // seconds remaining to allow jump after leaving ground
+let jumpPressedTimer = 0;  // seconds remaining to buffer a jump input before landing
+let screenShake = 0;       // pixels of camera shake, decays each frame
 
 const WEAPON_ORDER = ['rocket', 'grenade', 'plasma'];
 const AMMO_PER_PICKUP = { rocket: 6, grenade: 8, plasma: 120 };
@@ -231,11 +241,21 @@ function initGame() {
   projectiles = [];
   particles = [];
   pickups = pickupDefs.map(p => ({ ...p, collected: false }));
+  // Respawn at last checkpoint if one was activated; otherwise full reset
+  if (activeCheckpoint) {
+    player.x = activeCheckpoint.x + activeCheckpoint.w / 2;
+    player.y = activeCheckpoint.y - PLAYER_R - 2;
+    // Timer is preserved across checkpoint respawns
+  } else {
+    timer = 0;
+  }
   camera = { x: 0, y: 0 };
-  timer = 0;
   plasmaTimer = 0;
   onGround = false;
   jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  jumpPressedTimer = 0;
+  screenShake = 0;
   gameState = 'playing'; // 'playing' | 'won' | 'dead'
 }
 bestTime = bestTime || {}; // map from level name → best time
@@ -292,6 +312,9 @@ function explode(ex, ey, spec, color) {
   // Flash ring
   particles.push({ x: ex, y: ey, vx: 0, vy: 0, life: 0.12, maxLife: 0.12,
     r: spec.explodeR, color: '#ffffff', ring: true });
+
+  // Screen shake proportional to explosion power
+  screenShake = Math.min(screenShake + (spec.knockback / 1100) * 9, 14);
 
   // Knockback player
   const kbR = spec.kbR || spec.explodeR;
@@ -377,6 +400,7 @@ function update(ts) {
     updateProjectiles(dt);
     updateParticles(dt);
     checkPickups();
+    checkCheckpoints();
     checkGoal();
   }
 
@@ -395,11 +419,16 @@ function updatePlayer(dt) {
   }
 
   // Horizontal movement
+  // Input is capped to MAX_VX in its own direction — but external forces
+  // (rocket knockback, etc.) can push vx past MAX_VX and stay there.
   const moving = keys['KeyA'] || keys['KeyD'];
-  if (keys['KeyA']) player.vx -= PLAYER_SPEED * 8 * dt;
-  if (keys['KeyD']) player.vx += PLAYER_SPEED * 8 * dt;
-  if (!moving) player.vx *= Math.pow(onGround ? FRICTION : 0.94, dt * 60);
-  player.vx = Math.max(-MAX_VX, Math.min(MAX_VX, player.vx));
+  if (keys['KeyA'] && player.vx > -MAX_VX) {
+    player.vx = Math.max(-MAX_VX, player.vx - PLAYER_SPEED * 8 * dt);
+  }
+  if (keys['KeyD'] && player.vx < MAX_VX) {
+    player.vx = Math.min(MAX_VX, player.vx + PLAYER_SPEED * 8 * dt);
+  }
+  if (!moving) player.vx *= Math.pow(onGround ? FRICTION : 0.985, dt * 60);
 
   // Gravity
   if (player.vy < TERMINAL_VEL) {
@@ -407,11 +436,20 @@ function updatePlayer(dt) {
     if (player.vy > TERMINAL_VEL) player.vy = TERMINAL_VEL;
   }
 
-  // Jump
+  // Coyote time: track frames after leaving ground so player can still jump briefly
+  const wasOnGround = onGround;
+
+  // Jump input buffering: queue jump if pressed slightly before landing
+  if (keys['KeyW'] || keys['Space']) jumpPressedTimer = 0.12;
+  jumpPressedTimer = Math.max(0, jumpPressedTimer - dt);
   jumpBufferTimer -= dt;
-  if ((keys['KeyW'] || keys['Space']) && onGround) {
+
+  // Allow jump while on ground OR within coyote window
+  if (jumpPressedTimer > 0 && (onGround || coyoteTimer > 0)) {
     player.vy = -JUMP_VEL;
     onGround = false;
+    coyoteTimer = 0;
+    jumpPressedTimer = 0;
   }
 
   // Integrate
@@ -437,6 +475,11 @@ function updatePlayer(dt) {
     }
     if (res.ny > 0.5) player.vy = Math.max(player.vy, 0); // hit ceiling
   }
+
+  // Coyote time: grant a brief window to jump after walking off a ledge
+  if (wasOnGround && !onGround) coyoteTimer = 0.10;
+  else if (onGround) coyoteTimer = 0;
+  else coyoteTimer = Math.max(0, coyoteTimer - dt);
 
   // Death (fell below world or into void)
   if (player.y > WORLD_H + 200) die();
@@ -531,8 +574,18 @@ function checkPickups() {
     if (dx*dx + dy*dy < (PLAYER_R + PICKUP_S) * (PLAYER_R + PICKUP_S)) {
       pk.collected = true;
       player.ammo[pk.type] += AMMO_PER_PICKUP[pk.type];
-      player.weapon = pk.type;  // auto-switch to the picked-up weapon
+      if (!player.weapon) player.weapon = pk.type;  // only auto-switch if unarmed
       plasmaTimer = 0;
+    }
+  }
+}
+
+function checkCheckpoints() {
+  for (const cp of checkpointDefs) {
+    if (cp.hit) continue;
+    if (circleVsRect(player.x, player.y, player.r, cp.x, cp.y, cp.w, cp.h)) {
+      cp.hit = true;
+      activeCheckpoint = cp;
     }
   }
 }
@@ -564,6 +617,13 @@ function updateCamera() {
   camera.y += (ty - camera.y) * 0.1;
   camera.x = Math.max(0, Math.min(WORLD_W - canvas.width, camera.x));
   camera.y = Math.max(0, Math.min(WORLD_H - canvas.height, camera.y));
+  if (screenShake > 0.2) {
+    camera.x += (Math.random() - 0.5) * screenShake;
+    camera.y += (Math.random() - 0.5) * screenShake * 0.5;
+    screenShake *= 0.82;
+  } else {
+    screenShake = 0;
+  }
 }
 
 // ── Draw ──────────────────────────────────────────────────────────────────
@@ -585,12 +645,59 @@ function draw() {
 
   // ── Platforms ──
   for (const plat of platforms) {
-    ctx.fillStyle = '#2a3a4a';
-    ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-    ctx.fillStyle = '#3a5a6a';
-    ctx.fillRect(plat.x, plat.y, plat.w, 4);
-    ctx.fillStyle = '#1a2a35';
-    ctx.fillRect(plat.x, plat.y + plat.h - 4, plat.w, 4);
+    if (plat.wall) {
+      // Rocket-required wall: dark red with hazard stripe pattern
+      ctx.fillStyle = '#3a1010';
+      ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+      ctx.fillStyle = '#5a1a1a';
+      ctx.fillRect(plat.x, plat.y, plat.w, 4);
+      // Diagonal hazard stripes
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(plat.x, plat.y, plat.w, plat.h);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(200,60,20,0.25)';
+      ctx.lineWidth = 6;
+      for (let s = -plat.h; s < plat.h + plat.w; s += 18) {
+        ctx.beginPath();
+        ctx.moveTo(plat.x + s, plat.y);
+        ctx.lineTo(plat.x + s + plat.h, plat.y + plat.h);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // ↑ RKT label near the base of the wall
+      ctx.fillStyle = '#ff6644';
+      ctx.font = 'bold 11px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('↑ RKT', plat.x + plat.w / 2, plat.y + plat.h - 8);
+    } else {
+      ctx.fillStyle = '#2a3a4a';
+      ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+      ctx.fillStyle = '#3a5a6a';
+      ctx.fillRect(plat.x, plat.y, plat.w, 4);
+      ctx.fillStyle = '#1a2a35';
+      ctx.fillRect(plat.x, plat.y + plat.h - 4, plat.w, 4);
+    }
+  }
+
+  // ── Checkpoints ──
+  const cpT = performance.now() / 1000;
+  for (const cp of checkpointDefs) {
+    const cpColor = cp.hit ? '#00ff88' : '#00aaff';
+    const cpPulse = cp.hit ? 0 : Math.abs(Math.sin(cpT * 2)) * 6;
+    ctx.save();
+    ctx.shadowColor = cpColor;
+    ctx.shadowBlur = 10 + cpPulse;
+    ctx.fillStyle = cp.hit ? 'rgba(0,255,136,0.15)' : 'rgba(0,170,255,0.15)';
+    ctx.fillRect(cp.x, cp.y, cp.w, cp.h);
+    ctx.strokeStyle = cpColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cp.x, cp.y, cp.w, cp.h);
+    ctx.restore();
+    ctx.fillStyle = cpColor;
+    ctx.font = 'bold 10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(cp.hit ? '✓ CP' : 'CP', cp.x + cp.w / 2, cp.y + cp.h / 2 + 4);
   }
 
   // ── Goal ──
@@ -769,7 +876,9 @@ function drawHUD() {
     const hasAmmo = player.ammo[w] > 0;
     ctx.fillStyle = active ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.6)';
     ctx.fillRect(x, y, slotW, slotH);
-    ctx.strokeStyle = active ? PICKUP_COLORS[w] : (hasAmmo ? '#555' : '#222');
+    const lowAmmo = active && hasAmmo && player.ammo[w] <= 2;
+    const flashOn = lowAmmo && Math.floor(performance.now() / 200) % 2 === 0;
+    ctx.strokeStyle = flashOn ? '#ff2200' : (active ? PICKUP_COLORS[w] : (hasAmmo ? '#555' : '#222'));
     ctx.lineWidth = active ? 3 : 1;
     ctx.strokeRect(x, y, slotW, slotH);
     ctx.globalAlpha = hasAmmo ? 1.0 : 0.35;
@@ -829,7 +938,7 @@ function drawWin() {
 
 // Restart + weapon switching + level switching
 document.addEventListener('keydown', e => {
-  if (e.code === 'KeyR') initGame();
+  if (e.code === 'KeyR') { activeCheckpoint = null; die(); }
   if (e.code === 'KeyN') { loadLevel(currentLevel + 1); initGame(); }
   if (e.code === 'KeyB') { loadLevel(currentLevel - 1); initGame(); }
   if (e.code === 'Digit1') switchWeapon('rocket');
