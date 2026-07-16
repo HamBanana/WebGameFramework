@@ -28,6 +28,7 @@ var CORE = [
   'systems/GridSystem.js',
   'systems/TurnBasedBattleSystem.js',
   'systems/MenuSystem.js',
+  'systems/TouchControls.js',
   'systems/StateMachine.js',
   'systems/PlayerController.js',
   'systems/ScoreManager.js',

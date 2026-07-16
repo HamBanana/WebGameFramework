@@ -2,20 +2,22 @@
 // Starts the dev server and opens the launcher in your default browser.
 //
 // Usage:
-//   node launch.js          → server on port 3000
-//   node launch.js 8080     → server on port 8080
+//   node launch.js                  → server on port 3000 (loopback only)
+//   node launch.js 8080             → server on port 8080 (loopback only)
+//   node launch.js 8080 0.0.0.0     → server on port 8080, all interfaces (LAN)
 
 const { spawn, exec } = require('child_process');
 const path = require('path');
 
 const PORT   = parseInt(process.argv[2] || '3000', 10);
+const HOST   = process.argv[3] || '127.0.0.1';
 const LAUNCH = `http://localhost:${PORT}/launcher.html`;
 
 // ── Start the server as a child process ───────────────────────────────────────
 
 const server = spawn(
   process.execPath,                      // same node binary
-  [path.join(__dirname, 'serve.js'), PORT],
+  [path.join(__dirname, 'serve.js'), PORT, HOST],
   { stdio: 'inherit', cwd: __dirname }
 );
 

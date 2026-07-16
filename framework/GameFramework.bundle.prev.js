@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-07-16T22:29:26.000Z
+// Built: 2026-07-16T16:03:10.345Z
 // Source: framework/build.js (core)
 
 // -- utils/MathUtils.js ------------------------------------------
@@ -966,13 +966,6 @@
     destroy(engine) {}
   }
 
-  // Scenes are duck-typed: games (often LLM-authored) push plain classes that
-  // implement only some of the hooks (init/update/render). A missing hook is a
-  // no-op, not a TypeError.
-  function callHook(scene, hook, a, b) {
-    if (scene && typeof scene[hook] === 'function') return scene[hook](a, b);
-  }
-
   // ─── SceneManager ─────────────────────────────────────────────────────────
 
   class SceneManager {
@@ -1011,12 +1004,12 @@
       this._flushPending(engine);
 
       const top = this._top();
-      callHook(top, 'update', dt, engine);
+      if (top) top.update(dt, engine);
     }
 
     render(ctx, engine) {
       const top = this._top();
-      callHook(top, 'render', ctx, engine);
+      if (top) top.render(ctx, engine);
 
       // Draw the transition overlay on top of the scene.
       if (this._activeTransition && this._activeTransition.active) {
@@ -1198,14 +1191,14 @@
 
     _executePush(scene, engine) {
       const prev = this._top();
-      callHook(prev, 'exit', engine);
+      if (prev) prev.exit(engine);
 
       if (!scene._initialized) {
-        callHook(scene, 'init', engine);
+        scene.init(engine);
         scene._initialized = true;
       }
       this._stack.push(scene);
-      callHook(scene, 'enter', engine);
+      scene.enter(engine);
 
       engine.events.emit('scene:push', { scene, stack: this._stack });
     }
@@ -1214,11 +1207,11 @@
       if (!this._stack.length) return;
 
       const removed = this._stack.pop();
-      callHook(removed, 'exit', engine);
-      callHook(removed, 'destroy', engine);
+      removed.exit(engine);
+      removed.destroy(engine);
 
       const next = this._top();
-      callHook(next, 'enter', engine);
+      if (next) next.enter(engine);
 
       engine.events.emit('scene:pop', { removed, scene: next, stack: this._stack });
     }
@@ -1226,16 +1219,16 @@
     _executeReplace(scene, engine) {
       if (this._stack.length) {
         const removed = this._stack.pop();
-        callHook(removed, 'exit', engine);
-        callHook(removed, 'destroy', engine);
+        removed.exit(engine);
+        removed.destroy(engine);
       }
 
       if (!scene._initialized) {
-        callHook(scene, 'init', engine);
+        scene.init(engine);
         scene._initialized = true;
       }
       this._stack.push(scene);
-      callHook(scene, 'enter', engine);
+      scene.enter(engine);
 
       engine.events.emit('scene:replace', { scene, stack: this._stack });
     }
@@ -1243,8 +1236,8 @@
     _executeClear(engine) {
       while (this._stack.length) {
         const s = this._stack.pop();
-        callHook(s, 'exit', engine);
-        callHook(s, 'destroy', engine);
+        s.exit(engine);
+        s.destroy(engine);
       }
       engine.events.emit('scene:clear');
     }
@@ -7315,12 +7308,6 @@
     if (debug)    engine.addSystem(debug);
     // ParallaxSystem is intentionally NOT added to engine.systems by default;
     // games typically draw it themselves at the start of their scene's render.
-
-    // `scenes` also accepts an array of scene instances (a common way games
-    // try to boot); they are pushed in order, so the last one is on top.
-    if (scenes && Array.isArray(opts.scenes)) {
-      opts.scenes.forEach(function (s) { scenes.push(s, engine); });
-    }
 
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,

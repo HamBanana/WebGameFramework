@@ -202,7 +202,7 @@ const game = GF.createGame(cfg.engine, cfg.physics, {
   audio:       true,
   tweens:      true,
   particles:   true,
-  scenes:      true,
+  scenes:      true,        // or an array of scene instances: [new MyScene()] — pushed automatically
   tilemap:     true,
   debug:       true,
   dialogue:    true,
@@ -353,11 +353,50 @@ if (engine.input.wasReleased('attack')) { /* end charge */ }
 | `ShiftLeft`, `ShiftRight` | Shift |
 | `F1` … `F12` | Function keys |
 
+### Synthetic Input
+
+Touch overlays, virtual gamepads and replay systems can inject input through
+the same pipeline real keys use — game code keeps reading actions unchanged:
+
+```javascript
+engine.input.pressAction('jump');    // synthetic key-down (held)
+engine.input.releaseAction('jump');  // synthetic key-up
+engine.input.tapAction('pause');     // wasPressed() true for exactly one frame
+```
+
+### Touch Controls (mobile)
+
+`GF.TouchControls` renders on-canvas buttons and virtual joysticks that feed
+the synthetic-input API. It auto-enables on touch devices (`{ force: true }`
+to override) and attaches its pointer handlers in the capture phase, so
+touches on a control never leak into OrbitControls or game canvas listeners.
+
+```javascript
+const touch = new GF.TouchControls();          // or { autoRender:false, force:true }
+engine.addSystem(touch);
+
+touch
+  .addButton({ id:'pause', action:'pause', label:'⏯', anchor:'bc', x:0,  y:42 })
+  .addButton({ id:'fire',  action:'fire',  label:'A', anchor:'br', x:60, y:60, mode:'hold' })
+  .addJoystick({ id:'move', anchor:'bl', x:90, y:90,
+                 actions:{ up:'up', down:'down', left:'left', right:'right' } });
+
+const v = touch.value('move');   // analog stick: { x:-1..1, y:-1..1 }
+```
+
+Buttons: `mode:'tap'` (default, one-frame `wasPressed`) or `'hold'` (`isDown`
+while touched); `anchor` is one of `tl tr bl br tc bc` with `x/y` measured
+inward from that corner/edge. Games that draw their HUD in `onRender` should
+pass `{ autoRender:false }` and call `touch.draw(ctx)` last so controls stay
+on top.
+
 ---
 
 ## 7. Scenes & Scene Manager
 
 Scenes are the primary way to separate game states (menus, gameplay, pause screens, game-over screens, etc.). The `SceneManager` maintains a stack — only the top scene runs each frame.
+
+Scenes are duck-typed: extend `GF.Scene` for clarity, but any object works — every hook (`init`, `enter`, `update`, `render`, `exit`, `destroy`) is optional and a missing one is simply skipped. Register scenes either with `game.scenes.push(new MyScene(), game.engine)` or by passing them at creation: `GF.createGame(cfg.engine, cfg.physics, { scenes: [new MyScene()] })`.
 
 ### Creating a Scene
 

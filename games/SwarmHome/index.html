@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Swarm Home – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0c0e14;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    #gameContainer {
+      position: relative;
+      width: min(960px, 100vw);
+      aspect-ratio: 16 / 9;
+      flex: none;
+    }
+    #gameCanvas {
+      display: block;
+      border: 2px solid rgba(74, 198, 255, 0.30);
+      box-shadow: 0 0 40px rgba(40, 120, 200, 0.25);
+      touch-action: none;
+    }
+    @media (max-width: 1320px) {
+      body { flex-direction: column; }
+    }
+    /* Design panel is created by ui/DesignPanel.js and appended to body */
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+  </div>
+
+  <!-- Three.js + OrbitControls (required by Three3DScene / CameraDirector) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- Game config -->
+  <script src="config.js"></script>
+
+  <!-- GameFramework bundle -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- Game logic (load order matters) -->
+  <script src="core/parts.js"></script>
+  <script src="core/BOM.js"></script>
+  <script src="core/RobotBuilder.js"></script>
+  <script src="core/ApartmentBuilder.js"></script>
+  <script src="core/Devices.js"></script>
+  <script src="core/Robot.js"></script>
+  <script src="core/RoutineManager.js"></script>
+  <script src="core/CameraDirector.js"></script>
+  <script src="ui/HUD.js"></script>
+  <script src="ui/DesignPanel.js"></script>
+  <script src="SwarmHomeGame.js"></script>
+</body>
+</html>

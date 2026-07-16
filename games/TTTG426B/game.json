@@ -1,0 +1,11 @@
+{
+  "id": "TTTG426B",
+  "title": "Tic Tac Toe G42-6B",
+  "icon": "🎮",
+  "color": "#4488ff",
+  "tags": [
+    "BOARD GAME"
+  ],
+  "desc": "A simple Tic Tac Toe game for two players on one screen. Includes a scoreboard.",
+  "config": []
+}

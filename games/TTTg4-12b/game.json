@@ -1,0 +1,13 @@
+{
+  "id": "TTTg4-12b",
+  "title": "Tic Tac Toe",
+  "icon": "❌",
+  "color": "#4488ff",
+  "tags": [
+    "BOARD GAME",
+    "1 PLAYER",
+    "2 PLAYER"
+  ],
+  "desc": "A classic Tic Tac Toe game for two players.",
+  "config": []
+}

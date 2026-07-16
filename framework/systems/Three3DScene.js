@@ -98,7 +98,9 @@
       if (!this._renderer || !this._engine) return;
       const W = this._engine.canvas.width;
       const H = this._engine.canvas.height;
-      this._renderer.setSize(W, H);
+      // updateStyle=false: keep the width:100%/height:100% CSS so the WebGL
+      // canvas scales with the container (mobile) instead of snapping to px.
+      this._renderer.setSize(W, H, false);
       if (this._camera && this._camera.isPerspectiveCamera) {
         this._camera.aspect = W / H;
         this._camera.updateProjectionMatrix();

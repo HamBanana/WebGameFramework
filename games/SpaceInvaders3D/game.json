@@ -1,0 +1,43 @@
+{
+  "id": "SpaceInvaders3D",
+  "title": "Space Invaders 3D",
+  "icon": "🛸",
+  "color": "#00e5ff",
+  "tags": ["ARCADE", "SOLO", "SHOOTER", "3D"],
+  "desc": "Classic alien invasion reimagined in 3D! Pilot your starfighter, blast 3D alien grids, and defend against waves with destructible bunkers and bonus UFOs.",
+  "config": [
+    {
+      "key": "Player Speed",
+      "help": "How fast the cannon moves.",
+      "opts": ["Slow", "Normal", "Fast"],
+      "def": "Normal",
+      "apply": {
+        "Slow":   { "player": { "speed": 6 } },
+        "Normal": { "player": { "speed": 9 } },
+        "Fast":   { "player": { "speed": 13 } }
+      }
+    },
+    {
+      "key": "Starting Lives",
+      "help": "Lives at the start of the game.",
+      "opts": ["2", "3", "5"],
+      "def": "3",
+      "apply": {
+        "2": { "player": { "lives": 2 } },
+        "3": { "player": { "lives": 3 } },
+        "5": { "player": { "lives": 5 } }
+      }
+    },
+    {
+      "key": "Alien Speed",
+      "help": "Initial alien march speed.",
+      "opts": ["Easy", "Normal", "Hard"],
+      "def": "Normal",
+      "apply": {
+        "Easy":   { "aliens": { "marchInterval": 0.95 } },
+        "Normal": { "aliens": { "marchInterval": 0.7  } },
+        "Hard":   { "aliens": { "marchInterval": 0.45 } }
+      }
+    }
+  ]
+}

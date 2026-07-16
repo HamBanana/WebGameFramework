@@ -1,0 +1,44 @@
+{
+  "id": "SwarmHome",
+  "version": "0.1",
+  "title": "Swarm Home",
+  "icon": "🤖",
+  "color": "#4ac6ff",
+  "tags": ["3D", "SIMULATION", "DESIGN TOOL"],
+  "desc": "Design-tool simulation of an ESP32 robot swarm in a small apartment. Four modular robots brew coffee, ride homemade lifts to tables and shelves, deliver cups to the bedside, and team up to carry crates — all on a 24-hour routine. Watch through any robot or device camera, and redesign every robot and device live.",
+  "config": [
+    {
+      "key": "Sim Speed",
+      "help": "Simulated minutes per real second.",
+      "opts": ["0.5x", "1x", "2x", "4x"],
+      "def": "1x",
+      "apply": {
+        "0.5x": { "sim": { "speed": 0.5 } },
+        "1x":   { "sim": { "speed": 1 } },
+        "2x":   { "sim": { "speed": 2 } },
+        "4x":   { "sim": { "speed": 4 } }
+      }
+    },
+    {
+      "key": "Robots",
+      "help": "Number of robots in the swarm.",
+      "opts": ["2", "3", "4"],
+      "def": "4",
+      "apply": {
+        "2": { "sim": { "robotCount": 2 } },
+        "3": { "sim": { "robotCount": 3 } },
+        "4": { "sim": { "robotCount": 4 } }
+      }
+    },
+    {
+      "key": "Picture-in-Picture",
+      "help": "Inset camera view in the corner.",
+      "opts": ["On", "Off"],
+      "def": "On",
+      "apply": {
+        "On":  { "camera": { "pip": true } },
+        "Off": { "camera": { "pip": false } }
+      }
+    }
+  ]
+}

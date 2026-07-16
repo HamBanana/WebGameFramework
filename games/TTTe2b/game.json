@@ -1,0 +1,13 @@
+{
+  "id": "TTTe2b",
+  "title": "TTTe2b",
+  "icon": "🎮",
+  "color": "#4488ff",
+  "tags": [
+    "BOARD GAME",
+    "2 PLAYER",
+    "LOCAL PVP"
+  ],
+  "desc": "Tic-tac-toe written by the e2b model. Take turns claiming cells on the 3x3 grid — three in a row wins.",
+  "config": []
+}

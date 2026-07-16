@@ -4,8 +4,9 @@
 // don't hit file:// CORS restrictions (which block audio and fetch).
 //
 // Usage:
-//   node serve.js          → serves on http://localhost:3000
-//   node serve.js 8080     → serves on http://localhost:8080
+//   node serve.js                  → serves on http://localhost:3000 (loopback only)
+//   node serve.js 8080             → serves on http://localhost:8080 (loopback only)
+//   node serve.js 8080 0.0.0.0     → serves on all interfaces (reachable on LAN)
 //
 // Then open a game at e.g.:
 //   http://localhost:3000/games/FightingGame/index.html
@@ -47,6 +48,7 @@ function extractConfigFromFile(content) {
 }
 
 const PORT = parseInt(process.argv[2] || '3000', 10);
+const HOST = process.argv[3] || '127.0.0.1';
 const ROOT = __dirname;
 
 const MIME = {
@@ -241,9 +243,9 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, HOST, () => {
   console.log(`\nGameFramework dev server running at:\n`);
-  console.log(`  http://localhost:${PORT}/\n`);
+  console.log(`  http://localhost:${PORT}/  (bound to ${HOST})\n`);
   console.log(`Games:`);
 
   // List available games

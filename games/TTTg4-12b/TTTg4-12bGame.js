@@ -1,0 +1,163 @@
+const cfg = GF.GAME_CONFIG;
+
+class TicTacToe {
+  constructor() {
+    this.board = Array(9).fill(null); // 3x3 grid
+    this.turn = 'X';
+    this.gameOver = false;
+    this.winner = null;
+    this.message = "Player X's Turn";
+    this.hoverCell = -1;
+    this.font = "bold 60px Arial";
+  }
+
+  init(engine) {
+    this.engine = engine;
+    const ctx = engine.ctx;
+
+    // Input Handling
+    engine.canvas.addEventListener('mousemove', (e) => {
+      const r = engine.canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) * (engine.canvas.width / r.width);
+      const y = (e.clientY - r.top) * (engine.canvas.height / r.height);
+      
+      // Simple 3x3 grid mapping (300x300 centered in 600x600 canvas)
+      const centerX = engine.canvas.width / 2;
+      const centerY = engine.canvas.height / 2;
+      const size = 200;
+      const startX = centerX - size / 2;
+      const startY = centerY - size / 2;
+
+      const col = Math.floor((x - startX) / (size / 3));
+      const row = Math.floor((y - startY) / (size / 3));
+
+      if (col >= 0 && col < 3 && row >= 0 && row < 3) {
+        this.hoverCell = row * 3 + col;
+      } else {
+        this.hoverCell = -1;
+      }
+    });
+
+    engine.canvas.addEventListener('click', (e) => {
+      if (this.gameOver) return;
+
+      const r = engine.canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) * (engine.canvas.width / r.width);
+      const y = (e.clientY - r.top) * (engine.canvas.height / r.height);
+      
+      const centerX = engine.canvas.width / 2;
+      const centerY = engine.canvas.height / 2;
+      const size = 200;
+      const startX = centerX - size / 2;
+      const startY = centerY - size / 2;
+
+      const col = Math.floor((x - startX) / (size / 3));
+      const row = Math.floor((y - startY) / (size / 3));
+
+      if (col >= 0 && col < 3 && row >= 0 && row < 3) {
+        const idx = row * 3 + col;
+        if (!this.board[idx]) {
+          this.board[idx] = this.turn;
+          this.checkWinner();
+          this.turn = this.turn === 'X' ? 'O' : 'X';
+          if (!this.gameOver) {
+            this.message = `Player ${this.turn}'s Turn`;
+          }
+        }
+      }
+    });
+  }
+
+  checkWinner() {
+    const winPatterns = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+      [0, 3, 6], [1, 4, 7], [2, 5, 8], // Cols
+      [0, 4, 8], [2, 4, 6]             // Diagonals
+    ];
+
+    for (let p of winPatterns) {
+      if (this.board[p[0]] && this.board[p[0]] === this.board[p[1]] && this.board[p[0]] === this.board[p[2]]) {
+        this.winner = this.board[p[0]];
+        this.gameOver = true;
+        this.message = this.winner === 'X' ? "Player X Wins!" : "Player O Wins!";
+        return;
+      }
+    }
+
+    if (!this.board.includes(null)) {
+      this.gameOver = true;
+      this.message = "It's a Draw!";
+    }
+  }
+
+  update(dt, engine) {
+    // Logic handled by input
+  }
+
+  render(ctx, engine) {
+    const centerX = engine.canvas.width / 2;
+    const centerY = engine.canvas.height / 2;
+    const size = 200;
+    const startX = centerX - size / 2;
+    const startY = centerY - size / 2;
+
+    ctx.clearRect(0, 0, engine.canvas.width, engine.canvas.height);
+
+    // Draw Board Background
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(startX, startY, size, size);
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
+
+    // Draw Grid Lines
+    for (let i = 1; i < 3; i++) {
+      // Vertical
+      ctx.beginPath();
+      ctx.moveTo(startX + i * (size / 3), startY);
+      ctx.lineTo(startX + i * (size / 3), startY + size);
+      ctx.stroke();
+      // Horizontal
+      ctx.beginPath();
+      ctx.moveTo(startX, startY + i * (size / 3));
+      ctx.lineTo(startX + size, startY + i * (size / 3));
+      ctx.stroke();
+    }
+
+    // Draw Occupants
+    ctx.font = this.font;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (let i = 0; i < 9; i++) {
+      const row = Math.floor(i / 3);
+      const col = i % 3;
+      const x = startX + col * (size / 3) + (size / 6);
+      const y = startY + row * (size / 3) + (size / 6);
+
+      if (this.board[i]) {
+        ctx.fillStyle = this.board[i] === 'X' ? "#ff4444" : "#4444ff";
+        ctx.fillText(this.board[i], x, y);
+      } else if (this.hoverCell === i) {
+        ctx.fillStyle = "#ddd";
+        ctx.beginPath();
+        ctx.arc(x, y, 30, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Draw Message
+    ctx.fillStyle = "#000";
+    ctx.font = "30px Arial";
+    ctx.fillText(this.message, engine.canvas.width / 2, engine.canvas.height - 50);
+  }
+}
+
+window.addEventListener('GF:ready', () => {
+  const game = GF.createGame(cfg.engine, cfg.physics, {
+    background_color: "#222",
+    scenes: true
+  });
+  
+  game.scenes.push(new TicTacToe());
+  game.engine.start();
+});

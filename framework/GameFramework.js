@@ -100,6 +100,12 @@
     // ParallaxSystem is intentionally NOT added to engine.systems by default;
     // games typically draw it themselves at the start of their scene's render.
 
+    // `scenes` also accepts an array of scene instances (a common way games
+    // try to boot); they are pushed in order, so the last one is on top.
+    if (scenes && Array.isArray(opts.scenes)) {
+      opts.scenes.forEach(function (s) { scenes.push(s, engine); });
+    }
+
     return {
       engine: engine, sprites: sprites, physics: physics, ui: ui, save: save,
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,

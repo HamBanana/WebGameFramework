@@ -71,6 +71,13 @@
     destroy(engine) {}
   }
 
+  // Scenes are duck-typed: games (often LLM-authored) push plain classes that
+  // implement only some of the hooks (init/update/render). A missing hook is a
+  // no-op, not a TypeError.
+  function callHook(scene, hook, a, b) {
+    if (scene && typeof scene[hook] === 'function') return scene[hook](a, b);
+  }
+
   // ─── SceneManager ─────────────────────────────────────────────────────────
 
   class SceneManager {
@@ -109,12 +116,12 @@
       this._flushPending(engine);
 
       const top = this._top();
-      if (top) top.update(dt, engine);
+      callHook(top, 'update', dt, engine);
     }
 
     render(ctx, engine) {
       const top = this._top();
-      if (top) top.render(ctx, engine);
+      callHook(top, 'render', ctx, engine);
 
       // Draw the transition overlay on top of the scene.
       if (this._activeTransition && this._activeTransition.active) {
@@ -296,14 +303,14 @@
 
     _executePush(scene, engine) {
       const prev = this._top();
-      if (prev) prev.exit(engine);
+      callHook(prev, 'exit', engine);
 
       if (!scene._initialized) {
-        scene.init(engine);
+        callHook(scene, 'init', engine);
         scene._initialized = true;
       }
       this._stack.push(scene);
-      scene.enter(engine);
+      callHook(scene, 'enter', engine);
 
       engine.events.emit('scene:push', { scene, stack: this._stack });
     }
@@ -312,11 +319,11 @@
       if (!this._stack.length) return;
 
       const removed = this._stack.pop();
-      removed.exit(engine);
-      removed.destroy(engine);
+      callHook(removed, 'exit', engine);
+      callHook(removed, 'destroy', engine);
 
       const next = this._top();
-      if (next) next.enter(engine);
+      callHook(next, 'enter', engine);
 
       engine.events.emit('scene:pop', { removed, scene: next, stack: this._stack });
     }
@@ -324,16 +331,16 @@
     _executeReplace(scene, engine) {
       if (this._stack.length) {
         const removed = this._stack.pop();
-        removed.exit(engine);
-        removed.destroy(engine);
+        callHook(removed, 'exit', engine);
+        callHook(removed, 'destroy', engine);
       }
 
       if (!scene._initialized) {
-        scene.init(engine);
+        callHook(scene, 'init', engine);
         scene._initialized = true;
       }
       this._stack.push(scene);
-      scene.enter(engine);
+      callHook(scene, 'enter', engine);
 
       engine.events.emit('scene:replace', { scene, stack: this._stack });
     }
@@ -341,8 +348,8 @@
     _executeClear(engine) {
       while (this._stack.length) {
         const s = this._stack.pop();
-        s.exit(engine);
-        s.destroy(engine);
+        callHook(s, 'exit', engine);
+        callHook(s, 'destroy', engine);
       }
       engine.events.emit('scene:clear');
     }
