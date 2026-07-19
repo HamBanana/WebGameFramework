@@ -21,6 +21,7 @@ var CORE = [
   'systems/Camera.js',
   'systems/TilemapSystem.js',
   'systems/WorldSystem.js',
+  'systems/EntityWorld.js',
   'systems/SaveSystem.js',
   'systems/DebugOverlay.js',
   'systems/DialogueSystem.js',

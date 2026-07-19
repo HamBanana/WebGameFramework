@@ -1,0 +1,11 @@
+{
+  "id": "ModularDemo",
+  "title": "Modular Demo",
+  "icon": "🎮",
+  "color": "#4488ff",
+  "tags": [
+    "demo"
+  ],
+  "desc": "Proof of the modular EntityWorld model.",
+  "config": []
+}

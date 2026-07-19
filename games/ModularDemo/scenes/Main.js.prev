@@ -1,0 +1,28 @@
+// scenes/Main.js — the starting scene (registered as G.scenes.Main).
+// A MODULAR scene only SPAWNS prefabs and STATES rules — it stays tiny. All
+// per-entity logic lives in behaviors/*.js and prefabs/*.js. REPLACE the body
+// with your game via write_component(name='Main', kind='scene', ...).
+(function (G, GF) {
+  'use strict';
+  G.scenes.Main = class Main extends GF.Scene {
+    init(engine) {
+      this.engine = engine;
+      engine.input.bind('up', 'ArrowUp', 'KeyW').bind('down', 'ArrowDown', 'KeyS')
+                  .bind('left', 'ArrowLeft', 'KeyA').bind('right', 'ArrowRight', 'KeyD');
+      // The composition layer: entities are prefabs made of behaviors.
+      this.world = new GF.EntityWorld();
+      engine.addSystem(this.world);
+      const W = engine.config.width, H = engine.config.height;
+      this.player = this.world.spawn('player', W / 2 - 12, H / 2 - 12);
+      // Add more: this.world.spawn('enemy', x, y); define collisions with
+      // this.world.onOverlap('bullet','enemy',(b,e)=>{ b.destroy(); e.destroy(); });
+    }
+    update(dt, engine) { this.world.update(dt); }
+    render(ctx, engine) {
+      this.world.draw(ctx);
+      GF.UISystem.drawText(ctx, 'Modular Demo', 12, 12, { color: '#fff', font: '16px monospace' });
+      GF.UISystem.drawText(ctx, 'WASD / arrows — add prefabs & behaviors', 12, 32,
+        { color: '#9bd', font: '12px monospace' });
+    }
+  };
+})(window.GAME = window.GAME || { components: {}, scenes: {}, systems: {}, state: {} }, window.GF);

@@ -890,6 +890,82 @@ world.draw(ctx)                    // call inside scene.render (world.render() i
 
 ---
 
+## 11c. Entity World (composition — keeps scenes tiny)
+
+`EntityWorld` is the **composition layer**. Instead of a scene that owns entity
+arrays and inlines all their logic (the classic god-scene), an entity is a
+`GameObject` — a bag of small **behaviors** — and the world runs the
+update/draw/cull/sweep loop and resolves collisions declaratively. Behaviors and
+prefabs each live in their own tiny file, so a scene stays ~40 lines no matter how
+big the game gets.
+
+### Behaviors and prefabs (each a small module)
+
+```javascript
+// behaviors/FormationMove.js — a reusable behavior. factory(cfg) → hooks.
+GF.behavior('FormationMove', (cfg) => ({
+  update(dt, e, world) { e.x += (world.data.dir || 1) * (cfg.speed || 60) * dt; },
+  // other hooks: onAdd(e,world), draw(ctx,e,world), onRemove(e,world)
+}));
+
+// prefabs/invader.js — an entity archetype (data + which behaviors it has).
+GF.prefab('invader', {
+  tags: ['invader'], w: 32, h: 24, sprite: 'invader',   // sprite → auto animator
+  behaviors: ['FormationMove', ['DropOnDeath', { chance: 0.15 }]],  // name | [name, cfg]
+  data: { hp: 1 },                                        // free per-entity state
+});
+```
+
+### The scene (spawn + rules only)
+
+```javascript
+init(engine) {
+  this.world = engine.getSystem('EntityWorld');   // or new GF.EntityWorld(); engine.addSystem(it)
+  this.world.data.dir = 1;
+  this.world.spawnGrid('invader', 8, 5, 40, 50, 56, 40);         // 40 invaders
+  this.player = this.world.spawn('player', 300, 560);
+  // declarative collision — no nested loops:
+  this.world.onOverlap('bullet', 'invader', (b, i) => { b.destroy(); i.destroy(); this.score += 10; });
+}
+update(dt) { this.world.update(dt); }
+render(ctx) { this.world.draw(ctx); /* then HUD */ }
+```
+
+### GameObject
+
+Top-left `x,y` + `w,h` AABB (like `PhysicsBody`); `centerX/centerY/right/bottom`;
+`vx,vy` (auto-integrated unless `static`); `tags` (Set), `data` (free state),
+`flipX`. Methods: `addBehavior(name|inst, cfg)`, `behavior(name)`, `has(tag)`,
+`play(anim)`, `overlaps(other)`, `destroy()`. With `collideWorld: true` and
+`world.setSolid(fn)`, movement is resolved against solid tiles (top-down walls).
+
+### EntityWorld API
+
+```javascript
+world.definePrefab(name, spec)          // local prefab (else GF.prefab global)
+world.spawn(nameOrSpec, x, y, overrides) // → GameObject (null if unknown prefab)
+world.spawnGrid(name, cols, rows, x0, y0, dx, dy, perCell?)
+world.destroy(obj)
+world.all() / byTag(tag) / first(tag) / count(tag) / clear()
+world.onOverlap(tagA, tagB, (a, b, world) => …)   // declarative collision rule
+world.onTick((dt, world) => …)          // one world-level tick per frame
+world.setCamera(cam) / setSolid((x,y)=>bool)
+world.data                              // shared world state (e.g. world.data.dir)
+world.update(dt)                        // behaviors → integrate → collisions → tick → sweep
+world.draw(ctx, camera?)               // y-sorted by feet, culled; behavior.draw() overrides
+```
+
+Draw order per object: a behavior's `draw()` hook wins; else the object's sprite
+animator; else a `data.color` box. Registries are global: `GF.behavior(name, factory)`
+and `GF.prefab(name, spec)` (load-order independent — resolved by name at spawn).
+
+**Interop with `WorldSystem`:** for an open world, let `WorldSystem` own the
+tiles/areas and `EntityWorld` own the actors — `world.setCamera(worldSystem.camera)`
+and `world.setSolid((x,y) => worldSystem.isSolidAt(x,y))`, then draw ground →
+`entityWorld.draw(ctx, camera)` → overhead.
+
+---
+
 ## 12. UI Drawing Utilities
 
 `UISystem` provides static helpers for drawing common HUD elements. All coordinates are in screen space (draw after `camera.end()`).
