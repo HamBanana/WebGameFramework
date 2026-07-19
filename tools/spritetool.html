@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprite Tool — GameFramework</title>
+<style>
+  :root { --bg:#12141c; --panel:#1b1e2a; --panel2:#232838; --line:#333a52; --fg:#e6ebff; --mut:#8c96b8; --acc:#57b6ff; --acc2:#7CE0A0; --warn:#ffcf5a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; }
+  header { padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; }
+  header h1 { font-size:15px; margin:0; letter-spacing:.5px; }
+  header .sub { color:var(--mut); font-size:12px; }
+  .wrap { display:grid; grid-template-columns:320px 1fr 300px; gap:0; height:calc(100vh - 45px); }
+  .col { overflow:auto; padding:14px; }
+  .col.mid { background:#0c0e15; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .side { background:var(--panel); border-right:1px solid var(--line); }
+  .side.r { border-right:0; border-left:1px solid var(--line); }
+  h2 { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--acc); margin:18px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  h2:first-child { margin-top:0; }
+  label { display:block; color:var(--mut); margin:8px 0 3px; font-size:11px; }
+  input[type=number], input[type=text], select { width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--fg); border-radius:5px; padding:6px 8px; font:inherit; }
+  .row { display:flex; gap:8px; }
+  .row > div { flex:1; }
+  button { background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--acc); }
+  button.pri { background:linear-gradient(180deg,#2b6cff,#1f4fd6); border-color:#2b6cff; color:#fff; font-weight:bold; }
+  button.ok { background:linear-gradient(180deg,#2f9d5b,#237a45); border-color:#2f9d5b; color:#fff; }
+  button.sm { padding:4px 7px; font-size:11px; }
+  .drop { border:2px dashed var(--line); border-radius:8px; padding:18px; text-align:center; color:var(--mut); cursor:pointer; }
+  .drop.hi { border-color:var(--acc); color:var(--acc); }
+  #stage { border:1px solid var(--line); background:
+     conic-gradient(#20242e 25%, #191c25 0 50%, #20242e 0 75%, #191c25 0) 0 0/24px 24px; max-width:100%; }
+  #previewBox { border:1px solid var(--line); background:#0c0e15; image-rendering:pixelated; }
+  table { width:100%; border-collapse:collapse; margin-top:6px; }
+  th, td { border:1px solid var(--line); padding:3px 5px; font-size:11px; text-align:left; }
+  th { color:var(--mut); font-weight:normal; }
+  td input { width:100%; border:0; background:transparent; color:var(--fg); font:inherit; padding:2px; }
+  td input[type=number]{ width:52px; }
+  .muted { color:var(--mut); font-size:11px; }
+  .pill { display:inline-block; background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:2px 9px; margin:2px 3px 0 0; font-size:11px; }
+  .toolbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .zoomctl { display:flex; gap:4px; align-items:center; }
+  .stat { color:var(--acc2); }
+  textarea { width:100%; height:120px; background:#0c0e15; color:var(--fg); border:1px solid var(--line); border-radius:6px; font:11px/1.4 ui-monospace,monospace; padding:8px; }
+  .hint { background:#161a26; border-left:3px solid var(--acc); padding:7px 10px; border-radius:0 6px 6px 0; color:var(--mut); margin:8px 0; font-size:11px; }
+  a.dl { color:var(--acc2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎞️ Sprite Tool</h1>
+  <span class="sub">slice spritesheets → scale → tag animations → export a GameFramework-ready atlas + PNG + loader</span>
+</header>
+
+<div class="wrap">
+  <!-- LEFT: source + grid -->
+  <div class="col side">
+    <h2>1 · Source</h2>
+    <div id="drop" class="drop">Drop a PNG here, or click to pick a file</div>
+    <input id="file" type="file" accept="image/png,image/*" style="display:none">
+    <label>…or load by URL / path (when served)</label>
+    <div class="row">
+      <div style="flex:3"><input id="url" type="text" placeholder="framework/sprites/isometric_vehicles/red_vehicles.png"></div>
+      <div style="flex:1"><button class="sm" id="loadUrl">Load</button></div>
+    </div>
+    <div id="srcInfo" class="muted" style="margin-top:8px">No image loaded.</div>
+
+    <label>…or import an atlas (Kenney/Starling <b>.xml</b> or TexturePacker <b>.json</b>)</label>
+    <div class="row">
+      <div style="flex:3"><input id="atlasUrl" type="text" placeholder="…/spritesheet_characters.xml"></div>
+      <div style="flex:1"><button class="sm" id="loadAtlas">Import</button></div>
+    </div>
+    <input id="atlasFile" type="file" accept=".xml,.json,.txt" style="display:none">
+    <div class="toolbar" style="margin-top:5px">
+      <button class="sm" id="atlasPick">pick atlas file…</button>
+      <button class="sm" id="atlasClear">clear atlas (use grid)</button>
+    </div>
+    <div id="atlasInfo" class="muted" style="margin-top:6px"></div>
+
+    <h2 id="gridH">2 · Grid</h2>
+    <div class="row">
+      <div><label>Frame W</label><input id="fw" type="number" value="32" min="1"></div>
+      <div><label>Frame H</label><input id="fh" type="number" value="32" min="1"></div>
+    </div>
+    <div class="row">
+      <div><label>Offset X</label><input id="ox" type="number" value="0" min="0"></div>
+      <div><label>Offset Y</label><input id="oy" type="number" value="0" min="0"></div>
+    </div>
+    <div class="row">
+      <div><label>Spacing X</label><input id="sx" type="number" value="0" min="0"></div>
+      <div><label>Spacing Y</label><input id="sy" type="number" value="0" min="0"></div>
+    </div>
+    <label>…or derive frame size from columns × rows</label>
+    <div class="row">
+      <div><input id="cols" type="number" placeholder="cols" min="1"></div>
+      <div><input id="rows" type="number" placeholder="rows" min="1"></div>
+      <div><button class="sm" id="fromCR">Apply</button></div>
+    </div>
+    <div id="gridInfo" class="muted" style="margin-top:8px"></div>
+
+    <h2>3 · Output</h2>
+    <label>Name (file + sprite key)</label>
+    <input id="name" type="text" value="sprite">
+    <div class="row">
+      <div><label>Scale ×</label><input id="scale" type="number" value="1" min="0.05" step="0.05"></div>
+      <div><label>Origin X</label><input id="orx" type="number" value="16"></div>
+      <div><label>Origin Y</label><input id="ory" type="number" value="32"></div>
+    </div>
+    <div class="toolbar" style="margin-top:6px">
+      <button class="sm" id="origCB">center-bottom</button>
+      <button class="sm" id="origCC">center</button>
+    </div>
+  </div>
+
+  <!-- MIDDLE: sheet view -->
+  <div class="col mid">
+    <div class="toolbar" style="width:100%; justify-content:space-between">
+      <div class="zoomctl">
+        <span class="muted">zoom</span>
+        <button class="sm" id="zOut">−</button><span id="zLbl" class="stat">1×</span><button class="sm" id="zIn">+</button>
+        <label style="display:inline; margin-left:10px"><input type="checkbox" id="showGrid" checked> grid</label>
+        <label style="display:inline"><input type="checkbox" id="showNums" checked> #</label>
+      </div>
+      <div class="muted" id="hover">—</div>
+    </div>
+    <div style="overflow:auto; max-width:100%; max-height:60vh; border:1px solid var(--line)">
+      <canvas id="stage"></canvas>
+    </div>
+    <div class="hint">Click a frame to set an animation's <b>from</b>/<b>to</b> range, or use the row/column generators on the right. The checkerboard shows transparency.</div>
+    <h2 style="align-self:flex-start">Animation preview</h2>
+    <div class="toolbar">
+      <select id="prevTag" style="width:auto"></select>
+      <button class="sm" id="playBtn">▶ play</button>
+      <canvas id="previewBox" width="120" height="120"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT: animations + export -->
+  <div class="col side r">
+    <h2>4 · Animations</h2>
+    <div class="toolbar">
+      <button class="sm" id="genFrames">one tag / frame</button>
+      <button class="sm" id="genRows">one tag / row</button>
+      <button class="sm" id="genAll">single tag (all)</button>
+      <button class="sm" id="addTag">+ tag</button>
+    </div>
+    <table id="tagTable">
+      <thead><tr><th>name</th><th>from</th><th>to</th><th>fps</th><th>loop</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="muted" id="selInfo" style="margin-top:6px">No frame selected.</div>
+
+    <h2>5 · Export</h2>
+    <button class="pri" id="expPng" style="width:100%; margin-bottom:6px">⬇ scaled spritesheet PNG</button>
+    <button class="ok" id="expAtlas" style="width:100%; margin-bottom:6px">⬇ atlas JSON</button>
+    <button id="expLoader" style="width:100%; margin-bottom:6px">⬇ loader JS (sheet_&lt;name&gt;.js)</button>
+    <button id="copyAtlas" style="width:100%">📋 copy atlas JSON</button>
+    <div class="hint" style="margin-top:10px">Drop <b>&lt;name&gt;.png</b> into a game's <code>sprites/</code> and <b>sheet_&lt;name&gt;.js</b> into <code>parts/</code>. A scene registers it with<br><code>game.sprites.registerSheet(name, url, atlas)</code> then <code>createAnimator(name,'tag')</code> or <code>drawFrame(...)</code>.</div>
+    <h2>Atlas preview</h2>
+    <textarea id="atlasOut" readonly></textarea>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const state = {
+  img: null, name: 'sprite',
+  fw:32, fh:32, ox:0, oy:0, sx:0, sy:0, cols:0, rows:0, n:0,
+  zoom:1, tags:[], selFrom:null,
+  custom:null,   // [{name,x,y,w,h}] when an atlas is imported (non-uniform); else null
+};
+const stage = $('#stage'), sctx = stage.getContext('2d');
+const preview = $('#previewBox'), pctx = preview.getContext('2d');
+pctx.imageSmoothingEnabled = false;
+
+// ---------- loading ----------
+function setImage(img, label) {
+  state.img = img;
+  $('#srcInfo').innerHTML = `<span class="stat">${label}</span><br>${img.naturalWidth} × ${img.naturalHeight}px`;
+  // sensible default: if square & divisible by 32 assume 32 grid, else one frame
+  recalc(); render(); buildTagUI();
+}
+function loadFile(f) {
+  const r = new FileReader();
+  r.onload = () => { const i = new Image(); i.onload = () => setImage(i, f.name); i.src = r.result; if(!$('#name').value||$('#name').value==='sprite'){ $('#name').value = f.name.replace(/\.\w+$/,''); state.name=$('#name').value; } };
+  r.readAsDataURL(f);
+}
+$('#file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); };
+const drop = $('#drop');
+drop.onclick = () => $('#file').click();
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hi'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hi'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+$('#loadUrl').onclick = () => {
+  const u = $('#url').value.trim(); if (!u) return;
+  const i = new Image(); i.crossOrigin = 'anonymous';
+  i.onload = () => { setImage(i, u.split('/').pop()); const nm=u.split('/').pop().replace(/\.\w+$/,''); if(!$('#name').value||$('#name').value==='sprite'){ $('#name').value=nm; state.name=nm; } };
+  i.onerror = () => alert('Could not load (CORS or wrong path). Serve the file and use a same-origin path.');
+  i.src = u;
+};
+
+// ---------- atlas import (Kenney/Starling XML or TexturePacker JSON) ----------
+function parseAtlas(text) {
+  const t = text.trim();
+  if (t[0] === '{') {                                   // TexturePacker JSON (hash or array)
+    const j = JSON.parse(t);
+    const out = [];
+    const push = (name, fr) => out.push({ name, x:fr.x, y:fr.y, w:fr.w, h:fr.h });
+    if (Array.isArray(j.frames)) j.frames.forEach(f => push(f.filename || f.name, f.frame));
+    else if (j.frames) Object.keys(j.frames).forEach(k => push(k, j.frames[k].frame));
+    return out;
+  }
+  // XML: <SubTexture name x y width height/>
+  const doc = new DOMParser().parseFromString(t, 'application/xml');
+  return [...doc.querySelectorAll('SubTexture')].map(s => ({
+    name: s.getAttribute('name'),
+    x:+s.getAttribute('x'), y:+s.getAttribute('y'),
+    w:+s.getAttribute('width'), h:+s.getAttribute('height'),
+  }));
+}
+function applyAtlas(frames, label) {
+  if (!frames || !frames.length) { alert('No frames found in atlas.'); return; }
+  state.custom = frames;
+  const sizes = [...new Set(frames.map(f => f.w+'×'+f.h))];
+  $('#atlasInfo').innerHTML = `<span class="stat">${frames.length} named frames</span> · sizes: ${sizes.slice(0,4).join(', ')}${sizes.length>4?'…':''}`;
+  $('#gridH').style.opacity = .4;
+  recalc(); render(); genPerFrame();     // default: one tag per named sprite
+}
+function clearAtlas(){ state.custom=null; $('#atlasInfo').textContent=''; $('#gridH').style.opacity=1; recalc(); render(); buildTagUI(); }
+$('#atlasPick').onclick = () => $('#atlasFile').click();
+$('#atlasFile').onchange = e => { const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ applyAtlas(parseAtlas(r.result), f.name);}catch(err){ alert('Parse error: '+err.message);} }; r.readAsText(f); };
+$('#loadAtlas').onclick = () => {
+  const u=$('#atlasUrl').value.trim(); if(!u) return;
+  fetch(u).then(r=>r.text()).then(t=>applyAtlas(parseAtlas(t), u.split('/').pop())).catch(e=>alert('Could not load atlas: '+e.message));
+};
+$('#atlasClear').onclick = clearAtlas;
+
+// ---------- grid / frame math ----------
+function num(id){ return Math.max(0, parseFloat($('#'+id).value)||0); }
+function recalc() {
+  state.fw=Math.max(1,num('fw')); state.fh=Math.max(1,num('fh'));
+  state.ox=num('ox'); state.oy=num('oy'); state.sx=num('sx'); state.sy=num('sy');
+  if (state.custom) {                                   // imported atlas drives frames
+    state.n = state.custom.length;
+    const s0 = state.custom[0]; state.fw = s0.w; state.fh = s0.h; state.cols = state.custom.length; state.rows = 1;
+    $('#gridInfo').innerHTML = `<span class="stat">imported atlas: ${state.n} frames</span> (grid disabled)`;
+    return;
+  }
+  if (!state.img) return;
+  const W=state.img.naturalWidth, H=state.img.naturalHeight;
+  state.cols = Math.max(1, Math.floor((W - state.ox + state.sx) / (state.fw + state.sx)));
+  state.rows = Math.max(1, Math.floor((H - state.oy + state.sy) / (state.fh + state.sy)));
+  state.n = state.cols * state.rows;
+  $('#gridInfo').innerHTML = `<span class="stat">${state.cols} × ${state.rows} = ${state.n} frames</span> @ ${state.fw}×${state.fh}`;
+}
+function frameRect(i) {
+  if (state.custom) { const f = state.custom[i]; return { x:f.x, y:f.y, w:f.w, h:f.h, name:f.name }; }
+  const c = i % state.cols, r = Math.floor(i / state.cols);
+  return { x: state.ox + c*(state.fw+state.sx), y: state.oy + r*(state.fh+state.sy), w: state.fw, h: state.fh };
+}
+const baseName = s => (s||'').replace(/\.\w+$/,'');
+function genPerFrame(){
+  state.tags = []; for (let i=0;i<state.n;i++){ const f=frameRect(i); state.tags.push({name: baseName(f.name)||('f'+i), from:i, to:i, fps:1, loop:false}); }
+  buildTagUI();
+}
+['fw','fh','ox','oy','sx','sy'].forEach(id => $('#'+id).addEventListener('input', () => { recalc(); render(); buildTagUI(); }));
+$('#fromCR').onclick = () => {
+  if (!state.img) return;
+  const c=Math.max(1,parseInt($('#cols').value)||1), r=Math.max(1,parseInt($('#rows').value)||1);
+  $('#fw').value = Math.floor((state.img.naturalWidth - num('ox')) / c);
+  $('#fh').value = Math.floor((state.img.naturalHeight - num('oy')) / r);
+  recalc(); render(); buildTagUI();
+};
+
+// ---------- rendering the sheet ----------
+function render() {
+  if (!state.img) return;
+  const z = state.zoom, W=state.img.naturalWidth, H=state.img.naturalHeight;
+  stage.width = W*z; stage.height = H*z;
+  sctx.imageSmoothingEnabled = false;
+  sctx.clearRect(0,0,stage.width,stage.height);
+  sctx.drawImage(state.img, 0,0, W*z, H*z);
+  if ($('#showGrid').checked) {
+    sctx.strokeStyle='rgba(87,182,255,.55)'; sctx.lineWidth=1;
+    for (let i=0;i<state.n;i++){ const f=frameRect(i); sctx.strokeRect(f.x*z+.5, f.y*z+.5, f.w*z, f.h*z); }
+  }
+  if ($('#showNums').checked && z>=1.5) {
+    sctx.fillStyle='rgba(255,207,90,.9)'; sctx.font=`${Math.min(11,state.fh*z/3)}px monospace`;
+    for (let i=0;i<state.n;i++){ const f=frameRect(i); sctx.fillText(i, f.x*z+2, f.y*z+11); }
+  }
+}
+$('#showGrid').onchange = render; $('#showNums').onchange = render;
+function setZoom(z){ state.zoom=Math.max(.25,Math.min(8,z)); $('#zLbl').textContent=state.zoom+'×'; render(); }
+$('#zIn').onclick=()=>setZoom(state.zoom*2); $('#zOut').onclick=()=>setZoom(state.zoom/2);
+stage.addEventListener('mousemove', e => {
+  if(!state.img) return; const r=stage.getBoundingClientRect();
+  const x=(e.clientX-r.left)/state.zoom, y=(e.clientY-r.top)/state.zoom;
+  const i=frameAt(x,y); $('#hover').textContent = i>=0 ? `frame ${i}  (col ${i%state.cols}, row ${Math.floor(i/state.cols)})` : '—';
+});
+function frameAt(x,y){
+  for(let i=0;i<state.n;i++){ const f=frameRect(i); if(x>=f.x&&x<f.x+f.w&&y>=f.y&&y<f.y+f.h) return i; } return -1;
+}
+stage.addEventListener('click', e => {
+  const r=stage.getBoundingClientRect();
+  const i=frameAt((e.clientX-r.left)/state.zoom,(e.clientY-r.top)/state.zoom);
+  if(i<0) return;
+  if(state.selFrom===null){ state.selFrom=i; $('#selInfo').innerHTML=`from = <span class="stat">${i}</span> … click the end frame`; }
+  else { const a=Math.min(state.selFrom,i), b=Math.max(state.selFrom,i); addTag('clip'+state.tags.length, a, b, 8, true); state.selFrom=null; $('#selInfo').textContent='Range added.'; }
+});
+
+// ---------- animations ----------
+function addTag(name,from,to,fps,loop){ state.tags.push({name,from,to,fps,loop}); buildTagUI(); }
+$('#genFrames').onclick = genPerFrame;
+$('#addTag').onclick = () => addTag('anim'+state.tags.length, 0, Math.max(0,state.n-1), 8, true);
+$('#genAll').onclick = () => { state.tags=[{name:'idle',from:0,to:Math.max(0,state.n-1),fps:8,loop:true}]; buildTagUI(); };
+$('#genRows').onclick = () => {
+  state.tags=[]; for(let r=0;r<state.rows;r++) state.tags.push({name:'row'+r,from:r*state.cols,to:r*state.cols+state.cols-1,fps:8,loop:true});
+  buildTagUI();
+};
+function buildTagUI(){
+  const tb=$('#tagTable').querySelector('tbody'); tb.innerHTML='';
+  state.tags.forEach((t,idx)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><input value="${t.name}"></td>
+      <td><input type="number" value="${t.from}"></td>
+      <td><input type="number" value="${t.to}"></td>
+      <td><input type="number" value="${t.fps}"></td>
+      <td style="text-align:center"><input type="checkbox" ${t.loop?'checked':''}></td>
+      <td><button class="sm">✕</button></td>`;
+    const [nm,fr,to,fp]=tr.querySelectorAll('input');
+    const lp=tr.querySelectorAll('input')[4];
+    nm.oninput=()=>{t.name=nm.value; refreshPrevTags(); updateAtlas();};
+    fr.oninput=()=>{t.from=parseInt(fr.value)||0; updateAtlas();};
+    to.oninput=()=>{t.to=parseInt(to.value)||0; updateAtlas();};
+    fp.oninput=()=>{t.fps=parseInt(fp.value)||1; updateAtlas();};
+    lp.onchange=()=>{t.loop=lp.checked; updateAtlas();};
+    tr.querySelector('button').onclick=()=>{state.tags.splice(idx,1); buildTagUI();};
+    tb.appendChild(tr);
+  });
+  refreshPrevTags(); updateAtlas();
+}
+function refreshPrevTags(){
+  const s=$('#prevTag'); const cur=s.value; s.innerHTML='';
+  state.tags.forEach(t=>{ const o=document.createElement('option'); o.value=t.name; o.textContent=t.name; s.appendChild(o); });
+  if([...s.options].some(o=>o.value===cur)) s.value=cur;
+}
+
+// ---------- origin helpers ----------
+$('#origCB').onclick=()=>{ $('#orx').value=Math.round(state.fw*num('scale')/2); $('#ory').value=Math.round(state.fh*num('scale')); updateAtlas(); };
+$('#origCC').onclick=()=>{ $('#orx').value=Math.round(state.fw*num('scale')/2); $('#ory').value=Math.round(state.fh*num('scale')/2); updateAtlas(); };
+['name','scale','orx','ory'].forEach(id=>$('#'+id).addEventListener('input',()=>{ state.name=$('#name').value||'sprite'; updateAtlas(); }));
+
+// ---------- build packed sheet + atlas ----------
+function buildPacked(){
+  const scale=num('scale')||1;
+  const durOf = (i) => { const t=state.tags.find(t=>i>=Math.min(t.from,t.to)&&i<=Math.max(t.from,t.to)); return t?Math.round(1000/Math.max(1,t.fps)):125; };
+  const nameOf = (i,src) => (state.custom ? baseName(src.name) : state.name+'_'+String(i).padStart(2,'0'));
+  const place = [];
+  let sheetW, sheetH, firstW, firstH;
+
+  if (state.custom) {                          // shelf-pack varied-size frames
+    const maxW = 1024; let x=0,y=0,rowH=0; sheetW=0;
+    for (let i=0;i<state.n;i++){
+      const s=frameRect(i), w=Math.max(1,Math.round(s.w*scale)), h=Math.max(1,Math.round(s.h*scale));
+      if (x+w>maxW && x>0){ x=0; y+=rowH; rowH=0; }
+      place.push({i,src:s,dx:x,dy:y,w,h}); x+=w; rowH=Math.max(rowH,h); sheetW=Math.max(sheetW,x);
+    }
+    sheetH = (place.length?place[place.length-1].dy:0)+ (place.length?Math.max(...place.filter(p=>p.dy===place[place.length-1].dy).map(p=>p.h)):0);
+    firstW=place[0]?place[0].w:1; firstH=place[0]?place[0].h:1;
+  } else {                                     // uniform grid packing
+    const outW=Math.max(1,Math.round(state.fw*scale)), outH=Math.max(1,Math.round(state.fh*scale));
+    const cols=state.cols||1;
+    for (let i=0;i<state.n;i++){ place.push({i,src:frameRect(i),dx:(i%cols)*outW,dy:Math.floor(i/cols)*outH,w:outW,h:outH}); }
+    sheetW=cols*outW; sheetH=Math.ceil(state.n/cols)*outH; firstW=outW; firstH=outH;
+  }
+
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,sheetW); cv.height=Math.max(1,sheetH);
+  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false;
+  const frames = place.map(p => {
+    cx.drawImage(state.img, p.src.x,p.src.y,p.src.w,p.src.h, p.dx,p.dy,p.w,p.h);
+    return { filename: nameOf(p.i,p.src), frame:{x:p.dx,y:p.dy,w:p.w,h:p.h}, duration: durOf(p.i) };
+  });
+  return { canvas:cv, atlas: {
+    frames,
+    meta: {
+      app:'GameFramework Sprite Tool', image: state.name+'.png',
+      frameSize:{w:firstW,h:firstH}, origin:{x:parseFloat($('#orx').value)||0, y:parseFloat($('#ory').value)||0},
+      frameTags: state.tags.map(t=>({name:t.name, from:Math.min(t.from,t.to), to:Math.max(t.from,t.to), loop:!!t.loop, fps:t.fps}))
+    }
+  }};
+}
+function updateAtlas(){
+  if(!state.img){ $('#atlasOut').value=''; return; }
+  recalc(); const {atlas}=buildPacked();
+  $('#atlasOut').value=JSON.stringify(atlas,null,1);
+}
+
+// ---------- exports ----------
+function download(name, blobOrStr, type){
+  const blob = blobOrStr instanceof Blob ? blobOrStr : new Blob([blobOrStr], {type:type||'text/plain'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+$('#expPng').onclick=()=>{ if(!state.img)return; buildPacked().canvas.toBlob(b=>download(state.name+'.png',b),'image/png'); };
+$('#expAtlas').onclick=()=>{ if(!state.img)return; download(state.name+'.atlas.json', JSON.stringify(buildPacked().atlas,null,2),'application/json'); };
+$('#copyAtlas').onclick=()=>{ navigator.clipboard.writeText($('#atlasOut').value).then(()=>{ $('#copyAtlas').textContent='✓ copied'; setTimeout(()=>$('#copyAtlas').textContent='📋 copy atlas JSON',1200); }); };
+$('#expLoader').onclick=()=>{
+  if(!state.img)return; const atlas=buildPacked().atlas; const nm=state.name;
+  const js=`// parts/sheet_${nm}.js — generated by spritetool.html\n`+
+`// Registers spritesheet '${nm}' (sprites/${nm}.png) so a scene can call\n`+
+`//   game.sprites.registerSheet('${nm}', G.state.sheets['${nm}'].image, G.state.sheets['${nm}'].atlas)\n`+
+`(function (G) {\n  'use strict';\n  G.state = G.state || {};\n  G.state.sheets = G.state.sheets || {};\n`+
+`  G.state.sheets['${nm}'] = { image: 'sprites/${nm}.png', atlas: ${JSON.stringify(atlas)} };\n`+
+`})(window.GAME = window.GAME || { components:{}, scenes:{}, systems:{}, state:{} });\n`;
+  download('sheet_'+nm+'.js', js, 'text/javascript');
+};
+
+// ---------- live preview ----------
+let playing=false, pf=0, pacc=0, plast=0;
+$('#playBtn').onclick=()=>{ playing=!playing; $('#playBtn').textContent=playing?'⏸ pause':'▶ play'; plast=performance.now(); if(playing) requestAnimationFrame(tick); };
+$('#prevTag').onchange=()=>{ pf=0; };
+function tick(now){
+  if(!playing) return;
+  const dt=(now-plast)/1000; plast=now;
+  const tag=state.tags.find(t=>t.name===$('#prevTag').value);
+  pctx.clearRect(0,0,preview.width,preview.height);
+  if(state.img && tag){
+    const a=Math.min(tag.from,tag.to), b=Math.max(tag.from,tag.to), len=b-a+1;
+    pacc+=dt; if(pacc>=1/Math.max(1,tag.fps)){ pacc=0; pf=(pf+1)%len; }
+    const idx=a+pf, f=frameRect(idx);
+    const s=Math.min(preview.width/f.w, preview.height/f.h)*0.9;
+    const w=f.w*s, h=f.h*s;
+    pctx.drawImage(state.img, f.x,f.y,f.w,f.h, (preview.width-w)/2,(preview.height-h)/2, w,h);
+  }
+  requestAnimationFrame(tick);
+}
+
+// try to auto-load from ?img= for convenience
+const q=new URLSearchParams(location.search).get('img');
+if(q){ $('#url').value=q; $('#loadUrl').click(); }
+</script>
+</body>
+</html>

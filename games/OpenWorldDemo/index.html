@@ -8,18 +8,19 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background:#000; display:flex; justify-content:center; align-items:center;
            min-height:100vh; overflow:hidden; font-family:monospace; }
-    #gameContainer { position:relative; width:640px; height:384px; }
-    #gameCanvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
+    #gameContainer { position:relative; width:800px; height:512px; }
+    #gameCanvas { display:block; }
   </style>
 </head>
 <body>
   <div id="gameContainer">
-    <canvas id="gameCanvas" width="640" height="384"></canvas>
+    <canvas id="gameCanvas" width="800" height="512"></canvas>
   </div>
 
   <!-- GF:SCRIPTS start — auto-generated from parts/*.js by owui-games-tool; do not edit by hand -->
   <script src="config.js"></script>
   <script src="../../framework/GameFramework.bundle.js"></script>
+  <script src="parts/assets.js"></script>
   <script src="parts/Main.js"></script>
   <script src="parts/WorldScene.js"></script>
   <script src="parts/sheet_hero.js"></script>

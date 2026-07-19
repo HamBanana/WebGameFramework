@@ -5,8 +5,8 @@
 
   GF.GAME_CONFIG = {
   "engine": {
-    "width": 640,
-    "height": 384,
+    "width": 800,
+    "height": 512,
     "canvasId": "gameCanvas",
     "backgroundColor": "#10131f"
   },
