@@ -1,0 +1,13 @@
+{
+  "id": "OrnithBlitz",
+  "title": "Ornith Blitz",
+  "icon": "👾",
+  "color": "#4488ff",
+  "tags": [
+    "ARCADE",
+    "SOLO",
+    "SHOOTER"
+  ],
+  "desc": "Space Invaders clone written by the Ornith 1.0 9B model (Heretic Q8). Arrow keys to move, space to fire — stop the marching waves before they reach you.",
+  "config": []
+}

@@ -1,13 +1,12 @@
 {
   "id": "TTTg4-12b",
-  "title": "Tic Tac Toe",
-  "icon": "❌",
+  "title": "Tic Tac Toe (g4-12b)",
+  "icon": "🎮",
   "color": "#4488ff",
   "tags": [
     "BOARD GAME",
-    "1 PLAYER",
     "2 PLAYER"
   ],
-  "desc": "A classic Tic Tac Toe game for two players.",
+  "desc": "Tic-tac-toe written by the gemma4-12b-it-qat model. Two players on one screen.",
   "config": []
 }

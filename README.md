@@ -591,6 +591,38 @@ game.sprites.registerSprite('claude',  GF.Sprites.claude);
 game.sprites.registerSprite('claudia', GF.Sprites.claudia);
 ```
 
+### Spritesheet Sprites (image atlas)
+
+Instead of writing frame draw-functions by hand, you can register a sprite from a
+**spritesheet PNG + an atlas** (the Aseprite hash-export shape used by the built-in
+sprites' `animate.json` files). The animations are built at runtime — no generated
+JS and no bundle rebuild.
+
+```javascript
+// Atlas is the parsed animate.json object (load it with the AssetLoader, or inline it):
+//   { frames: [ { frame:{x,y,w,h}, duration }... ],
+//     meta: { frameTags:[{name,from,to,loop}], origin:{x,y}, frameSize:{w,h} } }
+
+game.sprites.registerSheet('hero', 'sprites/hero/spritesheet.png', heroAtlas);
+
+// URL-only convenience (fetches the atlas for you; returns a Promise):
+game.sprites.registerSheetAsync('hero',
+  'sprites/hero/spritesheet.png',
+  'sprites/hero/animate.json').then(() => { /* ready */ });
+```
+
+- Each `frameTags` entry becomes an animation; `loop:false` (or `direction:'once'`)
+  makes it play once. `fps` comes from the tag's `fps`, else from the first frame's
+  `duration` (ms → fps), else 12.
+- `origin` / `frameSize` set the draw pivot and frame dimensions; override with
+  `opts = { originX, originY, defaultFps }`.
+- With no `frameTags`, all frames become one looping `idle` animation.
+- While the PNG is still loading, frames draw a `#446` placeholder rect (so the game
+  runs — and renders in the headless harness — before art finishes loading).
+
+The resulting sprite behaves exactly like any other: `createAnimator`, `drawFrame`,
+`flipX`, etc. all work unchanged.
+
 ---
 
 ## 9. Physics
@@ -770,6 +802,90 @@ render(ctx, engine) {
   map.draw(ctx, camera);  // Pass camera to enable culling
   camera.end(ctx);
 }
+```
+
+---
+
+## 11b. World System (open world)
+
+`WorldSystem` builds a **data-driven, multi-area open world** on top of `Camera` +
+`Tilemap`. You describe the world as a plain data object (ship it as a JS object,
+not fetched JSON — the headless test harness cannot `fetch`). Each world has named
+**areas**; each area has tile **layers**, **entities**, **spawns**, and **portals**
+that teleport the player between areas.
+
+### World data shape
+
+```javascript
+const GAME_WORLD = {
+  tileWidth: 32, tileHeight: 32,
+  tileset: { image: 'world/tiles.png', cols: 8 },   // optional — flat colors if omitted
+  startArea: 'town', startSpawn: 'default',
+  areas: {
+    town: {
+      cols: 40, rows: 30,
+      layers: {
+        ground:    [[/* row-major tile indices, -1 = empty */]],  // required
+        decor:     [[/* above ground, below entities */]],        // optional
+        collision: [[/* any cell >= 0 blocks the player */]],     // optional
+        overhead:  [[/* drawn above entities: roofs, canopy */]], // optional
+      },
+      entities: [ { type:'npc', sprite:'villager', anim:'idle', x:320, y:400 } ],
+      spawns:   { default: { x:320, y:400 } },     // feet-center world coords
+      portals:  [ { x:1248, y:384, w:32, h:64, toArea:'forest', toSpawn:'fromTown' } ],
+      background: '#243',
+    },
+    forest: { /* … */ },
+  },
+};
+```
+
+### Wiring
+
+```javascript
+const world = new GF.WorldSystem({ viewWidth: 800, viewHeight: 450 });
+game.engine.addSystem(world);   // add AFTER physics so tile collision resolves last
+
+world.setTileset('world/tiles.png', 8);            // optional (URL or loaded image)
+world.setPlayer(playerBody, (ctx) =>               // how to draw the player, y-sorted
+  playerAnim.draw(ctx, playerBody.centerX, playerBody.bottom));
+world.loadWorld(GAME_WORLD);                        // enters startArea automatically
+
+// In your scene.render — draw the world, then the HUD on top:
+render(ctx) {
+  world.draw(ctx);                                 // layers + y-sorted entities + overhead
+  game.ui.drawText(ctx, area, 10, 10);             // screen-space HUD
+}
+```
+
+### Behaviour
+
+- **Camera** is created and owned by the system (`world.camera`); it follows the
+  player and re-clamps to each area's pixel size on `enterArea`.
+- **Collision** reuses `Tilemap.resolveCollision` against the `collision` layer.
+  The player and any `world.addDynamicBody(body)` are resolved each `update`.
+- **Portals** trigger when the player's feet enter a portal rect;
+  `enterArea(toArea, toSpawn)` repositions the player and snaps the camera. An
+  arrival lock prevents immediate bounce-back until the player steps off.
+- **Rendering** draws `ground` → `decor` → (entities + player, y-sorted by feet,
+  frustum-culled) → `overhead`. Without a loaded tileset, tiles draw as stable
+  flat colors so the world is visible immediately and in headless screenshots.
+- **Entities** with a registered `sprite` get an auto-advanced animator; override
+  drawing with `world.onEntityDraw((ctx, e, world) => …)` and behaviour with
+  `world.onEntityUpdate((e, dt, world) => …)`.
+
+### Key API
+
+```javascript
+world.loadWorld(data)              // load + enter start area
+world.enterArea(name, spawnName)   // switch area, place player at spawn
+world.setPlayer(body, drawFn)      // register the player
+world.setTileset(imageOrUrl, cols) // tileset image + column count
+world.addDynamicBody(body)         // extra body that collides with tiles
+world.isSolidAt(worldX, worldY)    // collision-layer solid test
+world.areaName / world.area / world.entities()
+world.onEnterArea(cb) / world.onEntityDraw(cb) / world.onEntityUpdate(cb) / world.onPortal(cb)
+world.draw(ctx)                    // call inside scene.render (world.render() is a no-op)
 ```
 
 ---

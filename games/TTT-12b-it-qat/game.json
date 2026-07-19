@@ -1,0 +1,12 @@
+{
+  "id": "TTT-12b-it-qat",
+  "title": "Tic-Tac-Toe",
+  "icon": "❌",
+  "color": "#4488ff",
+  "tags": [
+    "BOARD GAME",
+    "2 PLAYER"
+  ],
+  "desc": "A classic Tic-Tac-Toe game for two players.",
+  "config": []
+}

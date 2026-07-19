@@ -1,0 +1,13 @@
+{
+  "id": "OpenWorldDemo",
+  "title": "Open World Demo",
+  "icon": "🎮",
+  "color": "#4488ff",
+  "tags": [
+    "demo",
+    "rpg",
+    "world"
+  ],
+  "desc": "GameSmith open-world proof: multi-area world, portals, imported sprite.",
+  "config": []
+}

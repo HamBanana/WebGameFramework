@@ -34,6 +34,129 @@
       return this;
     }
 
+    /**
+     * Register a sprite from a spritesheet image + an atlas (Aseprite hash-export
+     * format — the same `animate.json` shape the framework's built-in sprites use).
+     * No generated JS and no bundle rebuild required: pass the image (or its URL)
+     * and the parsed atlas object, and the animations are built at runtime.
+     *
+     * @param {string} name
+     * @param {HTMLImageElement|{img,isLoaded}|string} image - loaded image, a
+     *        {img,isLoaded} sheet wrapper, or a URL to lazy-load.
+     * @param {Object} atlas - parsed animate.json: { frames:[{frame:{x,y,w,h},duration}],
+     *        meta:{ frameTags:[{name,from,to,loop}], origin:{x,y}, frameSize:{w,h} } }
+     * @param {Object} [opts] - { originX, originY, defaultFps } overrides.
+     * @returns {Object} the built sprite definition (also registered under `name`).
+     */
+    registerSheet(name, image, atlas, opts) {
+      const sheet = SpriteSystem._asSheet(image);
+      const def = SpriteSystem.buildSheetDefinition(sheet, atlas, opts);
+      this.registerSprite(name, def);
+      return def;
+    }
+
+    /**
+     * Async convenience: fetch the atlas JSON and load the image, then register.
+     * Use when you only have URLs. Prefer registerSheet with an inline atlas
+     * object where possible (headless tooling cannot fetch).
+     * @returns {Promise<Object>} resolves with the sprite definition.
+     */
+    registerSheetAsync(name, imageUrl, atlasUrl, opts) {
+      const self = this;
+      return fetch(atlasUrl)
+        .then(r => r.json())
+        .then(atlas => self.registerSheet(name, imageUrl, atlas, opts));
+    }
+
+    // --- internals ---------------------------------------------------------
+
+    /** Normalise an image argument into a { img, isLoaded() } sheet wrapper. */
+    static _asSheet(image) {
+      if (image && typeof image.isLoaded === 'function') return image; // already a wrapper
+      if (typeof image === 'string') return SpriteSystem._loadImage(image);
+      // A raw HTMLImageElement (may or may not be loaded yet).
+      const img = image;
+      return { img, isLoaded: () => !!(img && (img.complete ? img.naturalWidth !== 0 || img.width : false)) };
+    }
+
+    /** Lazy-load an image URL, mirroring the built-in sprite loaders' pattern. */
+    static _loadImage(url) {
+      SpriteSystem._imageCache = SpriteSystem._imageCache || {};
+      if (SpriteSystem._imageCache[url]) return SpriteSystem._imageCache[url];
+      const img = new Image();
+      let loaded = false;
+      img.addEventListener('load',  () => { loaded = true; });
+      img.addEventListener('error', () => { console.warn('SpriteSystem: failed to load ' + url); });
+      img.src = url;
+      return SpriteSystem._imageCache[url] = { img, isLoaded: () => loaded };
+    }
+
+    /** Return a frame draw function that blits a sub-rect of the sheet. */
+    static _makeFrameDrawer(sheet, sx, sy, fw, fh) {
+      return function (ctx) {
+        if (!sheet.isLoaded()) {
+          ctx.fillStyle = '#446';
+          ctx.fillRect(2, 2, fw - 4, fh - 4);
+          return;
+        }
+        ctx.drawImage(sheet.img, sx, sy, fw, fh, 0, 0, fw, fh);
+      };
+    }
+
+    /**
+     * Build a { frameWidth, frameHeight, originX, originY, animations } definition
+     * from a sheet wrapper + Aseprite-style atlas. Exposed for tooling/tests.
+     */
+    static buildSheetDefinition(sheet, atlas, opts) {
+      opts = opts || {};
+      atlas = atlas || {};
+      const meta   = atlas.meta || {};
+      const frames = Array.isArray(atlas.frames) ? atlas.frames : [];
+      const fsize  = meta.frameSize || {};
+      const origin = meta.origin || {};
+
+      // Frame dimensions: prefer meta.frameSize, else the first frame's rect.
+      const first = (frames[0] && frames[0].frame) || {};
+      const frameWidth  = fsize.w || first.w || opts.frameWidth  || 0;
+      const frameHeight = fsize.h || first.h || opts.frameHeight || 0;
+      const originX = (opts.originX != null) ? opts.originX : (origin.x != null ? origin.x : frameWidth  / 2);
+      const originY = (opts.originY != null) ? opts.originY : (origin.y != null ? origin.y : frameHeight);
+      const defaultFps = opts.defaultFps || 12;
+
+      const rectOf = (i) => (frames[i] && frames[i].frame) || { x: 0, y: 0, w: frameWidth, h: frameHeight };
+      const drawerFor = (i) => {
+        const r = rectOf(i);
+        return SpriteSystem._makeFrameDrawer(sheet, r.x, r.y, r.w || frameWidth, r.h || frameHeight);
+      };
+      // fps for a tag: derive from the tag's first frame duration (ms) if present.
+      const fpsFor = (from) => {
+        const d = frames[from] && frames[from].duration;
+        return (d && d > 0) ? Math.max(1, Math.round(1000 / d)) : defaultFps;
+      };
+
+      const animations = {};
+      const tags = Array.isArray(meta.frameTags) ? meta.frameTags : [];
+      if (tags.length) {
+        tags.forEach(tag => {
+          const from = tag.from | 0;
+          const to   = (tag.to != null ? tag.to : from) | 0;
+          const list = [];
+          for (let i = from; i <= to; i++) list.push(drawerFor(i));
+          animations[tag.name] = {
+            fps: tag.fps || fpsFor(from),
+            loop: tag.loop !== false && tag.direction !== 'once',
+            frames: list,
+          };
+        });
+      } else {
+        // No tags: one looping 'idle' animation spanning every frame.
+        const list = frames.length ? frames.map((_, i) => drawerFor(i)) : [drawerFor(0)];
+        animations.idle = { fps: defaultFps, loop: true, frames: list };
+      }
+
+      return { frameWidth, frameHeight, originX, originY, animations };
+    }
+
     /** Return the raw definition or null. */
     getSprite(name) {
       return this._sprites[name] || null;

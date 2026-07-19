@@ -1,0 +1,12 @@
+{
+  "id": "Monopoly",
+  "title": "Monopoly",
+  "icon": "🎲",
+  "color": "#2a9d8f",
+  "tags": [
+    "BOARD GAME",
+    "2 PLAYER"
+  ],
+  "desc": "A simplified Monopoly board game for 2 players. Roll dice by clicking or pressing Space, move tokens, buy properties, and pay rent.",
+  "config": []
+}

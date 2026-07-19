@@ -1,0 +1,12 @@
+{
+  "id": "HamInvadersMTP",
+  "title": "Ham Invaders MTP",
+  "icon": "🐷",
+  "color": "#ff8844",
+  "tags": [
+    "SHOOTER",
+    "1 PLAYER"
+  ],
+  "desc": "A classic Space Invaders clone: move left/right, fire upward, clear the formation of invaders before they reach you.",
+  "config": []
+}

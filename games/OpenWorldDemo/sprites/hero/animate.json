@@ -1,0 +1,91 @@
+{
+  "frames": [
+    {
+      "filename": "idle_00",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "duration": 333
+    },
+    {
+      "filename": "idle_01",
+      "frame": {
+        "x": 16,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "duration": 333
+    },
+    {
+      "filename": "walk_00",
+      "frame": {
+        "x": 0,
+        "y": 24,
+        "w": 16,
+        "h": 24
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_01",
+      "frame": {
+        "x": 16,
+        "y": 24,
+        "w": 16,
+        "h": 24
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_02",
+      "frame": {
+        "x": 32,
+        "y": 24,
+        "w": 16,
+        "h": 24
+      },
+      "duration": 100
+    },
+    {
+      "filename": "walk_03",
+      "frame": {
+        "x": 48,
+        "y": 24,
+        "w": 16,
+        "h": 24
+      },
+      "duration": 100
+    }
+  ],
+  "meta": {
+    "app": "owui-games-tool",
+    "format": "RGBA8888",
+    "image": "spritesheet.png",
+    "frameTags": [
+      {
+        "name": "idle",
+        "from": 0,
+        "to": 1,
+        "loop": true
+      },
+      {
+        "name": "walk",
+        "from": 2,
+        "to": 5,
+        "loop": true
+      }
+    ],
+    "origin": {
+      "x": 8,
+      "y": 24
+    },
+    "frameSize": {
+      "w": 16,
+      "h": 24
+    }
+  }
+}

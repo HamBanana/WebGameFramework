@@ -1,0 +1,40 @@
+// parts/Player.js — component, wired by owui-games-tool.
+(function (G, GF) {
+  'use strict';
+
+  class Player {
+    constructor(name, color, token) {
+      this.name = name;
+      this.color = color;
+      this.token = token;
+      this.money = 1500;
+      this.position = 0;
+      this.properties = [];
+      this.inJail = false;
+    }
+
+    draw(ctx, boardPositions, playerIndex) {
+      const pos = boardPositions[this.position];
+      const offset = playerIndex === 0 ? -8 : 8;
+
+      ctx.fillStyle = this.color;
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+
+      // Draw token shape
+      ctx.beginPath();
+      ctx.arc(pos.x + offset, pos.y + offset, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Token label
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(this.token, pos.x + offset, pos.y + offset);
+    }
+  }
+
+  G.components.Player = Player;
+})(window.GAME = window.GAME || { components: {}, scenes: {}, systems: {}, state: {} }, window.GF);

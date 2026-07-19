@@ -1,0 +1,132 @@
+const cfg = GF.GAME_CONFIG;
+
+// Scene for the main game
+class TicTacToeScene extends GF.Scene {
+  constructor() {
+    super();
+    this.board = Array(9).fill(null);
+    this.currentPlayer = 'X';
+    this.gameActive = true;
+    this.winner = null;
+    this.message = "Player X's turn";
+    this.lastMove = null;
+    this.cellSize = 100;
+    this.offset = 100;
+  }
+
+  init(engine) {
+    this.engine = engine;
+    // Draw the grid
+    this.ctx = engine.ctx;
+    this.canvas = engine.canvas;
+    
+    // Handle clicks
+    this.canvas.addEventListener('mousedown', (e) => this.handleClick(e));
+  }
+
+  handleClick(e) {
+    if (!this.gameActive) return;
+
+    const r = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) * (this.canvas.width / r.width);
+    const y = (e.clientY - r.top) * (this.canvas.height / r.height);
+
+    const col = Math.floor((x - this.offset) / this.cellSize);
+    const row = Math.floor((y - this.offset) / this.cellSize);
+    const index = row * 3 + col;
+
+    if (this.inBounds(col, row) && this.board[index] === null) {
+      this.board[index] = this.currentPlayer;
+      this.lastMove = { col, row };
+      
+      if (this.checkWinner()) {
+        this.gameActive = false;
+        this.winner = this.currentPlayer;
+        this.message = `Player ${this.winner} wins!`;
+      } else if (this.board.every(cell => cell !== null)) {
+        this.gameActive = false;
+        this.winner = 'Draw';
+        this.message = "It's a draw!";
+      } else {
+        this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
+        this.message = `Player ${this.currentPlayer}'s turn`;
+      }
+    }
+  }
+
+  inBounds(col, row) {
+    return col >= 0 && col < 3 && row >= 0 && row < 3;
+  }
+
+  checkWinner() {
+    const wins = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+      [0, 3, 6], [1, 4, 7], [2, 5, 8], // Cols
+      [0, 4, 8], [2, 4, 6]             // Diagonals
+    ];
+    for (let win of wins) {
+      if (this.board[win[0]] && 
+          this.board[win[0]] === this.board[win[1]] && 
+          this.board[win[0]] === this.board[win[2]]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  update(dt, engine) {}
+
+  render(ctx, engine) {
+    const { width, height, backgroundColor } = cfg.engine;
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw Grid
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    
+    // Horizontal lines
+    for (let i = 1; i < 3; i++) {
+      ctx.moveTo(this.offset, this.offset + i * this.cellSize);
+      ctx.lineTo(this.offset + 3 * this.cellSize, this.offset + i * this.cellSize);
+    }
+    // Vertical lines
+    for (let i = 1; i < 3; i++) {
+      ctx.moveTo(this.offset + i * this.cellSize, this.offset);
+      ctx.lineTo(this.offset + i * this.cellSize, this.offset + 3 * this.cellSize);
+    }
+    ctx.stroke();
+
+    // Draw Symbols
+    ctx.font = 'bold 80px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    this.board.forEach((val, i) => {
+      if (val) {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const x = this.offset + col * this.cellSize + this.cellSize / 2;
+        const y = this.offset + row * this.cellSize + this.cellSize / 2;
+        
+        ctx.fillStyle = val === 'X' ? '#ff4d4d' : '#4da3ff';
+        ctx.fillText(val, x, y);
+      }
+    });
+
+    // UI Message
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '30px Arial';
+    ctx.fillText(this.message, width / 2, height - 50);
+  }
+}
+
+// Boot the game
+window.addEventListener('GF:ready', () => {
+  const game = GF.createGame(cfg.engine, cfg.physics, {
+    gameName: 'TTT-12b-it-qat',
+    scenes: [new TicTacToeScene()],
+  });
+  game.engine.start();
+});

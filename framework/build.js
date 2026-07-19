@@ -20,6 +20,7 @@ var CORE = [
   'systems/ParticleSystem.js',
   'systems/Camera.js',
   'systems/TilemapSystem.js',
+  'systems/WorldSystem.js',
   'systems/SaveSystem.js',
   'systems/DebugOverlay.js',
   'systems/DialogueSystem.js',

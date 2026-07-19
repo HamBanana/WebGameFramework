@@ -1,0 +1,13 @@
+{
+  "id": "OrnithInvaders",
+  "title": "Ornith Invaders",
+  "icon": "🎮",
+  "color": "#4488ff",
+  "tags": [
+    "ARCADE",
+    "SOLO",
+    "SHOOTER"
+  ],
+  "desc": "A bird-themed space invasion! Defend Earth from alien bird hordes. Shoot, dodge, and survive the feathered onslaught.",
+  "config": []
+}
