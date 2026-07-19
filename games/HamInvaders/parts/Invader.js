@@ -9,26 +9,22 @@
       this.w = 32;
       this.h = 24;
       this.alive = true;
-      this.type = type || 0; // 0,1,2 for different rows
+      this.type = type || 0;
     }
     draw(ctx) {
       if (!this.alive) return;
       const colors = ['#9b59b6', '#e67e22', '#2ecc71'];
       ctx.fillStyle = colors[this.type] || '#9b59b6';
-      // Body
       ctx.fillRect(this.x, this.y, this.w, this.h);
-      // Eyes
       ctx.fillStyle = '#fff';
       ctx.fillRect(this.x + 6, this.y + 6, 8, 8);
       ctx.fillRect(this.x + 18, this.y + 6, 8, 8);
       ctx.fillStyle = '#222';
       ctx.fillRect(this.x + 9, this.y + 9, 4, 4);
       ctx.fillRect(this.x + 21, this.y + 9, 4, 4);
-      // Legs
       ctx.fillStyle = colors[this.type] || '#9b59b6';
       ctx.fillRect(this.x + 2, this.y + this.h, 6, 6);
       ctx.fillRect(this.x + this.w - 8, this.y + this.h, 6, 6);
-      // Mouth
       ctx.fillStyle = '#c0392b';
       ctx.fillRect(this.x + 10, this.y + 18, 12, 3);
     }

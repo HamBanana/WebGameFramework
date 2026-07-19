@@ -1,4 +1,4 @@
-// games/HamInvaders/config.js
+// games/HamInvadersHeretic31B/config.js
 // Game-specific configuration. Uses sprite NAMES only — no asset paths.
 (function (GF) {
   'use strict';
@@ -8,13 +8,13 @@
     "width": 800,
     "height": 500,
     "canvasId": "gameCanvas",
-    "backgroundColor": "#1a1a2e"
+    "backgroundColor": "#000000"
   },
   "physics": {
     "gravity": 0
   },
   "game": {
-    "name": "HamInvaders",
+    "name": "HamInvadersHeretic31B",
     "startScene": "Main"
   },
   "debug": {

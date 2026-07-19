@@ -2,11 +2,11 @@
   "id": "HamInvaders",
   "title": "Ham Invaders",
   "icon": "🐷",
-  "color": "#ff6b6b",
+  "color": "#c774e8",
   "tags": [
     "SHOOTER",
     "1 PLAYER"
   ],
-  "desc": "Classic Space Invaders clone with a ham/pig theme. Move left/right with Arrow keys or A/D, fire with Space. Destroy all invaders before they reach the bottom!",
+  "desc": "Space Invaders clone, ham/pig theme. Move with Arrows/A,D, fire with Space. Purple title card credits the model that generated it.",
   "config": []
 }

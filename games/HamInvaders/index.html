@@ -1,30 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Ham Invaders – GameFramework</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background:#000; display:flex; justify-content:center; align-items:center;
-           min-height:100vh; overflow:hidden; font-family:monospace; }
-    #gameContainer { position:relative; width:800px; height:500px; }
-    #gameCanvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
-  </style>
+  <title>Ham Invaders</title>
+  <meta charset="utf-8">
 </head>
-<body>
-  <div id="gameContainer">
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
-  </div>
-
-  <!-- GF:SCRIPTS start — auto-generated from parts/*.js by owui-games-tool; do not edit by hand -->
+<body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#000;">
   <script src="config.js"></script>
   <script src="../../framework/GameFramework.bundle.js"></script>
   <script src="parts/Bullet.js"></script>
   <script src="parts/Invader.js"></script>
   <script src="parts/Main.js"></script>
   <script src="parts/Player.js"></script>
+  <script src="parts/Powerup.js"></script>
   <script src="parts/boot.js"></script>
-  <!-- GF:SCRIPTS end -->
 </body>
 </html>

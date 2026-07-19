@@ -19,6 +19,9 @@
       this.ufo = null;
       this.ufoTimer = 20;
       this.ufoSpeed = 100;
+      this.powerups = [];
+      this.powerupTypes = ['speed', 'laser', 'sidecannons'];
+      this.shootRate = 0.3;
 
       engine.input.bind('left', 'KeyA', 'ArrowLeft');
       engine.input.bind('right', 'KeyD', 'ArrowRight');
@@ -49,7 +52,7 @@
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           this.invaders.push(new G.components.Invader(
-            startX + c * spacingX, startY + r * spacingY, r
+            startX + c * spacingX, startY + r * spacingY, r % 3
           ));
         }
       }
@@ -57,15 +60,33 @@
 
     shoot() {
       if (this.fireCooldown > 0) return;
-      this.fireCooldown = 0.3;
+      this.fireCooldown = this.player.shootRate || 0.3;
+      const bt = this.player.getBulletType();
       const bx = this.player.x + this.player.w / 2 - 2;
       const by = this.player.y - 12;
-      this.bullets.push(new G.components.Bullet(bx, by));
+      this.bullets.push(new G.components.Bullet(bx, by, bt));
+      // Side cannons fire too if active
+      if (this.player.needsSideCannons()) {
+        const lbx = this.player.x + this.player.leftCannonOffset + 4;
+        const rbx = this.player.x + this.player.w + this.player.leftCannonOffset + 4;
+        const lby = this.player.y - 6;
+        this.bullets.push(new G.components.Bullet(lbx, lby, 'sidecannon'));
+        this.bullets.push(new G.components.Bullet(rbx, lby, 'sidecannon'));
+      }
     }
 
     overlap(a, b) {
       return a.x < b.x + b.w && a.x + a.w > b.x &&
              a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    dropPowerup(x, y) {
+      var r = Math.random();
+      var type;
+      if (r < 0.33) type = 'speed';
+      else if (r < 0.66) type = 'laser';
+      else type = 'sidecannons';
+      this.powerups.push(new G.components.Powerup(x, y, type));
     }
 
     update(dt, engine) {
@@ -112,12 +133,10 @@
           this.ufoTimer = 20;
           const dir = Math.random() < 0.5 ? 1 : -1;
           const ufoW = 48, ufoH = 20;
-          const startX = dir === 1 ? -ufoW : W + ufo;
           this.ufo = { x: dir === 1 ? -ufoW : W, y: 20, w: ufoW, h: ufoH, dir: dir };
         }
         if (this.ufo) {
           this.ufo.x += this.ufoSpeed * this.ufo.dir * dt;
-          // Remove if off screen
           if ((this.ufo.dir === 1 && this.ufo.x > W + this.ufo.w) ||
               (this.ufo.dir === -1 && this.ufo.x + this.ufo.w < -this.ufo.w)) {
             this.ufo = null;
@@ -128,9 +147,26 @@
         for (const b of this.bullets) {
           for (const inv of this.invaders) {
             if (b.alive && inv.alive && this.overlap(b, inv)) {
-              b.alive = false;
-              inv.alive = false;
-              this.score += (3 - inv.type) * 10;
+              if (b.type === 'laser') {
+                // Laser kills entire column of invaders
+                var colInvaders = [];
+                for (const otherInv of this.invaders) {
+                  if (otherInv.alive && Math.abs(otherInv.x - inv.x) < 1) {
+                    colInvaders.push(otherInv);
+                  }
+                }
+                for (const ci of colInvaders) {
+                  ci.alive = false;
+                  this.score += (3 - ci.type) * 10;
+                  if (Math.random() < 0.15) this.dropPowerup(ci.x + ci.w / 2, ci.y);
+                }
+                b.alive = false;
+              } else {
+                b.alive = false;
+                inv.alive = false;
+                this.score += (3 - inv.type) * 10;
+                if (Math.random() < 0.15) this.dropPowerup(inv.x + inv.w / 2, inv.y);
+              }
             }
           }
         }
@@ -148,6 +184,18 @@
             }
           }
         }
+
+        // Update powerups (dropped items)
+        for (const p of this.powerups) p.update(dt);
+        this.powerups = this.powerups.filter(p => p.alive);
+        // Powerup vs player collision
+        for (const p of this.powerups) {
+          if (p.alive && this.overlap(p, this.player)) {
+            p.alive = false;
+            this.player.activate(p.type);
+          }
+        }
+        this.powerups = this.powerups.filter(p => p.alive);
 
         // Check win
         if (this.invaders.length === 0) {
@@ -176,7 +224,6 @@
               this.won = false;
               this.gameOverTimer = 0;
             } else {
-              // Remove that invader
               this.invaders = this.invaders.filter(i => i !== inv);
             }
             break;
@@ -209,9 +256,6 @@
           { align: 'center', font: '18px monospace', color: '#aaa' });
         GF.UISystem.drawText(ctx, 'Press Space to Start', cx, H/2 + 100,
           { align: 'center', font: '22px monospace', color: '#ffeb3b' });
-        GF.UISystem.drawText(ctx, 'built by qwen3.6-27b', cx, H/2 + 145,
-          { align: 'center', font: '16px monospace', color: '#ff6b6b' });
-
       } else if (this.phase === 'play') {
         // Background
         ctx.fillStyle = '#1a1a2e';
@@ -239,6 +283,22 @@
 
         // Draw bullets
         for (const b of this.bullets) b.draw(ctx);
+
+        // Draw powerups
+        for (const p of this.powerups) p.draw(ctx);
+
+        // Powerup HUD indicator
+        if (this.player.powerupType) {
+          var pText = '';
+          var pColor = '#fff';
+          if (this.player.powerupType === 'speed') { pText = '⚡ SPEED'; pColor = '#ffeb3b'; }
+          else if (this.player.powerupType === 'laser') { pText = '🔴 LASER'; pColor = '#ff6b6b'; }
+          else if (this.player.powerupType === 'sidecannons') { pText = '💥 SIDE CANNONS'; pColor = '#2ecc71'; }
+          if (pText) {
+            GF.UISystem.drawText(ctx, pText + ' ' + Math.ceil(this.player.powerupTimer) + 's', cx, 12,
+              { font: '16px monospace', color: pColor, align: 'center', baseline: 'top' });
+          }
+        }
 
         // HUD
         GF.UISystem.drawText(ctx, 'Score: ' + this.score, 12, 12,
