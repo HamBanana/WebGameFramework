@@ -12,38 +12,78 @@
   - `GF.ParallaxSystem` — multi-layer scroll backgrounds (RoadToSkagen)
 - **New scene templates**: `GF.TitleScene`, `GF.GameOverScene`
 - **New procedural-audio helpers**: `GF.Audio.makeToneBuffer`, `GF.Audio.makeArpeggioBuffer`, `GF.Audio.registerStandardSet` (extracted from SpaceInvaders/ShiningQuest)
-- **Built-in sprites**: 109 sprites + 6 portraits previously inside individual games are now available in the framework. Asset paths live in `framework/sprites/<category>.js`; games refer to sprites by name only (e.g. `'goblin'`, `'tree_pine'`, `'token_red'`, `'hana'`). Categories: `aliens`, `boss`, `businesses`, `cells`, `characters`, `landmarks`, `monsters`, `player`, `portraits`, `resources`, `scenery`, `tokens`, `ui`, `vehicles`, `wildlife`.
+- **Built-in sprites**: 109 sprites + 7 portraits previously inside individual games are now available in the framework. Asset paths live in `framework/sprites/<category>.js`; games refer to sprites by name only (e.g. `'goblin'`, `'tree_pine'`, `'token_red'`, `'hana'`). Categories: `aliens`, `boss`, `businesses`, `cells`, `characters`, `landmarks`, `monsters`, `player`, `portraits`, `resources`, `scenery`, `tokens`, `ui`, `vehicles`, `wildlife`.
 - **Sprite assets** rendered to `/Sprites/<Category>/<Name>/spritesheet.png` + `animate.json` (Aseprite frameTags format) — same layout as `Claude` and `Claudia`.
 - Two bundles now: `GameFramework.bundle.js` (core, ~217 KB) and `GameFramework.sprites.bundle.js` (optional, all built-in sprite registrations, ~84 KB). Include the second only if you want every sprite eagerly loaded.
 
 GameFramework is a modular JavaScript framework for building HTML-based games. A game only needs to include the bundled framework script in its `index.html`; all asset paths, sprite registrations, and system wiring live inside the framework and your game's config file — keeping individual game files lean and focused on logic.
 
+### Feature overview
+
+The framework spans several families of systems — enable the ones a game needs via `GF.createGame` flags:
+
+- **Core loop & I/O** — Engine, EventBus, InputManager (with synthetic input + on-screen TouchControls), AssetLoader, SceneManager (with animated transitions and Title / Game Over scene templates).
+- **2D rendering** — programmatic *and* spritesheet-atlas sprites, Camera (follow/lerp/culling), TilemapSystem, ParallaxSystem, UISystem HUD helpers, ParticleSystem, TweenSystem.
+- **Worlds & composition** — WorldSystem (data-driven multi-area open worlds with portals), EntityWorld (behavior/prefab composition layer).
+- **Gameplay logic** — PhysicsSystem (AABB + gravity), PlayerController (platformer/topdown/sideways presets), StateMachine, ScoreManager (score/high-score/combo), WaveSpawner, GridSystem (tactical grid + A*/BFS pathfinding), CursorMenu, TurnBasedBattleSystem, DialogueSystem.
+- **Audio** — AudioSystem (Web Audio wrapper) plus ProceduralAudio synthesis helpers (no asset files needed).
+- **3D (Three.js)** — ModelSystem (GLB/GLTF viewer with orbit & first-person walk-gallery modes) and Three3DScene (thin host for procedural 3D worlds).
+- **Persistence & debug** — SaveSystem (namespaced localStorage), DebugOverlay (F1).
+- **Built-in content** — 109 sprites + 7 portraits across 15 categories, plus `claude` / `claudia` characters and `claude_3d` / `claudia_3d` models.
+- **Tooling** — a game launcher, a zero-dependency Node dev server, a Sprite Tool, and a World Builder.
+
 ---
 
 ## Table of Contents
 
+**Getting started**
 1. [Project Structure](#1-project-structure)
 2. [Quick Start](#2-quick-start)
 3. [GAME_CONFIG Pattern](#3-game_config-pattern)
 4. [Creating a Game — `GF.createGame`](#4-creating-a-game)
+
+**Core**
 5. [Engine](#5-engine)
 6. [Input](#6-input)
 7. [Scenes & Scene Manager](#7-scenes--scene-manager)
+
+**2D rendering**
 8. [Sprites & Animation](#8-sprites--animation)
 9. [Physics](#9-physics)
 10. [Camera](#10-camera)
-11. [Tilemaps](#11-tilemaps)
+11. [Tilemaps](#11-tilemaps) · [11b. World System](#11b-world-system-open-world) · [11c. Entity World](#11c-entity-world-composition--keeps-scenes-tiny)
 12. [UI Drawing Utilities](#12-ui-drawing-utilities)
-13. [Audio](#13-audio)
-14. [Tweens](#14-tweens)
 15. [Particles](#15-particles)
+14. [Tweens](#14-tweens)
+26. [Parallax System](#26-parallax-system)
+
+**Audio**
+13. [Audio](#13-audio) · [30. Procedural Audio](#30-procedural-audio)
+
+**Gameplay logic**
+22. [Player Controller](#22-player-controller)
+23. [State Machine](#23-state-machine)
+24. [Score Manager](#24-score-manager)
+25. [Wave Spawner](#25-wave-spawner)
+27. [Grid System (tactics + pathfinding)](#27-grid-system-tactics--pathfinding)
+28. [Cursor Menu](#28-cursor-menu)
+29. [Turn-Based Battle System](#29-turn-based-battle-system)
 16. [Dialogue System](#16-dialogue-system)
+
+**3D**
+31. [Model System & Three3DScene](#31-3d--model-system--three3dscene)
+
+**Support**
 17. [Save System](#17-save-system)
 18. [Asset Loader](#18-asset-loader)
 19. [Debug Overlay](#19-debug-overlay)
 20. [Math Utilities](#20-math-utilities)
 21. [Events](#21-events)
-22. [Full Minimal Example](#22-full-minimal-example)
+32. [Scene Templates (Title / Game Over)](#32-scene-templates-title--game-over)
+
+**Reference**
+33. [Tooling & Dev Server](#33-tooling--dev-server)
+34. [Full Minimal Example](#34-full-minimal-example)
 
 ---
 
@@ -53,33 +93,69 @@ GameFramework is a modular JavaScript framework for building HTML-based games. A
 GameFramework/
 ├── framework/
 │   ├── core/
-│   │   ├── Engine.js           # Game loop & canvas management
-│   │   ├── EventBus.js         # Pub/sub event system
-│   │   ├── InputManager.js     # Keyboard input
-│   │   ├── AssetLoader.js      # Asset pre-loading
-│   │   └── SceneManager.js     # Scene stack
+│   │   ├── Engine.js               # Game loop & canvas management
+│   │   ├── EventBus.js             # Pub/sub event system
+│   │   ├── InputManager.js         # Keyboard + synthetic input → named actions
+│   │   ├── AssetLoader.js          # Asset pre-loading (image/audio/json/text)
+│   │   └── SceneManager.js         # Scene stack + animated transitions
 │   ├── systems/
-│   │   ├── SpriteSystem.js     # Sprite defs & animators
-│   │   ├── PhysicsSystem.js    # AABB physics + gravity
-│   │   ├── UISystem.js         # HUD drawing helpers
-│   │   ├── AudioSystem.js      # Web Audio wrapper
-│   │   ├── TweenSystem.js      # Property animation
-│   │   ├── ParticleSystem.js   # Particle emitters
-│   │   ├── Camera.js           # Scrolling viewport
-│   │   ├── TilemapSystem.js    # Grid-based tilemaps
-│   │   ├── SaveSystem.js       # localStorage save/load
-│   │   ├── DialogueSystem.js   # Dialogue sequencer
-│   │   └── DebugOverlay.js     # Dev overlay (F1)
-│   ├── sprites/                # Built-in sprite definitions
+│   │   ├── SpriteSystem.js         # Programmatic + spritesheet-atlas sprites
+│   │   ├── PhysicsSystem.js        # AABB physics + gravity
+│   │   ├── UISystem.js             # HUD drawing helpers
+│   │   ├── AudioSystem.js          # Web Audio wrapper
+│   │   ├── TweenSystem.js          # Property animation
+│   │   ├── ParticleSystem.js       # Particle emitters
+│   │   ├── ParallaxSystem.js       # Multi-layer scrolling backgrounds
+│   │   ├── Camera.js               # Scrolling viewport (follow / cull)
+│   │   ├── TilemapSystem.js        # Grid-based tilemaps
+│   │   ├── WorldSystem.js          # Data-driven multi-area open worlds
+│   │   ├── EntityWorld.js          # Behavior/prefab composition layer
+│   │   ├── GridSystem.js           # Tactical grid + A*/BFS pathfinding
+│   │   ├── PlayerController.js     # Platformer/topdown/sideways movement
+│   │   ├── StateMachine.js         # Timed finite state machine
+│   │   ├── ScoreManager.js         # Score / high score / combo
+│   │   ├── WaveSpawner.js          # Wave-based enemy spawning
+│   │   ├── MenuSystem.js           # Cursor-driven menu (GF.CursorMenu)
+│   │   ├── TurnBasedBattleSystem.js# Turn order / rounds / damage
+│   │   ├── TouchControls.js        # On-canvas buttons + virtual joystick
+│   │   ├── ModelSystem.js          # 3D GLB/GLTF viewer (Three.js)
+│   │   ├── Three3DScene.js         # 3D host for procedural meshes (Three.js)
+│   │   ├── SaveSystem.js           # localStorage save/load
+│   │   ├── DialogueSystem.js       # Dialogue sequencer
+│   │   └── DebugOverlay.js         # Dev overlay (F1)
+│   ├── scenes/                     # Reusable scene templates
+│   │   ├── TitleScene.js           # GF.TitleScene
+│   │   └── GameOverScene.js        # GF.GameOverScene
+│   ├── sprites/                    # Built-in sprite definitions (15 categories)
 │   ├── utils/
-│   │   └── MathUtils.js        # Math helpers & easing
-│   ├── GameFramework.js        # Main API (source)
-│   └── GameFramework.bundle.js # Bundled output (include this)
-├── games/                      # Example games
-└── Sprites/                    # Sprite asset files
+│   │   ├── MathUtils.js            # Math helpers & easing
+│   │   └── ProceduralAudio.js      # Synthesised SFX (GF.Audio.*)
+│   ├── vendor/                     # three.min.js, GLTFLoader, OrbitControls
+│   ├── build.js                    # Bundler → the two .bundle.js files
+│   ├── GameFramework.js            # Main API (source)
+│   ├── GameFramework.bundle.js         # Core bundle (include this)
+│   └── GameFramework.sprites.bundle.js # Optional: all built-in sprites
+├── games/                          # 20+ example games
+├── tools/
+│   ├── spritetool.html             # Slice/scale/tag spritesheets → atlas
+│   └── worldbuilder.html           # Paint WorldSystem areas → world data
+├── Sprites/                        # Sprite/model asset files
+├── SFX/                            # Sound assets
+├── launcher.html                   # Browsable game gallery / launcher
+├── serve.js                        # Zero-dependency dev HTTP server
+└── launch.js                       # Start server + open launcher
 ```
 
 Your game's `index.html` includes `GameFramework.bundle.js` (or the source file) once. Everything else is your game's own JS files.
+
+### The two bundles
+
+| Bundle | Size | Contents | When to include |
+|--------|------|----------|-----------------|
+| `GameFramework.bundle.js` | ~217 KB | All core + systems + scene templates + `claude`/`claudia` | Always |
+| `GameFramework.sprites.bundle.js` | ~84 KB | Eager registration of all 109 built-in sprites | Only if you want every built-in sprite loaded up-front |
+
+Both are produced by `node framework/build.js` from the source files — never edit a `.bundle.js` by hand (the `.prev.js` files are the previous build, kept for diffing).
 
 ---
 
@@ -198,14 +274,23 @@ Synchronously creates and wires all enabled systems. Returns a `game` object wit
 
 ```javascript
 const game = GF.createGame(cfg.engine, cfg.physics, {
-  gameName:    'MyGame',   // Namespace for SaveSystem
+  gameName:    'MyGame',   // Namespace for SaveSystem & ScoreManager
+
+  // ── Enabled by default (pass false to disable) ──
   audio:       true,
   tweens:      true,
   particles:   true,
   scenes:      true,        // or an array of scene instances: [new MyScene()] — pushed automatically
   tilemap:     true,
-  debug:       true,
   dialogue:    true,
+  grids:       true,        // GridSystem (tactical grids + pathfinding)
+  battle:      true,        // TurnBasedBattleSystem
+  debug:       true,        // (also honours GAME_CONFIG.debug — see below)
+
+  // ── Opt-in (disabled unless set true) ──
+  models:      false,       // ModelSystem (3D — requires Three.js)
+  score:       false,       // ScoreManager
+  parallax:    false,       // ParallaxSystem
 
   // Fine-grained system options
   audioOpts:    { masterVolume: 0.8 },
@@ -213,22 +298,34 @@ const game = GF.createGame(cfg.engine, cfg.physics, {
   dialogueOpts: { typeSpeed: 30, advanceKey: 'interact' },
   debugOpts:    { toggleKey: 'F1', enabled: false },
   saveOpts:     { namespace: 'MyGame' },
+  modelOpts:    { /* ModelSystem config */ },
+  scoreOpts:    { comboMaxTime: 1.5, multiplierStep: 0.5, multiplierCap: 4 },
+  parallaxOpts: { layers: [ /* … */ ] },
 });
 
-// Returned object
+// Returned object — a property is null when its system is disabled
 game.engine    // Engine instance
 game.sprites   // SpriteSystem
 game.physics   // PhysicsSystem
-game.ui        // UISystem
+game.ui        // UISystem (static helper object)
 game.save      // SaveSystem
-game.audio     // AudioSystem   (if audio: true)
-game.tweens    // TweenSystem   (if tweens: true)
-game.particles // ParticleSystem (if particles: true)
-game.scenes    // SceneManager  (if scenes: true)
-game.tilemap   // TilemapSystem (if tilemap: true)
-game.debug     // DebugOverlay  (if debug: true)
-game.dialogue  // DialogueSystem (if dialogue: true)
+game.audio     // AudioSystem            (if audio)
+game.tweens    // TweenSystem            (if tweens)
+game.particles // ParticleSystem         (if particles)
+game.scenes    // SceneManager           (if scenes)
+game.tilemap   // TilemapSystem          (if tilemap)
+game.dialogue  // DialogueSystem         (if dialogue)
+game.grids     // GridSystem             (if grids)
+game.battle    // TurnBasedBattleSystem  (if battle)
+game.debug     // DebugOverlay           (if debug)
+game.models    // ModelSystem            (if models)
+game.score     // ScoreManager           (if score)
+game.parallax  // ParallaxSystem         (if parallax)
 ```
+
+> **Debug precedence:** `GF.GAME_CONFIG.debug` is authoritative when present — set it to `false` to disable the overlay entirely, or to a config object (`{ enabled, toggleKey }`) to configure it. Only when `GAME_CONFIG.debug` is absent do the `debug` / `debugOpts` flags apply.
+
+> **ParallaxSystem note:** unlike the others, `parallax` is *not* auto-added to the engine's system list — games usually draw it themselves at the start of their scene's `render`. See [§26](#26-parallax-system).
 
 ### `GF.createGameAsync(engineConfig, physicsConfig, opts)` → `Promise<game>`
 
@@ -1494,7 +1591,503 @@ engine.events.clear();
 
 ---
 
-## 22. Full Minimal Example
+## 22. Player Controller
+
+`GF.PlayerController` wires together a `PhysicsBody`, a `SpriteAnimator`, and the `InputManager` into a ready-made movement controller. Three preset modes cover the bulk of game types.
+
+| Mode | Movement |
+|------|----------|
+| `platformer` (default) | Left/right run + jump (optional double-jump, air control) |
+| `topdown` | 8-direction free movement, no gravity |
+| `sideways` | Left/right only, no jump (fighting / arcade) |
+
+### Creating
+
+```javascript
+const pc = new GF.PlayerController({
+  body:      playerBody,          // GF.PhysicsBody
+  animator:  playerAnim,          // GF.SpriteAnimator
+  input:     game.engine.input,
+  mode:      'platformer',
+  speed:     220,                 // px/s walk
+  runSpeed:  330,                 // px/s while `run` action held (default speed*1.5)
+  jumpPower: 700,                 // upward velocity px/s
+  maxJumps:  2,                   // 2 = double-jump
+  airControl: 0.6,                // 0..1 horizontal control while airborne
+
+  // Which input actions to read (defaults shown)
+  actions:   { left:'left', right:'right', up:'up', down:'down',
+               jump:'jump', run:'run', crouch:'crouch', attack:'attack' },
+
+  // Map animation *convention names* → your sprite's animation names
+  animations: { walk:'run', jump:'leap' },   // idle/walk/run/jump/fall/land/crouch/attack
+
+  // Hooks
+  onJump:   (pc) => game.audio.play('jump'),
+  onLand:   (pc) => game.particles.burst(pc.body.centerX, pc.body.bottom, dustCfg),
+  onAttack: (pc) => fireProjectile(pc.facing),
+});
+
+// Each frame — it moves the body, plays the right animation, and flips the sprite:
+pc.update(dt);
+
+pc.facing   // 1 = right, -1 = left
+```
+
+The controller only plays an animation if the sprite actually defines it, so a sprite with just `idle`/`walk` degrades gracefully.
+
+---
+
+## 23. State Machine
+
+`GF.StateMachine` is a small, allocation-free finite state machine with timed states and `onEnter` / `onUpdate` / `onExit` hooks. Ideal for fighter logic, boss phases, AI, and dialogue flow.
+
+```javascript
+const fsm = new GF.StateMachine({
+  initial: 'idle',
+  owner:   this,                    // optional — `this` inside hooks
+  states: {
+    idle: {
+      onUpdate(dt, fsm) { if (input.wasPressed('attack')) fsm.go('punch'); },
+    },
+    punch: {
+      duration:   0.4,              // auto-transition after 0.4 s
+      onEnter()   { anim.play('punch'); },
+      onComplete: 'idle',           // state entered when the timer elapses
+    },
+    hurt: {
+      duration:   0.3,
+      onEnter()   { anim.play('hit'); },
+      onComplete: (fsm) => fsm.previous,   // dynamic transition
+    },
+  },
+});
+```
+
+### API
+
+```javascript
+fsm.update(dt);                 // run onUpdate + auto-transitions
+fsm.go('punch', payload);       // explicit transition (payload passed to onEnter)
+fsm.restart(payload);           // re-enter current state, resetting its timer
+fsm.is('idle', 'walk');         // true if current state is any of these
+fsm.has('punch');               // state defined?
+fsm.handle('hitbox', data);     // fire a state's custom `on_<event>` handler
+
+fsm.current;                    // current state name
+fsm.previous;                   // prior state name
+fsm.timeInState;                // seconds since entering the current state
+```
+
+`onEnter(prevName, fsm, payload)`, `onExit(nextName, fsm)`, `onUpdate(dt, fsm)`. Transitioning to the state you're already in is a no-op (use `restart()` to force a re-enter).
+
+---
+
+## 24. Score Manager
+
+`GF.ScoreManager` tracks score, a persistent high score, and an optional combo multiplier. It persists through `SaveSystem` when available (falling back to `localStorage`). Enable it with `{ score: true }`.
+
+```javascript
+const game = GF.createGame(cfg.engine, cfg.physics, {
+  gameName: 'MyShooter', score: true,
+  scoreOpts: { comboMaxTime: 1.5, multiplierStep: 0.5, multiplierCap: 4 },
+});
+
+game.score.add(100);            // adds 100 × current multiplier, bumps combo
+game.score.add(50, { combo: false });  // add without touching the combo
+game.score.subtract(25);        // clamped at 0
+game.score.multiplier();        // current multiplier (1 → cap)
+
+game.score.resetCombo();
+game.score.reset();             // score + combo to 0 (keeps high score)
+game.score.resetHighScore();
+
+game.score.score;               // current score
+game.score.highScore;           // persistent best
+game.score.combo;               // current combo count
+```
+
+The combo decays after `comboMaxTime` seconds without a scoring `add`. The multiplier is `1 + (combo-1) × multiplierStep`, capped at `multiplierCap`.
+
+### Events (on `engine.events`)
+
+| Event | Payload |
+|-------|---------|
+| `score:add` | `{ amount, score, combo, multiplier }` |
+| `score:multiplier` | `{ multiplier, combo }` |
+| `score:newHigh` | `{ score }` |
+| `score:reset` | `{}` |
+
+---
+
+## 25. Wave Spawner
+
+`GF.WaveSpawner` schedules wave-based enemy spawning with an optional difficulty ramp. It emits enemies one at a time through a spawn callback and advances to the next wave once every enemy from the current one is dead. Suits shooters, tower defense, and survival modes.
+
+```javascript
+const spawner = new GF.WaveSpawner({
+  waves: [
+    { delay: 0.5, entries: [
+      { kind: 'alienSquid', count: 8, spacing: 0.15 },
+      { kind: 'alienCrab',  count: 8, spacing: 0.15 },
+    ]},
+    { delay: 1.0, entries: [
+      { kind: 'alienOctopus', count: 12, spacing: 0.10, meta: { boss:true } },
+    ]},
+  ],
+  difficulty:     1,            // multiplies every entry's count
+  difficultyRamp: 0.25,         // +0.25× per wave index
+
+  spawn: (kind, info) => spawnEnemy(kind, info),   // must return the entity
+  onWaveStart: (index, wave) => showBanner('Wave ' + (index + 1)),
+  onWaveClear: (index, wave) => game.score.add(500),
+  onAllClear:  () => game.scenes.replace(new VictoryScene(), game.engine),
+
+  events: game.engine.events,   // optional — also emits wave:start/spawn/clear/all_clear
+});
+
+spawner.start();
+// each frame:
+spawner.update(dt);
+// when an enemy the spawner created dies, tell it:
+spawner.notifyKilled(enemy);
+
+spawner.isActive;               // boolean
+spawner.aliveCount;             // enemies still alive this wave
+spawner.stop();
+```
+
+The `spawn` callback receives `info = { waveIndex, kind, indexInEntry, total }`.
+
+---
+
+## 26. Parallax System
+
+`GF.ParallaxSystem` draws multi-layer scrolling backgrounds. Each layer has its own scroll `factor` (0 = static sky, 1 = moves with the camera) and a draw callback; optionally a layer `tile`s (wraps) horizontally for infinite scrollers.
+
+```javascript
+const parallax = new GF.ParallaxSystem({
+  viewportW: 800, viewportH: 450,
+  layers: [
+    { factor: 0.1, draw: drawSky },                    // slowest
+    { factor: 0.4, draw: drawMountains, tile: 800 },   // wraps every 800 px
+    { factor: 0.8, draw: drawTrees,     tile: 400 },
+    { factor: 1.0, draw: drawRoad },                   // foreground
+  ],
+});
+
+// In your scene render, before world/HUD:
+parallax.scrollX = camera.x;
+parallax.scrollY = camera.y;   // vertical scroll uses a per-layer `factorY`
+parallax.draw(ctx);
+```
+
+Each layer callback is `(ctx, layer, system) => …`; the context is pre-translated to the layer's scrolled origin. Manage layers at runtime with `addLayer(layer)` / `removeLayer(layer)`, and give a layer an `update(dt)` method for its own animation timer (call `parallax.update(dt)`).
+
+When enabled via `{ parallax: true }`, the instance is created and returned as `game.parallax` but **not** auto-drawn — you draw it yourself.
+
+---
+
+## 27. Grid System (tactics + pathfinding)
+
+`GF.GridSystem` (enabled by default; also `game.grids`) owns a **logical** tactical playfield — passability, per-cell occupants, movement cost, and pathfinding. It is deliberately orthogonal to `TilemapSystem`: the tilemap draws graphics, the grid answers *"who is on which cell and where can they move."*
+
+```javascript
+const grid = game.grids.create({
+  cols: 12, rows: 10, cellSize: 32,
+  x: 0, y: 0,                 // world-space top-left
+  // optional row-major arrays:
+  terrainCost: [ /* per-cell move cost, default 1 */ ],
+  blocked:     [ /* per-cell true = wall */ ],
+});
+```
+
+### Coordinates & cell state
+
+```javascript
+grid.toWorld(col, row);          // → {x,y} cell top-left
+grid.toWorldCenter(col, row);    // → {x,y} cell centre
+grid.toGrid(worldX, worldY);     // → {col,row}
+grid.inBounds(col, row);
+
+grid.setBlocked(col, row, true); grid.isBlocked(col, row);
+grid.setCost(col, row, 2);       grid.getCost(col, row);
+```
+
+### Occupancy
+
+Each occupant is any object, tracked by reference. If it exposes a `team` string, range queries treat enemies as blockers and allies as walk-through-only.
+
+```javascript
+grid.placeOccupant(unit, 5, 5);   // sets unit.col / unit.row
+grid.occupantAt(5, 5);
+grid.removeOccupant(unit);
+grid.forEachOccupant((occ, col, row) => …);
+```
+
+### Pathfinding & range
+
+```javascript
+// Every cell a unit can reach & STOP on within a movement budget (Dijkstra/BFS):
+const reachable = grid.tilesInRange(unit, 4);      // [{col,row,cost,parent}]
+
+// A* shortest path (inclusive of both ends), or null if unreachable:
+const path = grid.findPath({col:5,row:5}, {col:8,row:7}, { team:'player', ignore:unit });
+
+// Attack reach ring (min..max range):
+const targets = grid.cellsInRing(unit, 1, 2, 'diamond');  // 'diamond' | 'square'
+
+GF.Grid.manhattan(a, b);   // static helper
+```
+
+`isPassable(col,row,{team,ignore})` — can a unit *enter*; `isStoppable(...)` — can it *stop*. Pathing into a goal cell occupied by an enemy is allowed (for "move adjacent and attack" logic). The system is purely logical — `render()` is a no-op; games draw highlights themselves using the returned cells.
+
+---
+
+## 28. Cursor Menu
+
+`GF.CursorMenu` is a cursor-driven vertical menu common to RPGs and strategy games — pure logic plus a draw helper.
+
+```javascript
+const menu = new GF.CursorMenu({
+  items: [
+    { label: 'Attack', value: 'attack' },
+    { label: 'Magic',  value: 'magic', enabled: false },   // greyed out, skipped
+    { label: 'Item',   value: 'item', hint: 'x3' },        // right-aligned hint
+    { label: 'Wait',   value: 'wait' },
+  ],
+  wrap:     true,
+  onSelect: (item) => console.log('chose', item.value),
+  onCancel: () => closeMenu(),
+  style:    { width: 160, textColor: '#fff', cursorColor: '#ffdd44' },
+});
+
+// Each frame:
+menu.update(engine.input);     // reads keys directly
+menu.draw(ctx, x, y);          // draws a panel with the cursor arrow
+```
+
+Default keys: **↑/W** and **↓/S** move, **Enter/Space/Z** select, **Esc/Backspace/X** cancel — override via `cfg.keys` (raw codes) or `cfg.actions` (named input actions). Other API: `move(±1)`, `currentItem()`, `select()`, `cancel()`, `setItems(items, keepCursor)`, `measure()` → `{width,height}` for centring, and `menu.active` to gate input.
+
+---
+
+## 29. Turn-Based Battle System
+
+`GF.TurnBasedBattleSystem` (enabled by default; also `game.battle`) manages turn order, rounds, and the active actor for a classic JRPG-style battle. It renders nothing — the game draws units and menus; the system owns the flow.
+
+Unit shape it reads: `{ id?, team, name, hp, maxHp, agility, dead }`. Higher `agility` acts earlier each round.
+
+```javascript
+game.battle.start({
+  units: [hero, mage, goblinA, goblinB],
+  // Optional custom win/lose predicates (defaults: no enemy / no player alive)
+  victory: (units) => !units.some(u => u.team === 'enemy'  && !u.dead),
+  defeat:  (units) => !units.some(u => u.team === 'player' && !u.dead),
+});
+
+while (!game.battle.finished) {
+  const unit = game.battle.currentUnit();     // whose turn it is
+  // …game shows menus / plays the chosen action for `unit`…
+  game.battle.dealDamage(target, 12, unit);   // clamps at 0, flags `dead`, emits events
+  game.battle.heal(ally, 20, unit);
+  game.battle.endTurn();                       // advance to next living unit / round
+}
+
+game.battle.livingUnits('enemy');   // filter helpers
+game.battle.allUnits();
+game.battle.forceEnd('victory');
+game.battle.result;                  // 'victory' | 'defeat' | 'draw'
+```
+
+### Events (on `engine.events`)
+
+`battle:start` · `battle:round` `{round, order}` · `battle:turn_start` `{unit}` · `battle:turn_end` · `battle:unit_damaged` `{unit, source, amount}` · `battle:unit_healed` · `battle:unit_died` · `battle:complete` `{result}`.
+
+---
+
+## 30. Procedural Audio
+
+`GF.Audio.*` synthesises simple sound effects at runtime, so a game needs no audio asset files. Extracted from SpaceInvaders & ShiningQuest.
+
+### Standard SFX set (fastest path)
+
+```javascript
+GF.Audio.registerStandardSet(game.audio);        // registers a whole palette
+game.audio.play('laser');
+game.audio.play('explode');
+
+// Filter which presets get registered:
+GF.Audio.registerStandardSet(game.audio, { only: ['laser', 'hit', 'coin'] });
+GF.Audio.registerStandardSet(game.audio, { skip: ['gameOver'] });
+```
+
+Presets: `laser`/`shoot`, `hit`, `explode`, `coin`, `jump`, `land`, `pickup`/`powerup`, `levelUp`, `gameOver`, `menuMove`, `menuConfirm`, `menuCancel`.
+
+### Building your own buffers
+
+```javascript
+const ctx = game.audio._ctx;   // the AudioContext
+
+// Single tone → AudioBuffer. type: 'sine' | 'square' | 'sweep' | 'noise'
+const laser = GF.Audio.makeToneBuffer(ctx, 880, 0.12, 'square',
+  { attack: 0.005, release: 0.12, volume: 0.2, sweep: 0 });
+
+// Multi-tone arpeggio (chords, pickups):
+const coin = GF.Audio.makeArpeggioBuffer(ctx, [880, 1320], 0.07, 'square', { volume: 0.25 });
+
+game.audio.register('laser', laser);   // then game.audio.play('laser')
+```
+
+`env` fields: `attack`, `release` (seconds), `volume` (0–1), and `sweep` (Hz/s frequency glide, `sweep` type only).
+
+---
+
+## 31. 3D — Model System & Three3DScene
+
+The framework ships two Three.js-based 3D systems. Both require Three.js loaded **before** `GameFramework.bundle.js`, and expect the 2D canvas to be transparent so the 3D view shows through:
+
+```html
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- For ModelSystem also add GLTFLoader.js + OrbitControls.js (see file header) -->
+<script src="../../framework/GameFramework.bundle.js"></script>
+```
+```javascript
+engine: { backgroundColor: 'transparent' }   // in GAME_CONFIG
+```
+(`framework/vendor/` holds local copies of `three.min.js`, `GLTFLoader.js`, and `OrbitControls.js`.)
+
+### ModelSystem — GLB/GLTF viewer
+
+Enable with `{ models: true }` → `game.models`. It creates its own WebGL canvas *behind* the game canvas and supports two interaction modes:
+
+- **orbit** (default) — one model centred at origin; OrbitControls rotate/pan/zoom.
+- **walk** — first-person: all loaded models sit on pedestals in a circular gallery; WASD moves and the mouse (pointer-lock) looks, so you can walk around each model.
+
+```javascript
+await game.models.loadPreset('claude_3d');   // built-in preset (by name only)
+await game.models.loadFromURL('models/ship.glb', 'ship');
+game.models.loadFromFile(fileInput.files[0]); // e.g. from a drag-drop / <input type=file>
+
+game.models.setMode('walk');                  // 'walk' | 'orbit'
+game.models.showModel('ship');                // focus a model in orbit mode
+game.models.playAnimation('Idle');            // GLTF clip by name
+game.models.stopAnimation();
+game.models.getModelNames();                  // → ['ship', …]
+game.models.resetCamera();
+game.models.setLighting('studio');
+game.models.showGrid(true); game.models.showAxes(true);
+game.models.setWireframe(true);
+game.models.setWalkSpeed(4, 8); game.models.setLookSensitivity(0.002);
+game.models.onModelLoaded((model) => …);  game.models.onError((err) => …);
+
+GF.ModelSystem.registerPreset('robot', '../assets/robot.glb');  // add your own preset
+```
+
+Built-in presets: `claude_3d`, `claudia_3d`.
+
+### Three3DScene — procedural 3D host
+
+A thin renderer you populate with your own Three.js meshes (rather than loading GLBs). Swap entire scenes on game-scene transitions with `clearScene()`.
+
+```javascript
+const three = new GF.Three3DScene({ bgColor: 0x0a0a14 });
+engine.addSystem(three);
+
+// From a Scene.init():
+const cube = new THREE.Mesh(geometry, material);
+three.add(cube);                 // tracked → bulk-removable
+three.setCamera(myCamera);       // override the default camera
+
+// Helpers:
+const p = three.worldToScreen(vec3);   // → {x,y} pixel coords on the 2D canvas (draw HUD there)
+three.setBackground(0x112233);
+three.remove(cube);
+
+// From Scene.destroy():
+three.clearScene();              // removes everything added via add()
+```
+
+Only one of the two is usually needed per game: `ModelSystem` for viewing/showcasing models, `Three3DScene` for building a procedural 3D world.
+
+---
+
+## 32. Scene Templates (Title / Game Over)
+
+Two ready-made scenes cover the bookends of most games. Both extend `GF.Scene`; subclass or just pass options.
+
+### `GF.TitleScene`
+
+```javascript
+game.scenes.push(new GF.TitleScene({
+  title:    'COSMIC CONQUEST',
+  subtitle: 'Press SPACE to start',   // pulses when `blink: true` (default)
+  bgColor:  '#0a0a2e',
+  confirmAction: 'jump',              // input action that starts the game
+  menuAction:    null,                // optional second action
+  onStart: (engine) => engine.systems.scenes.replace(new GameScene(), engine),
+  onMenu:  (engine) => showOptions(),
+  drawBackground: (ctx, scene) => drawStarfield(ctx),   // optional custom bg
+}), game.engine);
+```
+
+### `GF.GameOverScene`
+
+Shows a title, score, high score, and a blinking restart prompt. Set `victory: true` to flip it to a green "VICTORY!" palette automatically.
+
+```javascript
+game.scenes.replaceWithTransition(new GF.GameOverScene({
+  score:     game.score.score,
+  highScore: game.score.highScore,
+  newRecord: game.score.score === game.score.highScore,
+  victory:   false,
+  restartAction: 'jump',
+  onRestart: () => game.scenes.replace(new GameScene(), game.engine),
+  onMenu:    () => game.scenes.replace(new GF.TitleScene({ /* … */ }), game.engine),
+}), { type: 'fade', duration: 0.6 });
+```
+
+Both degrade gracefully if `UISystem` is unavailable (minimal `fillText` fallback) so they render in the headless test harness.
+
+---
+
+## 33. Tooling & Dev Server
+
+The repo bundles browser-based content tools and a Node dev server. None are required at runtime — they support authoring.
+
+### Dev server & launcher
+
+Because games load audio and JSON, they must be served over HTTP (not `file://`). Two zero-dependency Node scripts handle this:
+
+```bash
+node serve.js                 # http://localhost:3000 (loopback only)
+node serve.js 8080            # custom port
+node serve.js 8080 0.0.0.0    # bind all interfaces (reachable on LAN)
+
+node launch.js                # starts serve.js AND opens launcher.html in your browser
+node launch.js 8080 0.0.0.0   # same args as serve.js
+```
+
+`launcher.html` is a browsable gallery of every game under `games/`. The server can also read each game's `config.js` (evaluated in a sandbox) so the launcher can apply per-game overrides — stored in `localStorage` under `GF_CONFIG_<GameName>` and merged at boot via `GF.applyLauncherConfig('<GameName>')`.
+
+### Sprite Tool — `tools/spritetool.html`
+
+Slice a spritesheet → scale → tag animations → export a GameFramework-ready **atlas (`animate.json`) + PNG + loader snippet**. The atlas is the Aseprite hash-export shape consumed by `game.sprites.registerSheet(...)` / `registerSheetAsync(...)` (see [§8](#8-sprites--animation)).
+
+### World Builder — `tools/worldbuilder.html`
+
+Paint tile layers, entities, spawns, and portals for a `WorldSystem` world, then export the plain-data world object described in [§11b](#11b-world-system-open-world) (shipped as a JS object, not fetched JSON, so the headless harness can load it).
+
+### Rebuilding the bundles
+
+```bash
+node framework/build.js
+```
+
+Concatenates the source files in dependency order into `GameFramework.bundle.js` and `GameFramework.sprites.bundle.js`. Edit the source files under `framework/`, never the generated bundles.
+
+---
+
+## 34. Full Minimal Example
 
 A complete, self-contained platformer skeleton showing all common patterns together.
 
@@ -1645,4 +2238,4 @@ A complete, self-contained platformer skeleton showing all common patterns toget
 
 ---
 
-*This guide covers GameFramework v2.1.0. Check `GF.VERSION` at runtime to verify the loaded version.*
+*This guide covers GameFramework v2.3.0. Check `GF.VERSION` at runtime to verify the loaded version.*

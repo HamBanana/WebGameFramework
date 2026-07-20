@@ -36,7 +36,7 @@
     const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(angle + Math.PI / 2); // sprite forward is up (-Y) -> align to heading
+    ctx.rotate(angle + Math.PI / 2); // sprite forward is (-Y) -> align to heading
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
     ctx.restore();
     return true;

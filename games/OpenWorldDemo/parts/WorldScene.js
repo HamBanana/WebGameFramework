@@ -16,7 +16,7 @@
     return 0.5;
   }
   // isometric heading -> column (0..7). Frame 0 faces south (+y), +45° clockwise.
-  const ISO_OFFSET = 0;
+  const ISO_OFFSET = 135;
   function isoCol(angle) {
     let i = Math.round((angle - Math.PI / 2) / (Math.PI / 4));
     return (((i + ISO_OFFSET) % 8) + 8) % 8;
@@ -245,7 +245,7 @@
         }
       } else {
         this._carShadow(ctx, cx, cy + 6, 14);
-        if (!G.drawRotated(ctx, img.char_player, cx, cy, this.facing, 0.62)) {
+        if (!G.drawRotated(ctx, img.char_player, cx, cy, this.facing + Math.PI, 0.62)) {
           ctx.fillStyle = '#ffd24a'; ctx.fillRect(cx - 8, cy - 10, 16, 20);
         }
       }
@@ -290,7 +290,7 @@
           break;
         case 'npc':
           this._carShadow(ctx, e.x, e.y + 4, 12);
-          G.drawRotated(ctx, img[e.sprite], e.x, e.y, e.heading || 0, 0.55);
+          G.drawRotated(ctx, img[e.sprite], e.x, e.y, e.heading + Math.PI || 0, 0.55);
           break;
         case 'bird': {
           const yo = Math.sin(e.bob || 0) * 4;

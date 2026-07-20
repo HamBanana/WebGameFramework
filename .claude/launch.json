@@ -12,6 +12,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["games/ShadowStrike3D/launch.js", "3008"],
       "port": 3008
+    },
+    {
+      "name": "openworld",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve.js", "3009"],
+      "port": 3009
     }
   ]
 }

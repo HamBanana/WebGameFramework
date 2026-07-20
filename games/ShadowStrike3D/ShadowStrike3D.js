@@ -416,8 +416,43 @@
 
   // ── FxSystem ────────────────────────────────────────────────────────────────
 
+  // Fireball flipbook sheet (game's own sprites/): 7x7 grid, 256px cells, 45 frames.
+  const FB_COLS = 7, FB_FRAMES = 45, FB_FPS = 30;
+
   class FxSystem {
-    constructor(scene) { this._s = scene; this._p = []; this._fl = []; }
+    constructor(scene) {
+      this._s = scene; this._p = []; this._fl = []; this._fb = [];
+      // Load the recolored fireball sheet once; each projectile clones it for its own UV.
+      const tex = new THREE.TextureLoader().load('sprites/Fireball45Frames.png');
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;   // NPOT-safe
+      tex.generateMipmaps = false;
+      tex.minFilter = tex.magFilter = THREE.LinearFilter;
+      this._fbBase = tex;
+    }
+
+    _fbSetFrame(o, frame) {
+      const f = Math.min(frame, FB_FRAMES - 1);
+      const c = f % FB_COLS, r = Math.floor(f / FB_COLS);
+      o.tex.offset.set(c / FB_COLS, 1 - (r + 1) / FB_COLS);   // flip row: image top-left -> UV bottom-left
+    }
+
+    // Launch a fireball projectile from (x,y) travelling in facing `dir` (+1/-1).
+    spawnFireball(x, y, dir) {
+      const tex = this._fbBase.clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1 / FB_COLS, 1 / FB_COLS);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(1.1, 1.1, 1);
+      sp.position.set(x, y, 0.35);
+      this._s.add(sp);
+      const fl = new THREE.PointLight(0xff6a00, 4.5, 3.2);
+      fl.position.set(x, y, 0.4);
+      this._s.add(fl);
+      const o = { sp, tex, mat, fl, dir, frame: 0, ft: 0, vx: dir * 4.6 };
+      this._fbSetFrame(o, 0);
+      this._fb.push(o);
+    }
 
     _burst(x, y, color, count, speed, life) {
       const geo = new THREE.SphereGeometry(0.055, 4, 4);
@@ -467,12 +502,31 @@
         f.light.intensity = Math.max(0, (f.life / 0.14) * 5);
         if (f.life <= 0) { this._s.remove(f.light); this._fl.splice(i, 1); }
       }
+      // Fireball projectiles: advance flipbook, travel forward, swell + fade, then retire.
+      for (let i = this._fb.length - 1; i >= 0; i--) {
+        const o = this._fb[i];
+        o.ft += dt;
+        while (o.ft >= 1 / FB_FPS) { o.ft -= 1 / FB_FPS; o.frame++; }
+        o.sp.position.x += o.vx * dt;
+        const t = o.frame / FB_FRAMES;
+        o.sp.scale.setScalar(1.0 + t * 1.1);
+        o.mat.opacity = o.frame >= FB_FRAMES - 8 ? Math.max(0, (FB_FRAMES - o.frame) / 8) : 1;
+        this._fbSetFrame(o, o.frame);
+        if (o.fl) { o.fl.position.set(o.sp.position.x, o.sp.position.y, 0.4); o.fl.intensity = 4.5 * o.mat.opacity; }
+        if (o.frame >= FB_FRAMES) {
+          this._s.remove(o.sp); this._s.remove(o.fl);
+          o.mat.dispose(); o.tex.dispose();
+          this._fb.splice(i, 1);
+        }
+      }
     }
 
     dispose() {
       this._p.forEach(p => { this._s.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); });
       this._fl.forEach(f => this._s.remove(f.light));
-      this._p = []; this._fl = [];
+      this._fb.forEach(o => { this._s.remove(o.sp); this._s.remove(o.fl); o.mat.dispose(); o.tex.dispose(); });
+      if (this._fbBase) this._fbBase.dispose();
+      this._p = []; this._fl = []; this._fb = [];
     }
   }
 
@@ -849,6 +903,12 @@
       p1.processInput(p1Inp, Object.fromEntries(Object.keys(ctl.p1).map(a => [a, a])), p2);
       p2.processInput(p2Inp, Object.fromEntries(Object.keys(ctl.p2).map(a => [a, a])), p1);
       p1.update(dt, hw); p2.update(dt, hw);
+      // Fireball: the "special" attack casts a travelling fireball (once per special).
+      [p1, p2].forEach(p => {
+        const casting = (p.state === 'attack' && p.attackMove === 'special');
+        if (casting && !p._fbSpawned) { this.fx.spawnFireball(p.x + p.facing * 0.4, p.y + 0.78, p.facing); p._fbSpawned = true; }
+        else if (!casting) { p._fbSpawned = false; }
+      });
       this._resolveOverlap();
       const h1 = p1.tryHitOpponent(p2), h2 = p2.tryHitOpponent(p1);
       if (h1) { const sp = p1.attackMove === 'special'; this.fx[sp ? 'spawnSpecial' : 'spawnHit'](p2.x, p2.y + 0.7, 0xffdd00); this._camShake = sp ? 0.20 : 0.08; this._sfx(sp ? 'special' : p1.attackMove.includes('ick') ? 'kick' : 'punch'); }
