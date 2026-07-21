@@ -84,6 +84,7 @@ The framework spans several families of systems — enable the ones a game needs
 **Reference**
 33. [Tooling & Dev Server](#33-tooling--dev-server)
 34. [Full Minimal Example](#34-full-minimal-example)
+35. [AI Modification Rules](#35-ai-modification-rules)
 
 ---
 
@@ -2235,6 +2236,67 @@ A complete, self-contained platformer skeleton showing all common patterns toget
 
 })(window.GF = window.GF || {});
 ```
+
+---
+
+## 35. AI Modification Rules
+
+Games in this repo are routinely modified by AI agents (via `owui-games-tool`).
+These rules keep an agent from wrecking a working game — they are enforced by
+the tool, and any agent (or human writing agent prompts) should know them.
+
+### Locked files
+
+A game can declare files that must **never be modified** by an AI:
+
+```json
+// game.json
+{ "ai_locked": ["parts/Main.js"] }
+```
+
+Alternatively, put `@ai-locked` in a comment within a file's first few lines.
+The tool rejects every write/edit/delete of a locked file with `403 LOCKED`;
+the file stays readable. HamInvaders' `parts/Main.js` is locked this way.
+
+To change the *behavior* of a locked file, add a **new part that patches the
+class it registers** — never touch the file itself:
+
+```js
+// parts/PatchMain.js — changes the locked Main scene WITHOUT editing it.
+(function (G, GF) {
+  'use strict';
+  // Part GF:ready listeners run before boot.js instantiates the scene
+  // (boot.js always loads last), so the prototype patch lands in time.
+  window.addEventListener('GF:ready', () => {
+    const Main = G.scenes.Main;
+    if (!Main) return;
+    const origUpdate = Main.prototype.update;
+    Main.prototype.update = function (dt, engine) {
+      origUpdate.call(this, dt, engine);
+      // extra behavior here
+    };
+  });
+  G.components.PatchMain = true;
+})(window.GAME = window.GAME || { components: {}, scenes: {}, systems: {}, state: {} }, window.GF);
+```
+
+The tool serves this as recipe `patch-locked-part`. Keep one patch part per
+locked file and grow it, rather than stacking several patches on one method.
+
+### Editing etiquette for agents
+
+- **Smallest possible change.** One bug = one targeted edit. Never rewrite a
+  working file, never add unrequested features, never create/clone a game as a
+  workaround for a failing edit.
+- **Edits go stale.** After any write, text remembered from an earlier read no
+  longer matches. Re-read before re-editing. The tool tracks consecutive
+  failed `edit_game_file` matches per file: after 2 misses it instructs the
+  agent to switch to `read_game_file(numbered=true)` + `edit_game_lines`;
+  after 4 it tells the agent to stop touching the file and report to the user.
+- **Warnings are the contract.** Every write returns a `warnings` list (syntax
+  errors, dead/duplicate methods, unregistered scenes, wrong GF API calls…).
+  Fix them, then stop — a response with no warnings means *done, report the
+  play URL*.
 
 ---
 
