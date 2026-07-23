@@ -1,0 +1,37 @@
+(function (G, GF) {
+  'use strict';
+
+  window.addEventListener('GF:ready', function () {
+    var Main = G.scenes.Main;
+    if (!Main) return;
+
+    var origR = Main.prototype.render;
+
+    Main.prototype.render = function (ctx, engine) {
+      origR.call(this, ctx, engine);
+
+      // Transition overlay
+      var ls = this._levelState;
+      if (ls && ls.th && ls.th.active) {
+        var W = engine.config.width, H = engine.config.height;
+        ls.th.render(ctx, W, H);
+      }
+
+      // Level dots HUD
+      if (ls) {
+        var cx = engine.config.width / 2;
+        GF.UISystem.drawText(ctx, 'Lvl ' + ls.cur + '/' + ls.max, cx, 12, {
+          font: '18px monospace', color: '#ffeb3b', align: 'center', baseline: 'top'
+        });
+        for (var i = 0; i < ls.max; i++) {
+          var col = i < ls.cur ? '#2ecc71' : '#555';
+          GF.UISystem.drawText(ctx, '●', cx - (ls.max - 1) * 16 + i * 16, 12, {
+            font: '16px monospace', color: col, align: 'center', baseline: 'top'
+          });
+        }
+      }
+    };
+  });
+
+  G.components.PatchLevelRender = true;
+})(window.GAME = window.GAME || { components: {}, scenes: {}, systems: {}, state: {} }, window.GF);

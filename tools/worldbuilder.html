@@ -189,7 +189,7 @@ async function loadWorld(game){
   state.gameId=game; state.world=j.world; state.selected=null; state.dirty=false;
   state.areaName=state.world.startArea || Object.keys(state.world.areas)[0];
   $("#saveBtn").disabled=true; $("#playBtn").disabled=false;
-  $("#playLink").href="games/"+game+"/index.html";
+  $("#playLink").href="/games/"+game+"/index.html";
   loadTileset();
   refreshAreas(); rebuildUI(); fit(); setStatus("loaded "+game);
 }
@@ -198,7 +198,7 @@ function loadTileset(){
   const ts=state.world && state.world.tileset;
   $("#tilesetInfo").textContent = ts ? ("tileset: "+ts.image+" ("+ts.cols+" cols)") : "flat-color tiles (no tileset image)";
   if(ts && ts.image){ const img=new Image(); img.onload=()=>{state.tilesetImg=img; buildSwatches(); render();};
-    img.src="games/"+state.gameId+"/"+ts.image; }
+    img.src="/games/"+state.gameId+"/"+ts.image; }
 }
 async function save(){
   if(!state.world) return;
@@ -235,7 +235,7 @@ function buildSwatches(){
   const mk=(idx,empty)=>{ const d=document.createElement("div");
     d.className="sw"+(state.tile===idx?" on":"")+(empty?" empty":"");
     if(!empty){ if(state.tilesetImg){ const ts=state.world.tileset;
-        d.style.backgroundImage="url(games/"+state.gameId+"/"+ts.image+")";
+        d.style.backgroundImage="url(/games/"+state.gameId+"/"+ts.image+")";
         d.style.backgroundSize=(ts.cols*100)+"% auto";
         const sc=idx%ts.cols, sr=Math.floor(idx/ts.cols);
         d.style.backgroundPosition=(sc/(ts.cols-1||1)*100)+"% "+(sr*100)+"%"; d.style.imageRendering="pixelated";
@@ -435,7 +435,7 @@ function addObject(mode,x,y){ const a=area();
 // ── control wiring ──────────────────────────────────────────────────────────
 $("#gameSel").onchange=e=>{ if(e.target.value) confirmDirty(()=>loadWorld(e.target.value)); };
 $("#areaSel").onchange=e=>{ state.areaName=e.target.value; state.selected=null; rebuildUI(); fit(); };
-$("#saveBtn").onclick=save; $("#playBtn").onclick=e=>{ if(state.dirty){ e.preventDefault(); if(confirm("Save before playing?")) save().then(()=>window.open("games/"+state.gameId+"/index.html")); } };
+$("#saveBtn").onclick=save; $("#playBtn").onclick=e=>{ if(state.dirty){ e.preventDefault(); if(confirm("Save before playing?")) save().then(()=>window.open("/games/"+state.gameId+"/index.html")); } };
 $("#zIn").onclick=()=>{ state.zoom*=1.2; render(); }; $("#zOut").onclick=()=>{ state.zoom/=1.2; render(); }; $("#zFit").onclick=fit;
 document.querySelectorAll("#tools button").forEach(b=>b.onclick=()=>{ state.tool=b.dataset.t;
   document.querySelectorAll("#tools button").forEach(x=>x.classList.toggle("on",x===b)); });
