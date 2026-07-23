@@ -36,12 +36,12 @@
     activate(type) {
       this.powerupType = type;
       this.powerupTimer = this.powerupDuration;
-      if (type === 'speed') {
-        this.shootRate = 0.12;
-      } else if (type === 'laser') {
+      if (type === 'laser') {
         this.shootRate = 0.3;
       } else if (type === 'sidecannons') {
         this.shootRate = 0.25;
+      } else if (type === 'autofire') {
+        this.shootRate = 0.08;
       } else {
         this.shootRate = 0.3;
       }
@@ -90,7 +90,7 @@
         ctx.fillStyle = '#333';
         ctx.fillRect(barX, barY, barW, barH);
         var pct = this.powerupTimer / this.powerupDuration;
-        var barColors = { speed: '#ffeb3b', laser: '#ff6b6b', sidecannons: '#2ecc71' };
+        var barColors = { laser: '#ff6b6b', sidecannons: '#2ecc71' };
         ctx.fillStyle = barColors[this.powerupType] || '#fff';
         ctx.fillRect(barX, barY, barW * pct, barH);
       }

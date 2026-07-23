@@ -15,7 +15,7 @@
   },
   "game": {
     "name": "HamInvadersHeretic31B",
-    "startScene": "Main"
+    "startScene": "TitleScreen"
   },
   "debug": {
     "enabled": false,

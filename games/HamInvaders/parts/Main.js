@@ -5,7 +5,15 @@
   class Main extends GF.Scene {
     init(engine) {
       this.engine = engine;
-      this.phase = 'menu';
+
+      engine.input.bind('left', 'KeyA', 'ArrowLeft');
+      engine.input.bind('right', 'KeyD', 'ArrowRight');
+      engine.input.bind('fire', 'Space');
+      engine.input.bind('confirm', 'Space', 'Enter');
+    }
+
+    enter(engine) {
+      this.phase = 'play';
       this.score = 0;
       this.lives = 3;
       this.player = null;
@@ -20,13 +28,10 @@
       this.ufoTimer = 20;
       this.ufoSpeed = 100;
       this.powerups = [];
-      this.powerupTypes = ['speed', 'laser', 'sidecannons', 'autofire'];
+      this.powerupTypes = ['laser', 'sidecannons', 'autofire'];
       this.shootRate = 0.3;
 
-      engine.input.bind('left', 'KeyA', 'ArrowLeft');
-      engine.input.bind('right', 'KeyD', 'ArrowRight');
-      engine.input.bind('fire', 'Space');
-      engine.input.bind('confirm', 'Space', 'Enter');
+      this.startGame();
     }
 
     startGame() {
@@ -83,20 +88,14 @@
     dropPowerup(x, y) {
       var r = Math.random();
       var type;
-      if (r < 0.3) type = 'speed';
-      else if (r < 0.55) type = 'laser';
-      else if (r < 0.8) type = 'sidecannons';
+      if (r < 0.35) type = 'laser';
+      else if (r < 0.7) type = 'sidecannons';
       else type = 'autofire';
       this.powerups.push(new G.components.Powerup(x, y, type));
     }
 
     update(dt, engine) {
-      if (this.phase === 'menu') {
-        if (engine.input.wasPressed('confirm')) {
-          this.phase = 'play';
-          this.startGame();
-        }
-      } else if (this.phase === 'play') {
+      if (this.phase === 'play') {
         this.fireCooldown = Math.max(0, this.fireCooldown - dt);
 
         // Player movement
@@ -104,6 +103,8 @@
 
         // Fire
         if (engine.input.wasPressed('fire')) this.shoot();
+        // Autofire if active
+        if (this.player.powerupType === 'autofire') this.shoot();
 
         // Update bullets
         for (const b of this.bullets) b.update(dt);
@@ -233,7 +234,7 @@
       } else if (this.phase === 'over') {
         this.gameOverTimer += dt;
         if (this.gameOverTimer > 0.5 && engine.input.wasPressed('confirm')) {
-          this.phase = 'menu';
+          G.game.scenes.pop(engine);
         }
       }
     }
@@ -243,20 +244,7 @@
       const H = engine.config.height;
       const cx = W / 2;
 
-      if (this.phase === 'menu') {
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, W, H);
-        GF.UISystem.drawText(ctx, 'HAM INVADERS', cx, H / 2 - 60,
-          { align: 'center', font: '48px monospace', color: '#ff6b6b' });
-        GF.UISystem.drawText(ctx, '🐷 vs 👾', cx, H / 2 - 10,
-          { align: 'center', font: '36px monospace', color: '#fff' });
-        GF.UISystem.drawText(ctx, 'Arrow Keys / A,D to move', cx, H / 2 + 30,
-          { align: 'center', font: '18px monospace', color: '#aaa' });
-        GF.UISystem.drawText(ctx, 'Space to fire', cx, H / 2 + 55,
-          { align: 'center', font: '18px monospace', color: '#aaa' });
-        GF.UISystem.drawText(ctx, 'Press Space to Start', cx, H / 2 + 100,
-          { align: 'center', font: '22px monospace', color: '#ffeb3b' });
-      } else if (this.phase === 'play') {
+      if (this.phase === 'play') {
         // Background
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, W, H);
@@ -291,8 +279,7 @@
         if (this.player.powerupType) {
           var pText = '';
           var pColor = '#fff';
-          if (this.player.powerupType === 'speed') { pText = '⚡ SPEED'; pColor = '#ffeb3b'; }
-          else if (this.player.powerupType === 'laser') { pText = '🔴 LASER'; pColor = '#ff6b6b'; }
+          if (this.player.powerupType === 'laser') { pText = '🔴 LASER'; pColor = '#ff6b6b'; }
           else if (this.player.powerupType === 'sidecannons') { pText = '💥 SIDE CANNONS'; pColor = '#2ecc71'; }
           else if (this.player.powerupType === 'autofire') { pText = '🔫 AUTOFIRE'; pColor = '#00ff88'; }
           if (pText) {
