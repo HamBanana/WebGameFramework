@@ -20,7 +20,7 @@
       this.ufoTimer = 20;
       this.ufoSpeed = 100;
       this.powerups = [];
-      this.powerupTypes = ['speed', 'laser', 'sidecannons'];
+      this.powerupTypes = ['speed', 'laser', 'sidecannons', 'autofire'];
       this.shootRate = 0.3;
 
       engine.input.bind('left', 'KeyA', 'ArrowLeft');
@@ -83,9 +83,10 @@
     dropPowerup(x, y) {
       var r = Math.random();
       var type;
-      if (r < 0.33) type = 'speed';
-      else if (r < 0.66) type = 'laser';
-      else type = 'sidecannons';
+      if (r < 0.3) type = 'speed';
+      else if (r < 0.55) type = 'laser';
+      else if (r < 0.8) type = 'sidecannons';
+      else type = 'autofire';
       this.powerups.push(new G.components.Powerup(x, y, type));
     }
 
@@ -229,7 +230,6 @@
             break;
           }
         }
-
       } else if (this.phase === 'over') {
         this.gameOverTimer += dt;
         if (this.gameOverTimer > 0.5 && engine.input.wasPressed('confirm')) {
@@ -246,15 +246,15 @@
       if (this.phase === 'menu') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, W, H);
-        GF.UISystem.drawText(ctx, 'HAM INVADERS', cx, H/2 - 60,
+        GF.UISystem.drawText(ctx, 'HAM INVADERS', cx, H / 2 - 60,
           { align: 'center', font: '48px monospace', color: '#ff6b6b' });
-        GF.UISystem.drawText(ctx, '🐷 vs 👾', cx, H/2 - 10,
+        GF.UISystem.drawText(ctx, '🐷 vs 👾', cx, H / 2 - 10,
           { align: 'center', font: '36px monospace', color: '#fff' });
-        GF.UISystem.drawText(ctx, 'Arrow Keys / A,D to move', cx, H/2 + 30,
+        GF.UISystem.drawText(ctx, 'Arrow Keys / A,D to move', cx, H / 2 + 30,
           { align: 'center', font: '18px monospace', color: '#aaa' });
-        GF.UISystem.drawText(ctx, 'Space to fire', cx, H/2 + 55,
+        GF.UISystem.drawText(ctx, 'Space to fire', cx, H / 2 + 55,
           { align: 'center', font: '18px monospace', color: '#aaa' });
-        GF.UISystem.drawText(ctx, 'Press Space to Start', cx, H/2 + 100,
+        GF.UISystem.drawText(ctx, 'Press Space to Start', cx, H / 2 + 100,
           { align: 'center', font: '22px monospace', color: '#ffeb3b' });
       } else if (this.phase === 'play') {
         // Background
@@ -294,6 +294,7 @@
           if (this.player.powerupType === 'speed') { pText = '⚡ SPEED'; pColor = '#ffeb3b'; }
           else if (this.player.powerupType === 'laser') { pText = '🔴 LASER'; pColor = '#ff6b6b'; }
           else if (this.player.powerupType === 'sidecannons') { pText = '💥 SIDE CANNONS'; pColor = '#2ecc71'; }
+          else if (this.player.powerupType === 'autofire') { pText = '🔫 AUTOFIRE'; pColor = '#00ff88'; }
           if (pText) {
             GF.UISystem.drawText(ctx, pText + ' ' + Math.ceil(this.player.powerupTimer) + 's', cx, 12,
               { font: '16px monospace', color: pColor, align: 'center', baseline: 'top' });
@@ -305,17 +306,16 @@
           { font: '20px monospace', color: '#fff', align: 'left', baseline: 'top' });
         GF.UISystem.drawText(ctx, 'Lives: ' + this.lives, W - 120, 12,
           { font: '20px monospace', color: '#fff', align: 'left', baseline: 'top' });
-
       } else if (this.phase === 'over') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, W, H);
         const title = this.won ? 'YOU WIN!' : 'GAME OVER';
         const color = this.won ? '#2ecc71' : '#e74c3c';
-        GF.UISystem.drawText(ctx, title, cx, H/2 - 40,
+        GF.UISystem.drawText(ctx, title, cx, H / 2 - 40,
           { align: 'center', font: '42px monospace', color: color });
-        GF.UISystem.drawText(ctx, 'Final Score: ' + this.score, cx, H/2 + 10,
+        GF.UISystem.drawText(ctx, 'Final Score: ' + this.score, cx, H / 2 + 10,
           { align: 'center', font: '24px monospace', color: '#fff' });
-        GF.UISystem.drawText(ctx, 'Press Space to Continue', cx, H/2 + 50,
+        GF.UISystem.drawText(ctx, 'Press Space to Continue', cx, H / 2 + 50,
           { align: 'center', font: '20px monospace', color: '#ffeb3b' });
       }
     }
