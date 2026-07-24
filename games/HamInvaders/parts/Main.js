@@ -27,9 +27,6 @@
       this.ufo = null;
       this.ufoTimer = 20;
       this.ufoSpeed = 100;
-      this.powerups = [];
-      this.powerupTypes = ['laser', 'sidecannons', 'autofire'];
-      this.shootRate = 0.3;
 
       this.startGame();
     }
@@ -65,33 +62,15 @@
 
     shoot() {
       if (this.fireCooldown > 0) return;
-      this.fireCooldown = this.player.shootRate || 0.3;
-      const bt = this.player.getBulletType();
+      this.fireCooldown = 0.3;
       const bx = this.player.x + this.player.w / 2 - 2;
       const by = this.player.y - 12;
-      this.bullets.push(new G.components.Bullet(bx, by, bt));
-      // Side cannons fire too if active
-      if (this.player.needsSideCannons()) {
-        const lbx = this.player.x + this.player.leftCannonOffset + 4;
-        const rbx = this.player.x + this.player.w + this.player.leftCannonOffset + 4;
-        const lby = this.player.y - 6;
-        this.bullets.push(new G.components.Bullet(lbx, lby, 'sidecannon'));
-        this.bullets.push(new G.components.Bullet(rbx, lby, 'sidecannon'));
-      }
+      this.bullets.push(new G.components.Bullet(bx, by));
     }
 
     overlap(a, b) {
       return a.x < b.x + b.w && a.x + a.w > b.x &&
              a.y < b.y + b.h && a.y + a.h > b.y;
-    }
-
-    dropPowerup(x, y) {
-      var r = Math.random();
-      var type;
-      if (r < 0.35) type = 'laser';
-      else if (r < 0.7) type = 'sidecannons';
-      else type = 'autofire';
-      this.powerups.push(new G.components.Powerup(x, y, type));
     }
 
     update(dt, engine) {
@@ -103,8 +82,6 @@
 
         // Fire
         if (engine.input.wasPressed('fire')) this.shoot();
-        // Autofire if active
-        if (this.player.powerupType === 'autofire') this.shoot();
 
         // Update bullets
         for (const b of this.bullets) b.update(dt);
@@ -149,26 +126,9 @@
         for (const b of this.bullets) {
           for (const inv of this.invaders) {
             if (b.alive && inv.alive && this.overlap(b, inv)) {
-              if (b.type === 'laser') {
-                // Laser kills entire column of invaders
-                var colInvaders = [];
-                for (const otherInv of this.invaders) {
-                  if (otherInv.alive && Math.abs(otherInv.x - inv.x) < 1) {
-                    colInvaders.push(otherInv);
-                  }
-                }
-                for (const ci of colInvaders) {
-                  ci.alive = false;
-                  this.score += (3 - ci.type) * 10;
-                  if (Math.random() < 0.15) this.dropPowerup(ci.x + ci.w / 2, ci.y);
-                }
-                b.alive = false;
-              } else {
-                b.alive = false;
-                inv.alive = false;
-                this.score += (3 - inv.type) * 10;
-                if (Math.random() < 0.15) this.dropPowerup(inv.x + inv.w / 2, inv.y);
-              }
+              b.alive = false;
+              inv.alive = false;
+              this.score += (3 - inv.type) * 10;
             }
           }
         }
@@ -186,18 +146,6 @@
             }
           }
         }
-
-        // Update powerups (dropped items)
-        for (const p of this.powerups) p.update(dt);
-        this.powerups = this.powerups.filter(p => p.alive);
-        // Powerup vs player collision
-        for (const p of this.powerups) {
-          if (p.alive && this.overlap(p, this.player)) {
-            p.alive = false;
-            this.player.activate(p.type);
-          }
-        }
-        this.powerups = this.powerups.filter(p => p.alive);
 
         // Check win
         if (this.invaders.length === 0) {
@@ -271,22 +219,6 @@
 
         // Draw bullets
         for (const b of this.bullets) b.draw(ctx);
-
-        // Draw powerups
-        for (const p of this.powerups) p.draw(ctx);
-
-        // Powerup HUD indicator
-        if (this.player.powerupType) {
-          var pText = '';
-          var pColor = '#fff';
-          if (this.player.powerupType === 'laser') { pText = '🔴 LASER'; pColor = '#ff6b6b'; }
-          else if (this.player.powerupType === 'sidecannons') { pText = '💥 SIDE CANNONS'; pColor = '#2ecc71'; }
-          else if (this.player.powerupType === 'autofire') { pText = '🔫 AUTOFIRE'; pColor = '#00ff88'; }
-          if (pText) {
-            GF.UISystem.drawText(ctx, pText + ' ' + Math.ceil(this.player.powerupTimer) + 's', cx, 12,
-              { font: '16px monospace', color: pColor, align: 'center', baseline: 'top' });
-          }
-        }
 
         // HUD
         GF.UISystem.drawText(ctx, 'Score: ' + this.score, 12, 12,
