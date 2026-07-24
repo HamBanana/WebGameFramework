@@ -27,6 +27,10 @@
       this.ufo = null;
       this.ufoTimer = 20;
       this.ufoSpeed = 100;
+      this.powerups = [];
+      this.powerupCooldown = 0;
+      this.powerupCooldownDuration = GF.GAME_CONFIG.powerups.cooldown;
+      this.powerupDropChance = GF.GAME_CONFIG.powerups.dropChance;
 
       this.startGame();
     }
@@ -45,6 +49,8 @@
       this.gameOverTimer = 0;
       this.ufo = null;
       this.ufoTimer = 20;
+      this.powerups = [];
+      this.powerupCooldown = 0;
 
       // Build invader grid: 5 rows x 8 cols
       const cols = 8, rows = 5;
@@ -66,6 +72,30 @@
       const bx = this.player.x + this.player.w / 2 - 2;
       const by = this.player.y - 12;
       this.bullets.push(new G.components.Bullet(bx, by));
+
+      // Double shot
+      if (this.player.hasPowerup('doubleShot')) {
+        this.bullets.push(new G.components.Bullet(bx - 10, by));
+        this.bullets.push(new G.components.Bullet(bx + 10, by));
+      }
+
+      // Triple shot
+      if (this.player.hasPowerup('tripleShot')) {
+        this.bullets.push(new G.components.Bullet(bx - 15, by));
+        this.bullets.push(new G.components.Bullet(bx + 15, by));
+      }
+
+      // Mega laser
+      if (this.player.hasPowerup('megaLaser')) {
+        this.bullets.push(new G.components.Bullet(bx - 15, by, 'megaLaser'));
+        this.bullets.push(new G.components.Bullet(bx + 15, by, 'megaLaser'));
+      }
+
+      // Rapid fire
+      if (this.player.hasPowerup('rapidFire')) {
+        this.bullets.push(new G.components.Bullet(bx, by - 10, 'rapidFire'));
+        this.bullets.push(new G.components.Bullet(bx, by + 10, 'rapidFire'));
+      }
     }
 
     overlap(a, b) {
@@ -108,6 +138,7 @@
 
         // UFO bonus: spawn every 20 seconds, flies across top
         this.ufoTimer -= dt;
+        this.powerupCooldown = Math.max(0, this.powerupCooldown - dt);
         if (this.ufoTimer <= 0 && !this.ufo) {
           this.ufoTimer = 20;
           const dir = Math.random() < 0.5 ? 1 : -1;
@@ -129,11 +160,22 @@
               b.alive = false;
               inv.alive = false;
               this.score += (3 - inv.type) * 10;
+              // Powerup drop chance
+              if (Math.random() < this.powerupDropChance) {
+                this.spawnPowerup(inv.x + inv.w / 2, inv.y + inv.h / 2);
+              }
             }
           }
         }
         this.bullets = this.bullets.filter(b => b.alive);
         this.invaders = this.invaders.filter(inv => inv.alive);
+        if (this.player.hasPowerup('smartBomb')) {
+          for (const inv of this.invaders) {
+            inv.alive = false;
+            this.score += (3 - inv.type) * 10;
+          }
+          this.invaders = this.invaders.filter(inv => inv.alive);
+        }
 
         // Bullet vs UFO collision
         if (this.ufo) {
@@ -168,15 +210,33 @@
         // Invader touches player
         for (const inv of this.invaders) {
           if (this.overlap(this.player, inv)) {
-            this.lives--;
-            if (this.lives <= 0) {
-              this.phase = 'over';
-              this.won = false;
-              this.gameOverTimer = 0;
+            if (this.player.hasPowerup('invincible')) {
+              inv.alive = false;
+              this.score += 50;
             } else {
-              this.invaders = this.invaders.filter(i => i !== inv);
+              this.lives--;
+              if (this.lives <= 0) {
+                this.phase = 'over';
+                this.won = false;
+                this.gameOverTimer = 0;
+              } else {
+                this.invaders = this.invaders.filter(i => i !== inv);
+              }
             }
             break;
+          }
+        }
+
+        // Update powerups
+        for (const p of this.powerups) p.update(dt);
+        this.powerups = this.powerups.filter(p => p.alive);
+
+        // Player vs powerup collision
+        const playerRect = { x: this.player.x, y: this.player.y, w: this.player.w, h: this.player.h };
+        for (const p of this.powerups) {
+          if (this.overlap(playerRect, p)) {
+            p.alive = false;
+            this.applyPowerup(p.type);
           }
         }
       } else if (this.phase === 'over') {
@@ -185,6 +245,21 @@
           G.game.scenes.pop(engine);
         }
       }
+    }
+
+    applyPowerup(type) {
+      const p = G.powerupTypes[type];
+      if (p) {
+        p.effect(this.player);
+      }
+    }
+
+    spawnPowerup(x, y) {
+      if (this.powerupCooldown > 0) return;
+      const types = Object.keys(G.powerupTypes);
+      const type = types[Math.floor(Math.random() * types.length)];
+      this.powerups.push(new G.components.Powerup(x, y, type));
+      this.powerupCooldown = this.powerupCooldownDuration;
     }
 
     render(ctx, engine) {
@@ -220,11 +295,34 @@
         // Draw bullets
         for (const b of this.bullets) b.draw(ctx);
 
+        // Draw powerups
+        for (const p of this.powerups) p.draw(ctx);
+
         // HUD
         GF.UISystem.drawText(ctx, 'Score: ' + this.score, 12, 12,
           { font: '20px monospace', color: '#fff', align: 'left', baseline: 'top' });
         GF.UISystem.drawText(ctx, 'Lives: ' + this.lives, W - 120, 12,
           { font: '20px monospace', color: '#fff', align: 'left', baseline: 'top' });
+
+        // Draw active powerup indicators
+        const indicatorY = 40;
+        let indicatorX = 12;
+        const powerupIcons = {
+          doubleShot: '⚡ 2x',
+          megaLaser: '🔫',
+          rapidFire: '⚡',
+          shield: '🛡️',
+          smartBomb: '💣',
+          invincible: '✨',
+          tripleShot: '🔫' 
+        };
+        for (const type in powerupIcons) {
+          if (this.player.hasPowerup(type)) {
+            GF.UISystem.drawText(ctx, powerupIcons[type], indicatorX, indicatorY,
+              { font: '14px monospace', color: G.powerupTypes[type].color, align: 'left', baseline: 'top' });
+            indicatorX += 60;
+          }
+        }
       } else if (this.phase === 'over') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, W, H);

@@ -17,6 +17,20 @@
     "name": "HamInvadersHeretic31B",
     "startScene": "TitleScreen"
   },
+  "powerups": {
+    "cooldown": 5,
+    "dropChance": 0.15,
+    "types": [
+      "doubleShot",
+      "extraLife",
+      "megaLaser",
+      "rapidFire",
+      "shield",
+      "smartBomb",
+      "invincible",
+      "tripleShot"
+    ]
+  },
   "debug": {
     "enabled": false,
     "toggleKey": "F1"

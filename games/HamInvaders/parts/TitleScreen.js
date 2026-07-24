@@ -5,7 +5,23 @@
   class TitleScreen extends GF.Scene {
     init(engine) {
       engine.input.bind('confirm', 'Space', 'Enter');
+
+      // Touch devices have no Space/Enter key — let a tap on the canvas
+      // stand in for it. Guarded by _active so a tap doesn't also fire
+      // 'confirm' while Main (pushed on top of this scene) is playing.
+      this._active = false;
+      const canvas = engine.canvas;
+      canvas.style.touchAction = 'none';
+      this._onPointerDown = (e) => {
+        if (!this._active) return;
+        e.preventDefault();
+        engine.input.tapAction('confirm');
+      };
+      canvas.addEventListener('pointerdown', this._onPointerDown);
     }
+
+    enter(engine) { this._active = true; }
+    exit(engine) { this._active = false; }
 
     update(dt, engine) {
       if (engine.input.wasPressed('confirm')) {
@@ -28,7 +44,8 @@
         { align: 'center', font: '18px monospace', color: '#aaa' });
       GF.UISystem.drawText(ctx, 'Space to fire', cx, H / 2 + 55,
         { align: 'center', font: '18px monospace', color: '#aaa' });
-      GF.UISystem.drawText(ctx, 'Press Space to Start', cx, H / 2 + 100,
+      const startHint = GF.TouchControls.isTouchDevice() ? 'Tap to Start' : 'Press Space to Start';
+      GF.UISystem.drawText(ctx, startHint, cx, H / 2 + 100,
         { align: 'center', font: '22px monospace', color: '#ffeb3b' });
     }
   }

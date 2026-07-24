@@ -2,13 +2,14 @@
 (function (G, GF) {
   'use strict';
   class Bullet {
-    constructor(x, y) {
+    constructor(x, y, type) {
       this.x = x;
       this.y = y;
       this.w = 4;
       this.h = 12;
       this.speed = 400;
       this.alive = true;
+      this.type = type || 'normal';
     }
     update(dt) {
       this.y -= this.speed * dt;
@@ -16,10 +17,22 @@
     }
     draw(ctx) {
       if (!this.alive) return;
-      ctx.fillStyle = '#ffeb3b';
-      ctx.fillRect(this.x, this.y, this.w, this.h);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(this.x + 1, this.y, 2, this.h);
+      if (this.type === 'megaLaser') {
+        ctx.fillStyle = '#ffeb3b';
+        ctx.fillRect(this.x - 1, this.y, this.w + 2, this.h);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(this.x, this.y, 2, this.h);
+      } else if (this.type === 'rapidFire') {
+        ctx.fillStyle = '#3498db';
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(this.x + 1, this.y, 2, this.h);
+      } else {
+        ctx.fillStyle = '#ffeb3b';
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(this.x + 1, this.y, 2, this.h);
+      }
     }
   }
   G.components.Bullet = Bullet;
