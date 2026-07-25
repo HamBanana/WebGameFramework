@@ -1,3 +1,6 @@
 /.claude
-/.claude
 /Ext_Sprites
+
+# Windows reserved device name. `> nul` under Git Bash creates a real 0-byte
+# file that git cannot index, which breaks `git add -A` with exit 128.
+nul

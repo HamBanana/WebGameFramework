@@ -32,7 +32,9 @@
       "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Directory)",
       "PowerShell(git ls-remote *)",
       "PowerShell(git fetch *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git check-ignore *)"
     ]
   }
 }
