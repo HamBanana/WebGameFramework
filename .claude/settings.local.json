@@ -29,7 +29,10 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Force)",
       "Bash(Select-Object FullName)",
-      "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Directory)"
+      "Bash(Get-ChildItem -Path \"C:\\\\codespace\\\\Claude\\\\WebGameFramework\" -Recurse -Directory)",
+      "PowerShell(git ls-remote *)",
+      "PowerShell(git fetch *)",
+      "Bash(git add *)"
     ]
   }
 }

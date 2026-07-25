@@ -8,6 +8,7 @@ var CORE = [
   'utils/MathUtils.js',
   'utils/ProceduralAudio.js',
   'core/EventBus.js',
+  'core/GameLoader.js',
   'core/InputManager.js',
   'core/AssetLoader.js',
   'core/Engine.js',
@@ -38,6 +39,8 @@ var CORE = [
   'systems/ParallaxSystem.js',
   'scenes/TitleScene.js',
   'scenes/GameOverScene.js',
+  'scenes/GameScene.js',
+  'core/Boot.js',
   'GameFramework.js',
 ];
 

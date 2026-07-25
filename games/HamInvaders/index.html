@@ -1,23 +1,15 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <title>Ham Invaders</title>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 </head>
 <body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#000;">
   <script src="config.js"></script>
   <script src="../../framework/GameFramework.bundle.js"></script>
-  <script src="parts/Bullet.js"></script>
-  <script src="parts/Invader.js"></script>
-  <script src="parts/Main.js"></script>
-  <script src="parts/Player.js"></script>
-  <script src="parts/Powerup.js"></script>
-  <script src="parts/TitleScreen.js"></script>
-  <script src="parts/PatchLevelUpdate.js"></script>
-  <script src="parts/PatchLevelRender.js"></script>
-  <script src="parts/PatchLevelStart.js"></script>
-  <script src="parts/PatchInvaderEdge.js"></script>
-  <script src="parts/PatchTouch.js"></script>
-  <script src="parts/boot.js"></script>
+  <!-- Every game file is listed in manifest.json, so this page never changes
+       when a behaviour, sprite, prefab or module is added. -->
+  <script>GF.loadGame('manifest.json');</script>
 </body>
 </html>

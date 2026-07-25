@@ -225,8 +225,13 @@
     }
 
     // ── draw ───────────────────────────────────────────────────────────────────
-    /** Draw all live objects, y-sorted by feet (bottom) and camera-culled. A
-     *  behavior with a draw() hook overrides the default sprite/box rendering. */
+    /** Draw all live objects, y-sorted by feet (bottom) and camera-culled.
+     *  Per entity, three passes run so decorations compose instead of fighting:
+     *    drawUnder(ctx,e,world) — beneath the body (shadows, glows)
+     *    draw(ctx,e,world)      — REPLACES the default sprite/box rendering
+     *    drawOver(ctx,e,world)  — on top of it (shields, damage flashes, labels)
+     *  Only draw() suppresses the default, so an overlay behavior can be added
+     *  to a prefab without having to re-implement how the entity looks. */
     draw(ctx, camera) {
       camera = camera || this.camera;
       const list = [];
@@ -238,19 +243,25 @@
       list.sort((a, b) => a.bottom - b.bottom);
       for (let i = 0; i < list.length; i++) {
         const o = list[i];
+        const bhs = o._behaviors;
+        for (let b = 0; b < bhs.length; b++) if (bhs[b].drawUnder) bhs[b].drawUnder(ctx, o, this);
+
         let drawn = false;
-        for (let b = 0; b < o._behaviors.length; b++) {
-          const bh = o._behaviors[b];
+        for (let b = 0; b < bhs.length; b++) {
+          const bh = bhs[b];
           if (bh.draw) { bh.draw(ctx, o, this); drawn = true; }
         }
-        if (drawn) continue;
-        if (o._anim) { o._anim.flipX = o.flipX; o._anim.draw(ctx, o.centerX, o.bottom); }
-        else if (o.sprite && this.sprites) {
-          this.sprites.drawFrame(ctx, o.sprite, o.anim, 0, o.centerX, o.bottom, o.flipX);
-        } else {
-          ctx.fillStyle = o.data.color || '#e33';
-          ctx.fillRect(o.x, o.y, o.w || 8, o.h || 8);
+        if (!drawn) {
+          if (o._anim) { o._anim.flipX = o.flipX; o._anim.draw(ctx, o.centerX, o.bottom); }
+          else if (o.sprite && this.sprites) {
+            this.sprites.drawFrame(ctx, o.sprite, o.anim, 0, o.centerX, o.bottom, o.flipX);
+          } else {
+            ctx.fillStyle = o.data.color || '#e33';
+            ctx.fillRect(o.x, o.y, o.w || 8, o.h || 8);
+          }
         }
+
+        for (let b = 0; b < bhs.length; b++) if (bhs[b].drawOver) bhs[b].drawOver(ctx, o, this);
       }
     }
   }

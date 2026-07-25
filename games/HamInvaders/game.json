@@ -8,8 +8,6 @@
     "1 PLAYER"
   ],
   "desc": "Space Invaders clone, ham/pig theme. Move with Arrows/A,D, fire with Space. Purple title card credits the model that generated it.",
-  "ai_locked": [
-    "parts/Main.js"
-  ],
+  "ai_locked": [],
   "config": []
 }

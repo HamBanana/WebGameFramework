@@ -2,7 +2,7 @@
 (function (GF) {
   'use strict';
 
-  GF.VERSION = '2.3.0';
+  GF.VERSION = '2.4.0';
 
   // Auto-detect the directory this bundle was loaded from so that
   // GF.resolvePath() works regardless of where the game lives on disk.
@@ -59,6 +59,10 @@
 
     var engine  = new GF.Engine(engineConfig);
     var sprites = new GF.SpriteSystem();
+    // Sprite files (framework's and the game's own sprites/ folder) register
+    // into the global GF.sprites map at load time, before any SpriteSystem
+    // exists. Fold them in here so no game has to repeat this line.
+    if (GF.sprites) sprites.registerSprites(GF.sprites);
     var physics = new GF.PhysicsSystem(physicsConfig);
     var ui      = GF.UISystem;
 
@@ -151,12 +155,28 @@
     }
   }
 
+  // GF:ready fires once BOTH the DOM is parsed and every deferred loader has
+  // finished (see core/GameLoader.js — GF.defer()/GF.release()). Without the
+  // gate, a manifest-loaded game would boot before its scenes had registered.
+  var _domReady = false;
+  var _fired    = false;
+
+  GF._maybeFireReady = function () {
+    if (_fired || !_domReady || GF._readyPending > 0) return;
+    _fired = true;
+    window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
-      window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
+      _domReady = true;
+      GF._maybeFireReady();
     });
   } else {
-    window.dispatchEvent(new CustomEvent('GF:ready', { detail: GF }));
+    _domReady = true;
+    // Microtask, so an inline `GF.loadGame(...)` running immediately after this
+    // bundle still gets to claim the gate before GF:ready goes out.
+    Promise.resolve().then(GF._maybeFireReady);
   }
 
   console.log('%cGameFramework v' + GF.VERSION + ' loaded', 'color:#00e5ff;font-weight:bold');
