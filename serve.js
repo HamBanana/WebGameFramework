@@ -251,6 +251,224 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // ── API: scene editor (tools/editor.html) ───────────────────────────────────
+  // Scenes are JSON documents under games/<id>/scenes/. The editor needs three
+  // things from the server: which parts of a game to load so prefabs/behaviors/
+  // sprites register, which scenes exist, and a way to write one back.
+
+  const SCENE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+  /** Read one query-string parameter, or '' when absent. */
+  function qs(name) {
+    const q = req.url.indexOf('?');
+    if (q === -1) return '';
+    return new URLSearchParams(req.url.slice(q + 1)).get(name) || '';
+  }
+
+  /** Resolve a game folder, or null if the id is bogus / not a game. */
+  function gameDir(game) {
+    if (!GAME_ID_RE.test(game || '')) return null;
+    const d = path.join(ROOT, 'games', game);
+    if (!d.startsWith(ROOT) || !fs.existsSync(d)) return null;
+    return d;
+  }
+
+  // GET /api/scene/parts?game=X → the scripts the editor must load to populate
+  // GF._prefabs / GF._behaviors / sprites, WITHOUT booting the game.
+  //
+  // Games declare their parts one of two ways, so both are supported: a
+  // manifest.json (GameLoader) or plain <script> tags in index.html. Either
+  // way scenes/ and boot are filtered out — loading them would start a game
+  // loop inside the editor and fight it for the canvas.
+  if (urlPath === '/api/scene/parts') {
+    const game = qs('game');
+    const gdir = gameDir(game);
+    if (!gdir) { jsonRes(res, 404, { error: 'game not found' }); return; }
+
+    const isBootOrScene = (p) =>
+      /(^|\/)scenes\//i.test(p) || /(^|\/)boot\.js$/i.test(p);
+
+    let parts = [];
+    let source = 'none';
+    const manifestFile = path.join(gdir, 'manifest.json');
+
+    if (fs.existsSync(manifestFile)) {
+      source = 'manifest';
+      // index.html loads config.js itself, so a manifest never lists it — but
+      // the editor needs GAME_CONFIG for the canvas size and per-scene tuning,
+      // so it goes in first.
+      if (fs.existsSync(path.join(gdir, 'config.js'))) parts.push('config.js');
+      try {
+        const m = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+        // Mirror GameLoader's KIND_ORDER resolution, minus scenes.
+        const KINDS = ['data', 'sprites', 'behaviors', 'behaviours', 'prefabs', 'systems', 'modules'];
+        (m.scripts || []).forEach(e => {
+          if (typeof e === 'string') parts.push(/\.js$/i.test(e) ? e : e + '.js');
+        });
+        // 'levels' holds JSON documents and 'scenes' holds boot/scene scripts;
+        // neither may be injected as a part, or the editor would request
+        // levels/<name>.js and boot a second game loop.
+        const NOT_PARTS = ['scripts', 'scenes', 'levels'];
+        const kinds = KINDS.slice();
+        Object.keys(m).forEach(k => {
+          if (NOT_PARTS.indexOf(k) !== -1) return;
+          if (kinds.indexOf(k) === -1 && Array.isArray(m[k])) kinds.push(k);
+        });
+        kinds.forEach(kind => {
+          (Array.isArray(m[kind]) ? m[kind] : []).forEach(e => {
+            if (typeof e !== 'string') return;
+            const p = (e.indexOf('/') !== -1 || /\.js$/i.test(e))
+              ? (/\.js$/i.test(e) ? e : e + '.js')
+              : kind + '/' + e + '.js';
+            parts.push(p);
+          });
+        });
+      } catch (e) { jsonRes(res, 500, { error: 'manifest.json is corrupt: ' + e.message }); return; }
+    } else {
+      const idx = path.join(gdir, 'index.html');
+      if (fs.existsSync(idx)) {
+        source = 'index.html';
+        const html = fs.readFileSync(idx, 'utf8');
+        const re = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi;
+        let m;
+        while ((m = re.exec(html)) !== null) {
+          const src = m[1];
+          // The framework bundle and config are loaded by the editor itself.
+          if (/GameFramework(\.[a-z]+)?\.bundle\.js$/i.test(src)) continue;
+          if (/^https?:/i.test(src)) continue;
+          parts.push(src.replace(/^\.\//, ''));
+        }
+      }
+    }
+
+    const skipped = parts.filter(isBootOrScene);
+    parts = parts.filter(p => !isBootOrScene(p));
+
+    // config.js carries GAME_CONFIG (canvas size, background) — the editor uses
+    // it to match the real game's dimensions, so surface it separately.
+    const hasConfig = fs.existsSync(path.join(gdir, 'config.js'));
+
+    jsonRes(res, 200, { game, source, parts, skipped, config: hasConfig });
+    return;
+  }
+
+  // GET /api/scene/list?game=X → level documents under games/<id>/levels/
+  if (urlPath === '/api/scene/list') {
+    const game = qs('game');
+    const gdir = gameDir(game);
+    if (!gdir) { jsonRes(res, 404, { error: 'game not found' }); return; }
+    const sdir = path.join(gdir, 'levels');
+    const scenes = [];
+    if (fs.existsSync(sdir)) {
+      for (const f of fs.readdirSync(sdir)) {
+        if (!/\.json$/i.test(f)) continue;
+        const base = f.replace(/\.json$/i, '');
+        let meta = { name: base, file: 'levels/' + f, entities: 0 };
+        try {
+          const doc = JSON.parse(fs.readFileSync(path.join(sdir, f), 'utf8'));
+          meta.entities = (doc.entities || []).length;
+          meta.scene = doc.scene || null;
+        } catch { meta.corrupt = true; }
+        scenes.push(meta);
+      }
+    }
+    jsonRes(res, 200, { game, scenes });
+    return;
+  }
+
+  // GET /api/scene/modules?game=X → the sceneModule names a game registers, and
+  // which scene each is bound to, so the editor can offer a real module stack
+  // instead of asking the author to remember them.
+  if (urlPath === '/api/scene/modules') {
+    const game = qs('game');
+    const gdir = gameDir(game);
+    if (!gdir) { jsonRes(res, 404, { error: 'game not found' }); return; }
+    const mdir = path.join(gdir, 'modules');
+    const mods = [];
+    if (fs.existsSync(mdir)) {
+      for (const f of fs.readdirSync(mdir)) {
+        if (!/\.js$/i.test(f)) continue;
+        const src = fs.readFileSync(path.join(mdir, f), 'utf8');
+        // Static read of the registration call — the editor must know the
+        // bindings before it runs anything, and this avoids executing game code
+        // on the server.
+        const m = /GF\.sceneModule\(\s*['"]([^'"]+)['"]\s*,\s*\{([\s\S]{0,400})/.exec(src);
+        if (!m) continue;
+        const scenes = [];
+        const sm = /\bscene\s*:\s*(\[[^\]]*\]|'[^']*'|"[^"]*")/.exec(m[2]);
+        if (sm) {
+          const raw = sm[1];
+          const re = /['"]([^'"]+)['"]/g;
+          let g;
+          while ((g = re.exec(raw)) !== null) scenes.push(g[1]);
+        }
+        mods.push({ name: m[1], file: 'modules/' + f, scenes: scenes.length ? scenes : ['*'] });
+      }
+    }
+    jsonRes(res, 200, { game, modules: mods });
+    return;
+  }
+
+  // POST /api/scene/save  { game, scene, doc } → write games/<id>/levels/<scene>.json
+  // and make sure the manifest lists it, since an unlisted level never loads.
+  if (req.method === 'POST' && urlPath === '/api/scene/save') {
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', () => {
+      try {
+        const { game, scene, doc } = JSON.parse(body);
+        const gdir = gameDir(game);
+        if (!gdir) { jsonRes(res, 404, { error: 'game not found' }); return; }
+        if (!SCENE_ID_RE.test(scene || '')) { jsonRes(res, 400, { error: 'bad level name' }); return; }
+        if (!doc || typeof doc !== 'object' || !Array.isArray(doc.entities)) {
+          jsonRes(res, 400, { error: 'doc must be an object with an entities array' }); return;
+        }
+
+        const warnings = [];
+        doc.entities.forEach((e, i) => {
+          if (!e.prefab && !e.spec) warnings.push(`entity ${i} has neither prefab nor spec`);
+          if (typeof e.x !== 'number' || typeof e.y !== 'number')
+            warnings.push(`entity ${i} (${e.prefab || 'inline'}) has a non-numeric position`);
+        });
+        if (!doc.entities.length) warnings.push('level places no entities');
+
+        const sdir = path.join(gdir, 'levels');
+        if (!fs.existsSync(sdir)) fs.mkdirSync(sdir, { recursive: true });
+        const out = path.join(sdir, scene + '.json');
+        if (!out.startsWith(ROOT)) { jsonRes(res, 400, { error: 'bad path' }); return; }
+
+        doc.format = doc.format || 'gf-level@1';
+        doc.name = doc.name || scene;
+        fs.writeFileSync(out, JSON.stringify(doc, null, 2), 'utf8');
+
+        // A level that is not in the manifest is invisible to GameLoader, which
+        // would make a freshly saved level silently fail to appear in the game.
+        let manifestUpdated = false;
+        const mf = path.join(gdir, 'manifest.json');
+        if (fs.existsSync(mf)) {
+          try {
+            const m = JSON.parse(fs.readFileSync(mf, 'utf8'));
+            if (!Array.isArray(m.levels)) m.levels = [];
+            if (m.levels.indexOf(scene) === -1) {
+              m.levels.push(scene);
+              fs.writeFileSync(mf, JSON.stringify(m, null, 2) + '\n', 'utf8');
+              manifestUpdated = true;
+            }
+          } catch (e) { warnings.push('manifest.json is corrupt, not updated: ' + e.message); }
+        } else {
+          warnings.push('no manifest.json — load this level yourself with GF.dataScene()');
+        }
+
+        jsonRes(res, 200, {
+          success: true, game, scene, warnings, manifestUpdated,
+          file: `games/${game}/levels/${scene}.json`,
+          play_url: `games/${game}/index.html`,
+        });
+      } catch (err) { jsonRes(res, 500, { error: err.message }); }
+    });
+    return;
+  }
+
   // GET /api/world/list → games that already have a world.json, plus every game
   // (so the editor can offer to add a world to one, and list targets for New).
   if (urlPath === '/api/world/list') {
@@ -387,6 +605,10 @@ const server = http.createServer((req, res) => {
       'Accept-Ranges':  'bytes',
       // Permissive CORS for local dev
       'Access-Control-Allow-Origin': '*',
+      // Without an explicit header browsers fall back to heuristic caching,
+      // which on an authoring server means an edited game file, tool or bundle
+      // can keep serving a stale copy after a reload. Always revalidate.
+      'Cache-Control':  'no-cache, must-revalidate',
     });
 
     fs.createReadStream(filePath).pipe(res);

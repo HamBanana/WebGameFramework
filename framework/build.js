@@ -40,6 +40,7 @@ var CORE = [
   'scenes/TitleScene.js',
   'scenes/GameOverScene.js',
   'scenes/GameScene.js',
+  'core/SceneData.js',        // extends GF.GameScene, so it must follow it
   'core/Boot.js',
   'GameFramework.js',
 ];

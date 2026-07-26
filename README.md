@@ -81,6 +81,9 @@ The framework spans several families of systems — enable the ones a game needs
 21. [Events](#21-events)
 32. [Scene Templates (Title / Game Over)](#32-scene-templates-title--game-over)
 
+**Authoring**
+36. [Scene Editor & Data-Authored Levels](#36-scene-editor--data-authored-levels)
+
 **Reference**
 33. [Tooling & Dev Server](#33-tooling--dev-server)
 34. [Full Minimal Example](#34-full-minimal-example)
@@ -98,7 +101,8 @@ GameFramework/
 │   │   ├── EventBus.js             # Pub/sub event system
 │   │   ├── InputManager.js         # Keyboard + synthetic input → named actions
 │   │   ├── AssetLoader.js          # Asset pre-loading (image/audio/json/text)
-│   │   └── SceneManager.js         # Scene stack + animated transitions
+│   │   ├── SceneManager.js         # Scene stack + animated transitions
+│   │   └── SceneData.js            # JSON levels → a GF.GameScene (GF.dataScene)
 │   ├── systems/
 │   │   ├── SpriteSystem.js         # Programmatic + spritesheet-atlas sprites
 │   │   ├── PhysicsSystem.js        # AABB physics + gravity
@@ -139,7 +143,8 @@ GameFramework/
 ├── games/                          # 20+ example games
 ├── tools/
 │   ├── spritetool.html             # Slice/scale/tag spritesheets → atlas
-│   └── worldbuilder.html           # Paint WorldSystem areas → world data
+│   ├── worldbuilder.html           # Paint WorldSystem areas → world data
+│   └── editor.html                 # Visual scene editor → levels/*.json
 ├── Sprites/                        # Sprite/model asset files
 ├── SFX/                            # Sound assets
 ├── launcher.html                   # Browsable game gallery / launcher
@@ -2078,6 +2083,10 @@ Slice a spritesheet → scale → tag animations → export a GameFramework-read
 
 Paint tile layers, entities, spawns, and portals for a `WorldSystem` world, then export the plain-data world object described in [§11b](#11b-world-system-open-world) (shipped as a JS object, not fetched JSON, so the headless harness can load it).
 
+### Scene Editor — `tools/editor.html`
+
+Place prefabs on a canvas, edit them in an inspector, press Play, and save to a JSON level. A level is a real `GF.GameScene`, so the game's own scene modules run. Full description in [§36](#36-scene-editor--data-authored-levels).
+
 ### Rebuilding the bundles
 
 ```bash
@@ -2297,6 +2306,122 @@ locked file and grow it, rather than stacking several patches on one method.
   errors, dead/duplicate methods, unregistered scenes, wrong GF API calls…).
   Fix them, then stop — a response with no warnings means *done, report the
   play URL*.
+
+---
+
+---
+
+## 36. Scene Editor & Data-Authored Levels
+
+Most of this guide authors a level in code. This section adds the other half: **placement as data**, edited in a GUI.
+
+The split is deliberate. *Where* a thing is — its position, which prefab, which tags — is data, and dragging it beats editing numbers. *What* a thing does stays in behaviors and [scene modules](#32-scene-templates-title--game-over). The editor only ever touches the data half.
+
+### A level is a GF.GameScene, not a new scene system
+
+This is the important part. `GF.dataScene(...)` produces a **[GF.GameScene](framework/scenes/GameScene.js)** — the same scene class everything else uses. Every `GF.sceneModule` the game already has runs unchanged: phases, `order`/`layer`, `scene.state`, `scene.config`, the scene stack. A level document supplies only what a GUI can honestly own:
+
+| Field | What it does |
+|---|---|
+| `scene` | The scene name modules bind to. |
+| `modules` | Which modules attach — see below. |
+| `entities` | What is placed, and where. |
+| `overlaps` | Tag-vs-tag rules, limited to named actions. |
+| `config` | Per-scene tuning, merged under `GAME_CONFIG.scenes[name]`. |
+| `state` / `phase` | Starting `scene.state` and phase. |
+| `background` | Fallback `config.background`. |
+
+### Borrowing a module stack
+
+A new scene name attaches nothing, and most games keep their gameplay in modules bound to one scene. So a level can borrow another scene's stack and drop what it replaces:
+
+```json
+"scene": "Boss",
+"modules": { "from": "Main", "exclude": ["Waves", "Formation", "Ufo"] }
+```
+
+That reads as *"play exactly like Main, but I place the entities myself"* — combat, HUD, powerups and the game-over screen all come along; wave spawning and the marching formation don't. **No existing module had to change.** Selector fields: `from` (borrow these scenes' modules), `include` (force in regardless of binding), `exclude` (drop by name, wins over both). The editor's Scene panel drives this and shows exactly which modules will attach.
+
+### Opening the editor
+
+```bash
+node serve.js
+# http://localhost:3000/tools/editor.html   — or the 🎬 button in launcher.html
+```
+
+| Action | How |
+|---|---|
+| Place | Click a prefab to arm it, then click the canvas. Shift-click keeps placing. |
+| Select / move | Click; drag to move. Snaps to grid unless snap is off. |
+| Pan / zoom | Alt-drag or right-drag; wheel. `fit` re-centres. |
+| Delete / duplicate | `Del` / `Ctrl+D` |
+| Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z`, or the toolbar arrows |
+| Play | Runs the level as a real `GameScene` with its real modules. `Esc` stops. |
+| Save | `Ctrl+S` → writes `levels/<name>.json` **and adds it to `manifest.json`** |
+
+Edit mode draws sprites and animations but does not run behavior `update()` hooks — those need a live engine. Press Play for the real thing.
+
+### Loading a level
+
+Levels are preloaded by `GameLoader` from the manifest, so the lookup is synchronous — which it must be, because a scene needs its name and module selection at construction time:
+
+```json
+{ "levels": ["boss"] }          // → levels/boss.json
+```
+
+```js
+// scenes/levels.js
+G.scenes.Boss = GF.dataScene('boss');   // a GF.GameScene subclass
+```
+
+Any module can then reach it by name: `scene.push('Boss')`.
+
+Other entry points: `GF.buildScene(doc, world)` pours placed entities into a world you built yourself (use the editor for layout only), `GF.applyOverlaps(doc, world)` registers just the rules, and `GF.overlapAction(name, fn)` adds an action the editor will list.
+
+> **Rule ordering.** `EntityWorld` skips a colliding pair once either side is dead. A `DataScene` therefore lets modules register their rules first and applies the document's `overlaps` last — otherwise a declarative `destroyB` would silently starve a module's scoring rule for the same pair.
+
+### Worked example — the HamInvaders boss fight
+
+HamInvaders generates its waves in [Waves.js](games/HamInvaders/modules/Waves.js), so nothing in it was hand-placed. A boss level was added **without editing a single existing file**:
+
+```
+games/HamInvaders/
+├── sprites/boss.js            # mothership + drone art
+├── prefabs/boss.js            # boss, bossDrone   ← the editor's palette
+├── behaviors/
+│   ├── BossMove.js            # sweep; faster as it takes damage
+│   ├── BossGun.js             # volleys of the existing invaderShot
+│   └── Shielded.js            # invulnerable while escorts live
+├── modules/
+│   ├── Boss.js                # damage, health bar, win condition (scene: 'Boss')
+│   ├── BossWave.js            # clearing the last wave summons the mothership
+│   └── BossEntry.js           # "Press B" shortcut for testing it directly
+├── scenes/levels.js           # G.scenes.Boss = GF.dataScene('boss')
+└── levels/boss.json           # ← the level, authored in the editor
+```
+
+**Reaching it in play.** [Waves.js](games/HamInvaders/modules/Waves.js) already announces the end of a run: it sets `state.won = true` and switches to the `over` phase. `BossWave` listens for exactly that in `onPhase` and calls `scene.replace('Boss', …)` before anything renders, so the "YOU WIN" screen never gets a frame and Waves needed no edit. Raising `GAME_CONFIG.scenes.Main.levels` still works — the escalation keys off *the last wave was cleared*, not off a count. Dying is untouched, because Combat sets `won = false` before the same phase change.
+
+The run carries forward: score and remaining lives are passed through `replace`'s `state`, and `Boss.enter` applies the lives to whichever player the level placed.
+
+> A module bound to `'Main'` also attaches to any scene borrowing Main's stack — including this boss level. `BossWave` therefore guards with `if (!scene.has('Waves')) return;`, so beating the boss cannot summon another one. `scene.has(name)` is the general way to make a module's behaviour conditional on the stack it landed in.
+
+The design point: **the drones you place *are* the difficulty.** `Shielded` makes the mothership invulnerable while any `bossDrone` lives, so placing seven means stripping seven before the boss can be touched. Retuning the fight is dragging drones around and editing `data.hp` in the inspector — no code.
+
+`bossDrone` is tagged `['bossDrone', 'invader']`, so Combat's existing shot-kills-invader rule and the reach-the-player lose condition apply for free.
+
+Play it: `games/HamInvaders/index.html` — clear the waves and the mothership arrives, or press **B** on the title to skip straight to it. Edit it: `/tools/editor.html?game=HamInvaders&scene=boss`.
+
+### Server endpoints
+
+Authoring-only; nothing at runtime depends on them.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/scene/parts?game=X` | Scripts to load so prefabs/behaviors/modules register. Reads `manifest.json` or `index.html`'s script tags, always includes `config.js`, and excludes `scenes/`, `boot.js` and `levels/` so the editor never starts a second game loop. |
+| `GET /api/scene/modules?game=X` | Each module's name and scene binding, parsed statically — the editor shows the real stack without executing game code. |
+| `GET /api/scene/list?game=X` | Level documents under `levels/`. |
+| `POST /api/scene/save` | Writes the level, registers it in the manifest, returns validation warnings. |
 
 ---
 

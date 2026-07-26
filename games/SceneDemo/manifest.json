@@ -1,0 +1,7 @@
+{
+  "behaviors": ["Bob", "TopdownMove"],
+  "prefabs":   ["player", "orb", "wall"],
+  "modules":   ["Rules"],
+  "scenes":    ["boot"],
+  "levels":    ["main"]
+}

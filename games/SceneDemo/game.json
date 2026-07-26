@@ -1,0 +1,12 @@
+{
+  "id": "SceneDemo",
+  "title": "Scene Demo",
+  "icon": "🎬",
+  "color": "#57d18a",
+  "tags": [
+    "demo",
+    "editor"
+  ],
+  "desc": "A game whose level is authored in tools/editor.html and stored as scenes/main.json.",
+  "config": []
+}

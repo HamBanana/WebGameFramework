@@ -1,0 +1,26 @@
+{
+  "format": "gf-level@1",
+  "name": "main",
+  "scene": "Main",
+  "background": "#12141f",
+  "entities": [
+    { "id": "e1", "name": "Player", "prefab": "player", "x": 268, "y": 168 },
+
+    { "id": "e2", "prefab": "orb", "x": 48,  "y": 56 },
+    { "id": "e3", "prefab": "orb", "x": 188, "y": 56 },
+    { "id": "e4", "prefab": "orb", "x": 348, "y": 56 },
+    { "id": "e5", "prefab": "orb", "x": 488, "y": 56 },
+    { "id": "e6", "prefab": "orb", "x": 48,  "y": 280 },
+    { "id": "e7", "prefab": "orb", "x": 188, "y": 280 },
+    { "id": "e8", "prefab": "orb", "x": 348, "y": 280 },
+    { "id": "e9", "prefab": "orb", "x": 488, "y": 280 },
+
+    { "id": "e10", "prefab": "wall", "x": 128, "y": 160 },
+    { "id": "e11", "prefab": "wall", "x": 160, "y": 160 },
+    { "id": "e12", "prefab": "wall", "x": 368, "y": 160 },
+    { "id": "e13", "prefab": "wall", "x": 400, "y": 160 }
+  ],
+  "overlaps": [
+    { "a": "player", "b": "orb", "do": "destroyB" }
+  ]
+}

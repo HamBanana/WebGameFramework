@@ -35,8 +35,19 @@
 
     var startName = gameCfg.startScene || 'Main';
     var registered = Object.keys(G.scenes || {});
-    var name = (G.scenes && G.scenes[startName]) ? startName
-             : (registered.length ? registered[0] : startName);
+    var name = startName;
+    if (!(G.scenes && G.scenes[startName])) {
+      // No class registered under the configured name. A plain GF.GameScene is
+      // still right whenever modules are bound to it, so only fall back to the
+      // first registered scene when nothing at all would run — otherwise
+      // registering any other scene (a data level, say) would hijack the start.
+      var hasModules = typeof GF.sceneModulesFor === 'function' &&
+        GF.sceneModulesFor(startName).some(function (m) {
+          var w = m.spec.scene;
+          return w != null && w !== '*';
+        });
+      if (!hasModules && registered.length) name = registered[0];
+    }
 
     var scene = GF.GameScene.create(name);
     if (!scene) { console.error('[GF] boot: cannot resolve start scene "' + startName + '"'); return game; }

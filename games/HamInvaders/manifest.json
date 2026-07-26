@@ -1,8 +1,10 @@
 {
   "data":      ["powerups"],
-  "sprites":   ["ships", "projectiles", "powerups"],
-  "behaviors": ["Bob", "CullOffscreen", "FireOnChance", "PlayerMove", "Powerups", "ShipAura"],
-  "prefabs":   ["player", "invader", "shot", "ufo", "powerup"],
-  "modules":   ["Background", "Controls", "Touch", "Waves", "Formation", "Combat", "Ufo", "Powerups", "Hud", "GameOver", "Title"],
-  "scenes":    []
+  "sprites":   ["ships", "projectiles", "powerups", "boss"],
+  "behaviors": ["Bob", "CullOffscreen", "FireOnChance", "PlayerMove", "Powerups", "ShipAura",
+                "BossMove", "BossGun", "Shielded"],
+  "prefabs":   ["player", "invader", "shot", "ufo", "powerup", "boss"],
+  "modules":   ["Background", "Controls", "Touch", "Waves", "Formation", "Combat", "Ufo", "Powerups", "Hud", "GameOver", "Title", "Boss", "BossWave", "BossEntry"],
+  "scenes":    ["levels"],
+  "levels":    ["boss"]
 }

@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scene Editor — GameFramework</title>
+<!-- Sprite files resolve their art with paths like "../../Sprites/Player", which
+     assume a document two levels deep (games/<id>/index.html). The editor lives
+     in tools/, so a <base> at that depth keeps those paths working. Everything
+     the editor itself requests uses an absolute /path so it is unaffected. -->
+<base href="/games/_editor/">
+<style>
+  :root { --bg:#12141c; --panel:#1b1e2b; --panel2:#232838; --line:#333a52;
+          --ink:#e8ecf6; --dim:#8b93ad; --accent:#4a9eff; --accent2:#ffd24a;
+          --danger:#ff5d5d; --ok:#57d18a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--ink); font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;
+         display:flex; flex-direction:column; overflow:hidden; }
+  header { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--panel);
+           border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:14px; font-weight:700; letter-spacing:.5px; color:var(--accent2); margin-right:6px; }
+  select,input,button,textarea { font:inherit; color:var(--ink); background:var(--panel2);
+           border:1px solid var(--line); border-radius:5px; padding:4px 8px; }
+  input[type=number]{ width:70px; } input[type=text]{ width:130px; }
+  input[type=color]{ padding:1px; width:34px; height:28px; }
+  input[type=checkbox]{ width:auto; }
+  textarea { width:100%; resize:vertical; font-size:11px; line-height:1.35; }
+  button { cursor:pointer; } button:hover:not([disabled]) { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#04122a; font-weight:700; }
+  button[disabled]{ opacity:.45; cursor:default; }
+  button.warn { border-color:var(--danger); color:var(--danger); }
+  button.on { background:var(--accent); border-color:var(--accent); color:#04122a; font-weight:700; }
+  .sp { flex:1; }
+  #status { color:var(--dim); font-size:12px; }
+  #status.dirty { color:var(--accent2); } #status.err { color:var(--danger); } #status.ok { color:var(--ok); }
+  main { flex:1; display:flex; min-height:0; }
+  .side { width:250px; background:var(--panel); overflow-y:auto; padding:10px;
+          display:flex; flex-direction:column; gap:12px; flex:none; }
+  #left { border-right:1px solid var(--line); }
+  #right { border-left:1px solid var(--line); width:280px; }
+  .grp { border:1px solid var(--line); border-radius:7px; padding:8px; }
+  .grp h2 { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--dim);
+            margin-bottom:7px; display:flex; align-items:center; gap:6px; }
+  .grp h2 .sp { flex:1; }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+  .row:last-child { margin-bottom:0; }
+  label.f { color:var(--dim); font-size:11px; min-width:52px; }
+  .list { max-height:230px; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+  .item { display:flex; gap:6px; align-items:center; padding:4px 5px; border-radius:4px;
+          cursor:pointer; font-size:11px; border:1px solid transparent; }
+  .item:hover { background:var(--panel2); }
+  .item.sel { background:var(--accent); color:#04122a; font-weight:700; }
+  .item .dot { width:10px; height:10px; border-radius:2px; flex:none; border:1px solid #0006; }
+  .item .tag { color:var(--dim); font-size:10px; }
+  .item.sel .tag { color:#04122acc; }
+  .item .del { margin-left:auto; opacity:0; padding:0 4px; background:none; border:none; color:var(--danger); }
+  .item:hover .del { opacity:1; }
+  #canvasWrap { flex:1; position:relative; overflow:hidden; background:#0a0b10; min-width:0; }
+  #cv { position:absolute; inset:0; width:100%; height:100%; }
+  #playHost { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+              background:#0a0b10; }
+  #playHost.on { display:flex; }
+  #hint { position:absolute; left:10px; bottom:8px; color:var(--dim); font-size:11px;
+          background:#000a; padding:3px 7px; border-radius:5px; pointer-events:none; white-space:pre; }
+  #zoombar { position:absolute; right:10px; bottom:8px; display:flex; gap:4px; }
+  #zoombar button { padding:2px 8px; }
+  #playBadge { position:absolute; left:10px; top:8px; color:var(--ok); font-size:11px;
+               background:#000a; padding:3px 7px; border-radius:5px; display:none; }
+  #playBadge.on { display:block; }
+  .muted { color:var(--dim); font-size:11px; }
+  .err { color:var(--danger); font-size:11px; }
+  .sep { width:1px; height:22px; background:var(--line); }
+  dialog { background:var(--panel); color:var(--ink); border:1px solid var(--line);
+           border-radius:10px; padding:16px; }
+  dialog::backdrop { background:#000a; }
+  dialog .row { margin-bottom:9px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎬 SCENE EDITOR</h1>
+  <label class="f">Game</label>
+  <select id="gameSel"></select>
+  <span class="sep"></span>
+  <label class="f">Scene</label>
+  <select id="sceneSel"></select>
+  <button id="newSceneBtn">+ New</button>
+  <span class="sep"></span>
+  <button id="playBtn" disabled>▶ Play</button>
+  <span class="sp"></span>
+  <span id="status">loading…</span>
+  <button id="undoBtn" disabled title="Ctrl+Z">↶</button>
+  <button id="redoBtn" disabled title="Ctrl+Shift+Z">↷</button>
+  <button id="saveBtn" class="primary" disabled>Save</button>
+</header>
+
+<main>
+  <!-- ── left: what you can place ──────────────────────────────────────────── -->
+  <div class="side" id="left">
+    <div class="grp">
+      <h2>Prefabs <span class="sp"></span><span class="muted" id="prefabCount"></span></h2>
+      <div class="muted" style="margin-bottom:6px">Click to arm, then click the canvas.</div>
+      <div class="list" id="prefabList"></div>
+    </div>
+    <div class="grp">
+      <h2>Behaviors</h2>
+      <div class="muted" id="behaviorList">—</div>
+    </div>
+    <div class="grp">
+      <h2>Sprites <span class="sp"></span><span class="muted" id="spriteCount"></span></h2>
+      <div class="list" id="spriteList" style="max-height:170px"></div>
+    </div>
+  </div>
+
+  <!-- ── centre: the scene ─────────────────────────────────────────────────── -->
+  <div id="canvasWrap">
+    <canvas id="cv"></canvas>
+    <div id="playHost"></div>
+    <div id="playBadge">▶ PLAYING — behaviors and collisions are live</div>
+    <div id="hint"></div>
+    <div id="zoombar">
+      <button id="zoomOut">−</button><button id="zoomFit">fit</button><button id="zoomIn">+</button>
+    </div>
+  </div>
+
+  <!-- ── right: what is in the scene, and what is selected ─────────────────── -->
+  <div class="side" id="right">
+    <div class="grp">
+      <h2>Hierarchy <span class="sp"></span><span class="muted" id="entCount"></span></h2>
+      <div class="list" id="hierList"></div>
+    </div>
+    <div class="grp" id="inspector">
+      <h2>Inspector</h2>
+      <div class="muted" id="inspEmpty">Nothing selected.</div>
+      <div id="inspBody" style="display:none">
+        <div class="row"><label class="f">Name</label><input type="text" id="iName"></div>
+        <div class="row"><label class="f">Prefab</label><span class="muted" id="iPrefab"></span></div>
+        <div class="row">
+          <label class="f">X</label><input type="number" id="iX" step="1">
+          <label class="f" style="min-width:14px">Y</label><input type="number" id="iY" step="1">
+        </div>
+        <div class="row">
+          <label class="f">W</label><input type="number" id="iW" step="1" placeholder="prefab">
+          <label class="f" style="min-width:14px">H</label><input type="number" id="iH" step="1" placeholder="prefab">
+        </div>
+        <div class="row"><label class="f">Sprite</label><input type="text" id="iSprite" placeholder="prefab"></div>
+        <div class="row"><label class="f">Tags</label><input type="text" id="iTags" placeholder="comma,separated"></div>
+        <div class="row"><label class="f">Enabled</label><input type="checkbox" id="iEnabled" checked></div>
+        <div class="row" style="flex-direction:column; align-items:stretch; gap:3px">
+          <label class="f">data (JSON, merged over prefab)</label>
+          <textarea id="iData" rows="3" spellcheck="false"></textarea>
+          <div class="err" id="iDataErr"></div>
+        </div>
+        <div class="row">
+          <button id="dupBtn">Duplicate</button>
+          <button id="delBtn" class="warn">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div class="grp">
+      <h2>Scene</h2>
+      <div class="row"><label class="f">Name</label><input type="text" id="sScene" placeholder="Main"></div>
+      <div class="muted" style="margin-bottom:6px">Modules bind to this name. Use a new name
+        for a hand-placed level so the generated-wave modules don't fight it.</div>
+      <div class="row"><label class="f">Reuse</label>
+        <select id="sFrom"><option value="">(nothing)</option></select></div>
+      <div class="muted" style="margin-bottom:4px">Borrow another scene's modules, then untick
+        whatever this level replaces.</div>
+      <div class="list" id="modList" style="max-height:190px"></div>
+    </div>
+    <div class="grp">
+      <h2>Look</h2>
+      <div class="row"><label class="f">Background</label><input type="color" id="sBg"></div>
+      <div class="row"><label class="f">Grid</label><input type="number" id="sGrid" value="16" min="1" step="1">
+        <label class="f" style="min-width:auto"><input type="checkbox" id="sSnap" checked> snap</label></div>
+    </div>
+    <div class="grp">
+      <h2>Overlap rules</h2>
+      <div class="muted" style="margin-bottom:6px">Tag-vs-tag, run at play time.</div>
+      <div class="list" id="ovList" style="max-height:120px"></div>
+      <div class="row" style="margin-top:6px">
+        <input type="text" id="ovA" placeholder="tagA" style="width:64px">
+        <input type="text" id="ovB" placeholder="tagB" style="width:64px">
+        <select id="ovDo"></select>
+        <button id="ovAdd">+</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<dialog id="newDlg">
+  <div class="row"><label class="f">Scene name</label><input type="text" id="newName" placeholder="level1"></div>
+  <div class="muted" style="margin-bottom:9px">Letters, digits, - and _ . Saved to scenes/&lt;name&gt;.json</div>
+  <div class="row"><button id="newCancel">Cancel</button><button id="newOk" class="primary">Create</button></div>
+</dialog>
+
+<!-- The editor runs the real framework, so what it draws is what the game draws. -->
+<script src="/framework/GameFramework.bundle.js"></script>
+<script src="/framework/GameFramework.sprites.bundle.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── state ──────────────────────────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+
+  let GAME   = params.get('game') || '';
+  let SCENE  = params.get('scene') || '';
+  let doc    = null;      // the scene document being edited
+  let world  = null;      // a real EntityWorld holding the preview objects
+  let sprites= null;      // SpriteSystem shared with that world
+  let selId  = null;      // selected entity id
+  let armed  = null;      // prefab name armed for placement
+  let dirty  = false;
+  let playing= false;
+  let playGame = null;    // the GF game handle while playing
+  let lastResult = null;  // { won, score } of the last level run, for the host scene
+  let engineCfg = { width: 800, height: 450, backgroundColor: '#12141f' };
+  let ALL_MODULES = [];   // [{ name, file, scenes }] from /api/scene/modules
+
+  const view = { zoom: 1, panX: 0, panY: 0 };
+  // Until the user pans or zooms, the view re-fits on resize — the first
+  // measurement happens before layout has settled, so a one-shot fit lands off-centre.
+  let userView = false;
+  const undoStack = [], redoStack = [];
+
+  // ── small helpers ──────────────────────────────────────────────────────────
+  function setStatus(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
+  function api(path) { return fetch(path).then(r => r.json()); }
+  function nextId() {
+    let n = 1;
+    const used = new Set((doc.entities || []).map(e => e.id));
+    while (used.has('e' + n)) n++;
+    return 'e' + n;
+  }
+  function markDirty() {
+    dirty = true; $('saveBtn').disabled = false;
+    setStatus('unsaved changes', 'dirty');
+  }
+  function snapshot() {
+    undoStack.push(JSON.stringify(doc));
+    if (undoStack.length > 100) undoStack.shift();
+    redoStack.length = 0;
+    syncUndoButtons();
+  }
+  function syncUndoButtons() {
+    $('undoBtn').disabled = !undoStack.length;
+    $('redoBtn').disabled = !redoStack.length;
+  }
+  function restore(json) {
+    doc = JSON.parse(json);
+    selId = null;
+    rebuildWorld(); renderPanels(); markDirty();
+  }
+
+  // ── loading a game's parts ─────────────────────────────────────────────────
+  // Prefabs, behaviors and game sprites all register themselves as a side effect
+  // of their script running, so the editor just injects the same files the game
+  // does — minus scenes/boot, which would start a second game loop.
+  function injectScripts(urls) {
+    return new Promise((resolve) => {
+      if (!urls.length) return resolve([]);
+      let pending = urls.length; const failed = [];
+      urls.forEach(url => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.async = false;                  // keep execution order
+        s.onload = done;
+        s.onerror = () => { failed.push(url); done(); };
+        document.head.appendChild(s);
+      });
+      function done() { if (--pending === 0) resolve(failed); }
+    });
+  }
+
+  async function loadGameParts(game) {
+    const info = await api('/api/scene/parts?game=' + encodeURIComponent(game));
+    if (info.error) throw new Error(info.error);
+    const urls = info.parts.map(p => '/games/' + game + '/' + p);
+    const failed = await injectScripts(urls);
+    if (failed.length) console.warn('[editor] failed to load:', failed);
+    if (GF.GAME_CONFIG && GF.GAME_CONFIG.engine) {
+      engineCfg = Object.assign(engineCfg, GF.GAME_CONFIG.engine);
+    }
+    return info;
+  }
+
+  // ── the preview world ──────────────────────────────────────────────────────
+  // Edit mode spawns real GameObjects so sizes, sprites and animations match the
+  // game exactly. It does NOT run behaviour update()/draw() hooks — those need a
+  // live engine and can have side effects, so they are a Play-mode concern.
+  function rebuildWorld() {
+    world = new GF.EntityWorld({ sprites: sprites });
+    // A stub engine, because behaviors' onAdd hooks legitimately reach for
+    // world.engine.input / .config. Returning "nothing pressed" lets them run
+    // their guards instead of throwing and taking the whole preview down.
+    world.init({
+      getSystem: () => sprites,
+      config: { width: engineCfg.width, height: engineCfg.height },
+      input: { isDown: () => false, wasPressed: () => false, wasReleased: () => false },
+    });
+    (doc.entities || []).forEach(ent => {
+      const overrides = Object.assign({}, ent.overrides);
+      if (ent.name) overrides.name = ent.name;
+      let spec = ent.prefab || Object.assign({}, ent.spec || {});
+      if (overrides.data && typeof spec === 'string') {
+        const pf = world._resolvePrefab(spec);
+        if (pf && pf.data) overrides.data = Object.assign({}, pf.data, overrides.data);
+      }
+      try {
+        const obj = world.spawn(spec, ent.x, ent.y, overrides);
+        if (obj) obj.data._editorId = ent.id;
+      } catch (err) {
+        console.warn('[editor] could not preview "' + (ent.prefab || 'inline') + '":', err);
+      }
+    });
+  }
+
+  function objFor(id) { return world ? world.all().find(o => o.data._editorId === id) : null; }
+  function entFor(id) { return (doc.entities || []).find(e => e.id === id) || null; }
+
+  // ── rendering (edit mode) ──────────────────────────────────────────────────
+  const cv = $('cv'), ctx = cv.getContext('2d');
+
+  function resizeCanvas() {
+    const r = cv.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cv._cssW = r.width; cv._cssH = r.height; cv._dpr = dpr;
+  }
+
+  function fitView() {
+    resizeCanvas();                        // re-measure; layout may have shifted
+    const w = cv._cssW || 1, h = cv._cssH || 1;
+    const z = Math.min(w / engineCfg.width, h / engineCfg.height) * 0.9;
+    view.zoom = z;
+    view.panX = (w - engineCfg.width * z) / 2;
+    view.panY = (h - engineCfg.height * z) / 2;
+  }
+
+  function screenToWorld(sx, sy) {
+    return { x: (sx - view.panX) / view.zoom, y: (sy - view.panY) / view.zoom };
+  }
+
+  let lastT = performance.now();
+  function drawLoop(now) {
+    requestAnimationFrame(drawLoop);
+    if (playing) {
+      // Belt and braces: the host scene should always catch a level popping
+      // itself, but a level that clears the stack outright would leave the
+      // engine drawing nothing at all. Return to editing rather than sit on a
+      // dead black canvas.
+      if (playGame && playGame.scenes && playGame.scenes.stack.length === 0) {
+        stopPlay();
+        setStatus('play stopped — the level emptied the scene stack', 'err');
+      }
+      return;
+    }
+    if (!doc) return;
+    const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
+
+    const dpr = cv._dpr || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#0a0b10';
+    ctx.fillRect(0, 0, cv._cssW, cv._cssH);
+
+    ctx.save();
+    ctx.translate(view.panX, view.panY);
+    ctx.scale(view.zoom, view.zoom);
+
+    // the game's viewport
+    ctx.fillStyle = doc.background || engineCfg.backgroundColor || '#12141f';
+    ctx.fillRect(0, 0, engineCfg.width, engineCfg.height);
+
+    drawGrid();
+
+    // entities, y-sorted like EntityWorld does
+    const objs = world.all().slice().sort((a, b) => a.bottom - b.bottom);
+    for (const o of objs) {
+      const ent = entFor(o.data._editorId);
+      const off = ent && ent.enabled === false;
+      ctx.globalAlpha = off ? 0.3 : 1;
+      if (o._anim) {
+        o._anim.update(dt);                       // animate the preview
+        o._anim.flipX = o.flipX;
+        try { o._anim.draw(ctx, o.centerX, o.bottom); } catch (e) { box(o); }
+      } else if (o.sprite && sprites && sprites.getSprite(o.sprite)) {
+        try { sprites.drawFrame(ctx, o.sprite, o.anim, 0, o.centerX, o.bottom, o.flipX); }
+        catch (e) { box(o); }
+      } else {
+        box(o);
+      }
+      ctx.globalAlpha = 1;
+      if (o.data._editorId === selId) outline(o);
+    }
+
+    // viewport border on top, so it reads as the camera bounds
+    ctx.strokeStyle = '#4a9eff66';
+    ctx.lineWidth = 1 / view.zoom;
+    ctx.strokeRect(0, 0, engineCfg.width, engineCfg.height);
+    ctx.restore();
+
+    function box(o) {
+      ctx.fillStyle = (o.data && o.data.color) || '#e33';
+      ctx.fillRect(o.x, o.y, o.w || 8, o.h || 8);
+    }
+    function outline(o) {
+      ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 2 / view.zoom;
+      ctx.strokeRect(o.x - 1, o.y - 1, (o.w || 8) + 2, (o.h || 8) + 2);
+      ctx.fillStyle = '#ffd24a';
+      const s = 4 / view.zoom;
+      ctx.fillRect(o.x - s / 2, o.y - s / 2, s, s);
+    }
+  }
+
+  function drawGrid() {
+    const g = parseInt($('sGrid').value, 10) || 0;
+    if (!g || view.zoom < 0.35) return;
+    ctx.strokeStyle = '#ffffff10'; ctx.lineWidth = 1 / view.zoom;
+    ctx.beginPath();
+    for (let x = 0; x <= engineCfg.width; x += g) { ctx.moveTo(x, 0); ctx.lineTo(x, engineCfg.height); }
+    for (let y = 0; y <= engineCfg.height; y += g) { ctx.moveTo(0, y); ctx.lineTo(engineCfg.width, y); }
+    ctx.stroke();
+  }
+
+  // ── canvas interaction ─────────────────────────────────────────────────────
+  let drag = null, panning = null;
+
+  function pickAt(wx, wy) {
+    // topmost first: reverse draw order
+    const objs = world.all().slice().sort((a, b) => b.bottom - a.bottom);
+    for (const o of objs) {
+      const w = o.w || 8, h = o.h || 8;
+      if (wx >= o.x && wx <= o.x + w && wy >= o.y && wy <= o.y + h) return o;
+    }
+    return null;
+  }
+
+  function snap(v) {
+    if (!$('sSnap').checked) return Math.round(v);
+    const g = parseInt($('sGrid').value, 10) || 1;
+    return Math.round(v / g) * g;
+  }
+
+  cv.addEventListener('mousedown', (e) => {
+    if (playing || !doc) return;
+    const r = cv.getBoundingClientRect();
+    const p = screenToWorld(e.clientX - r.left, e.clientY - r.top);
+
+    if (e.button === 1 || e.button === 2 || e.altKey) {     // pan
+      panning = { x: e.clientX, y: e.clientY, px: view.panX, py: view.panY };
+      e.preventDefault(); return;
+    }
+
+    if (armed) {                                            // place a prefab
+      snapshot();
+      const ent = { id: nextId(), prefab: armed, x: snap(p.x), y: snap(p.y) };
+      doc.entities.push(ent);
+      selId = ent.id;
+      if (!e.shiftKey) { armed = null; }                    // shift keeps placing
+      rebuildWorld(); renderPanels(); markDirty();
+      return;
+    }
+
+    const hit = pickAt(p.x, p.y);
+    selId = hit ? hit.data._editorId : null;
+    renderPanels();
+    if (hit) {
+      snapshot();
+      drag = { id: selId, dx: p.x - hit.x, dy: p.y - hit.y, moved: false };
+    }
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (panning) {
+      view.panX = panning.px + (e.clientX - panning.x);
+      view.panY = panning.py + (e.clientY - panning.y);
+      userView = true;
+      return;
+    }
+    if (!drag) return;
+    const r = cv.getBoundingClientRect();
+    const p = screenToWorld(e.clientX - r.left, e.clientY - r.top);
+    const ent = entFor(drag.id), obj = objFor(drag.id);
+    if (!ent || !obj) return;
+    ent.x = snap(p.x - drag.dx); ent.y = snap(p.y - drag.dy);
+    obj.x = ent.x; obj.y = ent.y;
+    drag.moved = true;
+    syncInspectorPos(ent);
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (drag && drag.moved) markDirty();
+    else if (drag) undoStack.pop(), syncUndoButtons();   // click without a move: no undo entry
+    drag = null; panning = null;
+  });
+
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+
+  cv.addEventListener('wheel', (e) => {
+    if (playing) return;
+    e.preventDefault();
+    const r = cv.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const before = screenToWorld(mx, my);
+    view.zoom = Math.max(0.1, Math.min(8, view.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    const after = screenToWorld(mx, my);
+    view.panX += (after.x - before.x) * view.zoom;
+    view.panY += (after.y - before.y) * view.zoom;
+    userView = true;
+  }, { passive: false });
+
+  window.addEventListener('keydown', (e) => {
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (playing && e.key !== 'Escape') return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { deleteSel(); e.preventDefault(); }
+    else if (e.key === 'Escape') { if (playing) stopPlay(); else { armed = null; selId = null; renderPanels(); } }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { duplicateSel(); e.preventDefault(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { save(); e.preventDefault(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) doRedo(); else doUndo();
+    }
+  });
+
+  $('undoBtn').onclick = () => doUndo();
+  $('redoBtn').onclick = () => doRedo();
+
+  function doUndo() {
+    if (!undoStack.length) return;
+    redoStack.push(JSON.stringify(doc));
+    restore(undoStack.pop());
+    syncUndoButtons();
+  }
+  function doRedo() {
+    if (!redoStack.length) return;
+    undoStack.push(JSON.stringify(doc));
+    restore(redoStack.pop());
+    syncUndoButtons();
+  }
+
+  function deleteSel() {
+    if (!selId) return;
+    snapshot();
+    doc.entities = doc.entities.filter(e => e.id !== selId);
+    selId = null;
+    rebuildWorld(); renderPanels(); markDirty();
+  }
+  function duplicateSel() {
+    const ent = entFor(selId); if (!ent) return;
+    snapshot();
+    const copy = JSON.parse(JSON.stringify(ent));
+    copy.id = nextId(); copy.x += 16; copy.y += 16;
+    doc.entities.push(copy); selId = copy.id;
+    rebuildWorld(); renderPanels(); markDirty();
+  }
+
+  // ── panels ─────────────────────────────────────────────────────────────────
+  function renderPanels() {
+    renderPrefabs(); renderHierarchy(); renderInspector(); renderOverlaps(); renderModules();
+  }
+
+  function renderPrefabs() {
+    const names = Object.keys(GF._prefabs || {}).sort();
+    $('prefabCount').textContent = names.length || '';
+    const box = $('prefabList');
+    box.innerHTML = '';
+    if (!names.length) { box.innerHTML = '<div class="muted">This game registers no prefabs.</div>'; return; }
+    names.forEach(n => {
+      const pf = GF._prefabs[n];
+      const el = document.createElement('div');
+      el.className = 'item' + (armed === n ? ' sel' : '');
+      el.innerHTML = '<span class="dot" style="background:' +
+        ((pf.data && pf.data.color) || '#4a9eff') + '"></span><span>' + n + '</span>' +
+        '<span class="tag">' + ((pf.tags || []).join(',') || '') + '</span>';
+      el.onclick = () => { armed = (armed === n ? null : n); renderPrefabs(); updateHint(); };
+      box.appendChild(el);
+    });
+  }
+
+  function renderHierarchy() {
+    const box = $('hierList');
+    box.innerHTML = '';
+    const ents = doc.entities || [];
+    $('entCount').textContent = ents.length || '';
+    if (!ents.length) { box.innerHTML = '<div class="muted">Empty scene.</div>'; return; }
+    ents.forEach(ent => {
+      const el = document.createElement('div');
+      el.className = 'item' + (ent.id === selId ? ' sel' : '');
+      const label = ent.name || ent.prefab || 'inline';
+      el.innerHTML = '<span>' + label + '</span><span class="tag">' +
+                     Math.round(ent.x) + ',' + Math.round(ent.y) + '</span>';
+      const del = document.createElement('button');
+      del.className = 'del'; del.textContent = '✕';
+      del.onclick = (e) => { e.stopPropagation(); selId = ent.id; deleteSel(); };
+      el.appendChild(del);
+      el.onclick = () => { selId = ent.id; renderPanels(); };
+      box.appendChild(el);
+    });
+  }
+
+  function syncInspectorPos(ent) {
+    if (document.activeElement === $('iX') || document.activeElement === $('iY')) return;
+    $('iX').value = Math.round(ent.x); $('iY').value = Math.round(ent.y);
+  }
+
+  function renderInspector() {
+    const ent = entFor(selId);
+    $('inspEmpty').style.display = ent ? 'none' : '';
+    $('inspBody').style.display = ent ? '' : 'none';
+    if (!ent) return;
+    const ov = ent.overrides || {};
+    $('iName').value   = ent.name || '';
+    $('iPrefab').textContent = ent.prefab || '(inline spec)';
+    $('iX').value = Math.round(ent.x); $('iY').value = Math.round(ent.y);
+    $('iW').value = ov.w != null ? ov.w : '';
+    $('iH').value = ov.h != null ? ov.h : '';
+    $('iSprite').value = ov.sprite || '';
+    $('iTags').value = (ov.tags || []).join(',');
+    $('iEnabled').checked = ent.enabled !== false;
+    $('iData').value = ov.data ? JSON.stringify(ov.data, null, 1) : '';
+    $('iDataErr').textContent = '';
+  }
+
+  /** Write one inspector field back into the doc and refresh the preview. */
+  function editSel(fn, structural) {
+    const ent = entFor(selId); if (!ent) return;
+    snapshot();
+    ent.overrides = ent.overrides || {};
+    fn(ent, ent.overrides);
+    // drop empty override bags so saved scenes stay clean
+    Object.keys(ent.overrides).forEach(k => {
+      const v = ent.overrides[k];
+      if (v === '' || v == null || (Array.isArray(v) && !v.length)) delete ent.overrides[k];
+    });
+    if (!Object.keys(ent.overrides).length) delete ent.overrides;
+    if (structural !== false) rebuildWorld();
+    renderHierarchy(); markDirty();
+  }
+
+  $('iName').oninput   = () => editSel((e) => { e.name = $('iName').value.trim() || undefined; });
+  $('iX').oninput      = () => editSel((e) => { e.x = parseFloat($('iX').value) || 0; });
+  $('iY').oninput      = () => editSel((e) => { e.y = parseFloat($('iY').value) || 0; });
+  $('iW').oninput      = () => editSel((e, o) => { const v = parseFloat($('iW').value); if (isNaN(v)) delete o.w; else o.w = v; });
+  $('iH').oninput      = () => editSel((e, o) => { const v = parseFloat($('iH').value); if (isNaN(v)) delete o.h; else o.h = v; });
+  $('iSprite').oninput = () => editSel((e, o) => { const v = $('iSprite').value.trim(); if (v) o.sprite = v; else delete o.sprite; });
+  $('iTags').oninput   = () => editSel((e, o) => {
+    const v = $('iTags').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (v.length) o.tags = v; else delete o.tags;
+  });
+  $('iEnabled').onchange = () => editSel((e) => { e.enabled = $('iEnabled').checked ? undefined : false; });
+  $('iData').oninput = () => {
+    const raw = $('iData').value.trim();
+    if (!raw) { $('iDataErr').textContent = ''; editSel((e, o) => { delete o.data; }); return; }
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (err) { $('iDataErr').textContent = 'invalid JSON'; return; }
+    $('iDataErr').textContent = '';
+    editSel((e, o) => { o.data = parsed; });
+  };
+  $('delBtn').onclick = deleteSel;
+  $('dupBtn').onclick = duplicateSel;
+
+  // ── scene settings ─────────────────────────────────────────────────────────
+  $('sBg').oninput = () => { doc.background = $('sBg').value; markDirty(); };
+
+  $('sScene').oninput = () => {
+    doc.scene = $('sScene').value.trim() || undefined;
+    renderModules(); markDirty();
+  };
+  $('sFrom').onchange = () => {
+    doc.modules = doc.modules || {};
+    const v = $('sFrom').value;
+    if (v) doc.modules.from = v; else delete doc.modules.from;
+    if (!Object.keys(doc.modules).length) delete doc.modules;
+    renderModules(); markDirty();
+  };
+
+  /** Would this module attach, given the scene name and the from/exclude set? */
+  function moduleActive(m) {
+    const sel = doc.modules || {};
+    const scene = doc.scene || 'Main';
+    const exc = sel.exclude || [];
+    if (exc.indexOf(m.name) !== -1) return false;
+    if ((sel.include || []).indexOf(m.name) !== -1) return true;
+    const names = [scene];
+    if (sel.from) names.push(sel.from);
+    return m.scenes.some(s => s === '*' || names.indexOf(s) !== -1);
+  }
+
+  // Mirrors GF.sceneModulesFor so the editor shows the stack that will actually
+  // run, rather than a guess the author has to reconcile at play time.
+  function renderModules() {
+    const box = $('modList');
+    box.innerHTML = '';
+    if (!ALL_MODULES.length) {
+      box.innerHTML = '<div class="muted">This game registers no scene modules.</div>';
+      return;
+    }
+    ALL_MODULES.forEach(m => {
+      const on = moduleActive(m);
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.title = 'bound to: ' + m.scenes.join(', ');
+      el.innerHTML = '<span class="dot" style="background:' + (on ? '#57d18a' : '#3a4158') + '"></span>' +
+                     '<span style="' + (on ? '' : 'opacity:.5') + '">' + m.name + '</span>' +
+                     '<span class="tag">' + m.scenes.join(',') + '</span>';
+      el.onclick = () => {
+        const sel = doc.modules = doc.modules || {};
+        const exc = sel.exclude = sel.exclude || [];
+        const i = exc.indexOf(m.name);
+        if (i === -1) exc.push(m.name); else exc.splice(i, 1);
+        if (!exc.length) delete sel.exclude;
+        if (!Object.keys(sel).length) delete doc.modules;
+        renderModules(); markDirty();
+      };
+      box.appendChild(el);
+    });
+  }
+
+  function renderOverlaps() {
+    const box = $('ovList'); box.innerHTML = '';
+    const rules = doc.overlaps || [];
+    if (!rules.length) { box.innerHTML = '<div class="muted">No rules.</div>'; return; }
+    rules.forEach((r, i) => {
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML = '<span>' + r.a + ' ⇄ ' + r.b + '</span><span class="tag">' + (r.do || 'nothing') + '</span>';
+      const del = document.createElement('button');
+      del.className = 'del'; del.textContent = '✕';
+      del.onclick = () => { snapshot(); doc.overlaps.splice(i, 1); renderOverlaps(); markDirty(); };
+      el.appendChild(del);
+      box.appendChild(el);
+    });
+  }
+
+  $('ovAdd').onclick = () => {
+    const a = $('ovA').value.trim(), b = $('ovB').value.trim();
+    if (!a || !b) return;
+    snapshot();
+    doc.overlaps = doc.overlaps || [];
+    doc.overlaps.push({ a: a, b: b, do: $('ovDo').value });
+    $('ovA').value = ''; $('ovB').value = '';
+    renderOverlaps(); markDirty();
+  };
+
+  // ── play mode ──────────────────────────────────────────────────────────────
+  // Runs the scene through the real runtime path (createGame + GF.dataScene), so
+  // Play exercises the same code the shipped game will.
+  /** Push a fresh instance of the level being edited onto the play stack. */
+  function pushLevelScene() {
+    // DataScene is a GF.GameScene, so this attaches every module the level
+    // selects — Play runs the real game, not an approximation of it.
+    const SceneClass = GF.dataScene(JSON.parse(JSON.stringify(doc)));
+    const inst = new SceneClass();
+    playGame.scenes.push(inst, playGame.engine);
+    const mods = (inst._mods || []).map(m => m.name);
+    console.log('[editor] playing "' + inst.sceneName + '" with modules:', mods.join(', ') || '(none)');
+    return inst;
+  }
+
+  /**
+   * The scene the play session sits on. Duck-typed rather than a GF.Scene
+   * subclass so it attaches no modules of its own and cannot interfere with
+   * what the level under test is doing.
+   */
+  function makeHostScene() {
+    return {
+      sceneName: 'EditorHost',
+      enter() { this._t = 0; },
+      update(dt, engine) {
+        this._t = (this._t || 0) + dt;
+        // Short lockout so the keypress that ended the level doesn't
+        // immediately restart it.
+        if (this._t > 0.35 && engine.input.wasPressed('confirm')) pushLevelScene();
+      },
+      render(ctx, engine) {
+        const W = engine.config.width, H = engine.config.height;
+        ctx.fillStyle = (doc && doc.background) || '#12141f';
+        ctx.fillRect(0, 0, W, H);
+
+        const title = lastResult ? (lastResult.won ? 'LEVEL COMPLETE' : 'LEVEL ENDED') : 'LEVEL ENDED';
+        GF.UISystem.drawText(ctx, title, W / 2, H / 2 - 30,
+          { align: 'center', font: '30px monospace',
+            color: lastResult && lastResult.won ? '#57d18a' : '#ffd24a' });
+
+        if (lastResult && typeof lastResult.score === 'number') {
+          GF.UISystem.drawText(ctx, 'Score: ' + lastResult.score, W / 2, H / 2 + 8,
+            { align: 'center', font: '18px monospace', color: '#e8ecf6' });
+        }
+        GF.UISystem.drawText(ctx, 'Space — play again     Esc — back to editing',
+          W / 2, H / 2 + 46,
+          { align: 'center', font: '16px monospace', color: '#8b93ad' });
+      },
+    };
+  }
+
+  function startPlay() {
+    const host = $('playHost');
+    host.innerHTML = '';
+    const pc = document.createElement('canvas');
+    pc.id = 'gfEditorPlayCanvas';
+    pc.width = engineCfg.width; pc.height = engineCfg.height;
+    pc.style.imageRendering = 'pixelated';
+    host.appendChild(pc);
+    host.classList.add('on');
+    $('playBadge').classList.add('on');
+
+    const cfg = Object.assign({}, engineCfg, {
+      canvasId: 'gfEditorPlayCanvas',
+      backgroundColor: doc.background || engineCfg.backgroundColor,
+    });
+    try {
+      playGame = GF.createGame(cfg, (GF.GAME_CONFIG && GF.GAME_CONFIG.physics) || {}, {
+        gameName: GAME, audio: true, tweens: true, particles: true, scenes: true, debug: false,
+      });
+      // Modules reach the scene stack through GF.game / GAME.game (that is how
+      // scene.push and scene.pop resolve), so Play has to publish the handle the
+      // same way a booted game does.
+      GF.game = playGame;
+      window.GAME = window.GAME || { components: {}, scenes: {}, systems: {}, state: {} };
+      window.GAME.game = playGame;
+
+      // Fallback bindings for games with no Controls-style module. Bound before
+      // the scene is pushed, so a game's own module overrides them.
+      playGame.engine.input
+        .bind('up', 'ArrowUp', 'KeyW').bind('down', 'ArrowDown', 'KeyS')
+        .bind('left', 'ArrowLeft', 'KeyA').bind('right', 'ArrowRight', 'KeyD')
+        .bind('fire', 'Space').bind('confirm', 'Space', 'Enter')
+        .bind('action', 'Space', 'Enter');
+
+      // A level ends by popping itself — HamInvaders' GameOver module does
+      // exactly that on Space. In the real game the level sits on top of a
+      // title screen, but in the editor it would be the ONLY scene, so the pop
+      // would empty the stack and leave the engine clearing to black forever.
+      // This host scene is what the level lands on instead.
+      lastResult = null;
+      playGame.engine.events.on('scene:pop', (e) => {
+        const s = e && e.removed;
+        if (s && s.state) lastResult = { won: !!s.state.won, score: s.state.score };
+      });
+      playGame.scenes.push(makeHostScene(), playGame.engine);
+
+      pushLevelScene();
+      playGame.engine.start();
+      playing = true;
+      $('playBtn').textContent = '■ Stop';
+      $('playBtn').classList.add('on');
+      setStatus('playing — Esc to stop', 'ok');
+    } catch (err) {
+      console.error(err);
+      stopPlay();
+      setStatus('play failed: ' + err.message, 'err');
+    }
+    updateHint();
+  }
+
+  function stopPlay() {
+    if (playGame) {
+      try { playGame.engine.stop(); } catch (e) {}
+      playGame = null;
+    }
+    playing = false;
+    $('playHost').classList.remove('on');
+    $('playHost').innerHTML = '';
+    $('playBadge').classList.remove('on');
+    $('playBtn').textContent = '▶ Play';
+    $('playBtn').classList.remove('on');
+    setStatus(dirty ? 'unsaved changes' : 'ready', dirty ? 'dirty' : '');
+    updateHint();
+  }
+
+  $('playBtn').onclick = () => { playing ? stopPlay() : startPlay(); };
+
+  // ── save / load ────────────────────────────────────────────────────────────
+  function save() {
+    if (!doc || !GAME || !SCENE) return;
+    setStatus('saving…');
+    fetch('/api/scene/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game: GAME, scene: SCENE, doc: doc }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) { setStatus('save failed: ' + res.error, 'err'); return; }
+      dirty = false; $('saveBtn').disabled = true;
+      setStatus(res.warnings && res.warnings.length
+        ? 'saved with ' + res.warnings.length + ' warning(s) — see console'
+        : 'saved ' + res.file, 'ok');
+      if (res.warnings && res.warnings.length) console.warn('[editor] save warnings:', res.warnings);
+    }).catch(err => setStatus('save failed: ' + err.message, 'err'));
+  }
+  $('saveBtn').onclick = save;
+
+  function blankDoc(name) {
+    return { format: 'gf-level@1', name: name, scene: name,
+             background: engineCfg.backgroundColor || '#12141f',
+             entities: [], overlaps: [] };
+  }
+
+  function adoptDoc(d) {
+    doc = d;
+    doc.entities = doc.entities || [];
+    doc.overlaps = doc.overlaps || [];
+    // Give every entity a stable id so selection survives edits.
+    doc.entities.forEach((e, i) => { if (!e.id) e.id = 'e' + (i + 1); });
+    $('sBg').value = doc.background || engineCfg.backgroundColor || '#12141f';
+    $('sScene').value = doc.scene || '';
+    $('sFrom').value = (doc.modules && doc.modules.from) || '';
+    undoStack.length = 0; redoStack.length = 0; syncUndoButtons();
+    selId = null;
+    rebuildWorld(); fitView(); renderPanels();
+    dirty = false; $('saveBtn').disabled = true;
+  }
+
+  async function loadScene(name) {
+    SCENE = name;
+    history.replaceState(null, '', '?game=' + encodeURIComponent(GAME) + '&scene=' + encodeURIComponent(name));
+    try {
+      const r = await fetch('/games/' + GAME + '/levels/' + name + '.json');
+      adoptDoc(r.ok ? await r.json() : blankDoc(name));
+      setStatus(r.ok ? 'ready' : 'new scene (unsaved)', r.ok ? '' : 'dirty');
+      if (!r.ok) { dirty = true; $('saveBtn').disabled = false; }
+    } catch (err) {
+      adoptDoc(blankDoc(name));
+      setStatus('could not read scene — starting empty', 'err');
+    }
+  }
+
+  // ── new-scene dialog ───────────────────────────────────────────────────────
+  $('newSceneBtn').onclick = () => { $('newName').value = ''; $('newDlg').showModal(); };
+  $('newCancel').onclick = () => $('newDlg').close();
+  $('newOk').onclick = () => {
+    const n = $('newName').value.trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(n)) { $('newName').focus(); return; }
+    $('newDlg').close();
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    $('sceneSel').appendChild(opt); $('sceneSel').value = n;
+    adoptDoc(blankDoc(n));
+    SCENE = n;
+    history.replaceState(null, '', '?game=' + encodeURIComponent(GAME) + '&scene=' + encodeURIComponent(n));
+    dirty = true; $('saveBtn').disabled = false;
+    setStatus('new scene (unsaved)', 'dirty');
+  };
+
+  // ── hint line ──────────────────────────────────────────────────────────────
+  function updateHint() {
+    $('hint').textContent = playing
+      ? 'Esc / Stop to return to editing'
+      : (armed ? 'Click to place "' + armed + '"  ·  Shift-click to keep placing  ·  Esc to cancel'
+               : 'Click select · drag move · Alt/right-drag pan · wheel zoom · Del delete · Ctrl+D duplicate');
+  }
+
+  // ── zoom bar ───────────────────────────────────────────────────────────────
+  $('zoomIn').onclick  = () => { view.zoom = Math.min(8, view.zoom * 1.25); userView = true; };
+  $('zoomOut').onclick = () => { view.zoom = Math.max(0.1, view.zoom / 1.25); userView = true; };
+  $('zoomFit').onclick = () => { userView = false; fitView(); };
+
+  // ── boot ───────────────────────────────────────────────────────────────────
+  async function boot() {
+    resizeCanvas();
+    window.addEventListener('resize', () => { resizeCanvas(); if (!userView && doc) fitView(); });
+    requestAnimationFrame(drawLoop);
+
+    // overlap-action dropdown comes from the runtime, so the two never drift
+    (GF.overlapActions ? GF.overlapActions() : ['destroyB']).forEach(a => {
+      const o = document.createElement('option'); o.value = a; o.textContent = a;
+      $('ovDo').appendChild(o);
+    });
+
+    const games = await api('/api/games');
+    const gsel = $('gameSel');
+    games.forEach(g => {
+      const o = document.createElement('option');
+      o.value = g.id; o.textContent = (g.icon ? g.icon + ' ' : '') + (g.title || g.id);
+      gsel.appendChild(o);
+    });
+    if (!GAME && games.length) GAME = games[0].id;
+    gsel.value = GAME;
+    // Prefabs and behaviors register globally, so switching games needs a clean
+    // document rather than a second set of registrations layered on the first.
+    gsel.onchange = () => { location.search = '?game=' + encodeURIComponent(gsel.value); };
+
+    if (!GAME) { setStatus('no games found', 'err'); return; }
+
+    setStatus('loading ' + GAME + '…');
+    try {
+      await loadGameParts(GAME);
+    } catch (err) {
+      setStatus('could not load game parts: ' + err.message, 'err');
+      return;
+    }
+
+    sprites = new GF.SpriteSystem();
+    if (GF.sprites) sprites.registerSprites(GF.sprites);
+
+    // sprite + behavior panels
+    const sn = Object.keys(GF.sprites || {}).sort();
+    $('spriteCount').textContent = sn.length || '';
+    const sbox = $('spriteList');
+    if (!sn.length) sbox.innerHTML = '<div class="muted">No sprites registered.</div>';
+    sn.forEach(n => {
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML = '<span>' + n + '</span>';
+      el.title = 'Assign to the selected entity';
+      el.onclick = () => {
+        if (!selId) return;
+        $('iSprite').value = n;
+        editSel((e, o) => { o.sprite = n; });
+        renderInspector();
+      };
+      sbox.appendChild(el);
+    });
+    const bn = Object.keys(GF._behaviors || {}).sort();
+    $('behaviorList').textContent = bn.length ? bn.join(', ') : 'none registered';
+
+    // Module stack. Read from the server rather than GF._sceneModules so the
+    // list survives a game whose module files failed to load.
+    const minfo = await api('/api/scene/modules?game=' + encodeURIComponent(GAME));
+    ALL_MODULES = minfo.modules || [];
+    const bound = [...new Set(ALL_MODULES.flatMap(m => m.scenes).filter(s => s !== '*'))].sort();
+    bound.forEach(s => {
+      const o = document.createElement('option'); o.value = s; o.textContent = s;
+      $('sFrom').appendChild(o);
+    });
+
+    // scenes
+    const list = await api('/api/scene/list?game=' + encodeURIComponent(GAME));
+    const ssel = $('sceneSel');
+    (list.scenes || []).forEach(s => {
+      const o = document.createElement('option');
+      const base = s.file.replace(/^scenes\//, '').replace(/\.json$/, '');
+      o.value = base; o.textContent = base + ' (' + s.entities + ')';
+      ssel.appendChild(o);
+    });
+    ssel.onchange = () => loadScene(ssel.value);
+
+    $('playBtn').disabled = false;
+
+    if (SCENE) {
+      if (![...ssel.options].some(o => o.value === SCENE)) {
+        const o = document.createElement('option'); o.value = SCENE; o.textContent = SCENE;
+        ssel.appendChild(o);
+      }
+      ssel.value = SCENE;
+      await loadScene(SCENE);
+    } else if (ssel.options.length) {
+      await loadScene(ssel.options[0].value);
+    } else {
+      adoptDoc(blankDoc('main'));
+      SCENE = 'main';
+      setStatus('no scenes yet — this is a new "main"', 'dirty');
+      dirty = true; $('saveBtn').disabled = false;
+    }
+    updateHint();
+  }
+
+  window.addEventListener('beforeunload', (e) => {
+    if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

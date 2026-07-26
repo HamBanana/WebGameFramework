@@ -55,12 +55,45 @@
     return GF;
   };
 
-  /** Every module registered for `sceneName`, in registration order. */
-  GF.sceneModulesFor = function (sceneName) {
+  function boundTo(m, sceneName) {
+    var want = m.spec.scene;
+    if (want == null || want === '*') return true;
+    return Array.isArray(want) ? want.indexOf(sceneName) !== -1 : want === sceneName;
+  }
+
+  /**
+   * Every module registered for `sceneName`, in registration order.
+   *
+   * `sel` lets a scene borrow another scene's module stack instead of forcing
+   * every module to list it. A hand-placed level typically wants all of the
+   * gameplay a scene already has, minus whatever it replaces:
+   *
+   *   { from: 'Main', exclude: ['Waves', 'Formation'] }
+   *
+   * …which is "play like Main, but I place the entities myself". Without this a
+   * new scene name would attach nothing, and reusing combat/HUD would mean
+   * editing every one of those modules' `scene` fields.
+   *
+   *   from     string|string[]  also take modules bound to these scene names
+   *   include  string[]         force these in, whatever they are bound to
+   *   exclude  string[]         drop these by name (wins over from/include)
+   */
+  GF.sceneModulesFor = function (sceneName, sel) {
+    sel = sel || {};
+    var names = [sceneName];
+    if (sel.from) {
+      (Array.isArray(sel.from) ? sel.from : [sel.from]).forEach(function (n) {
+        if (names.indexOf(n) === -1) names.push(n);
+      });
+    }
+    var inc = sel.include || [];
+    var exc = sel.exclude || [];
+    // Filtering the registry in place keeps registration order, which the
+    // scene's stable sort relies on to break order/layer ties.
     return GF._sceneModules.filter(function (m) {
-      var want = m.spec.scene;
-      if (want == null || want === '*') return true;
-      return Array.isArray(want) ? want.indexOf(sceneName) !== -1 : want === sceneName;
+      if (exc.indexOf(m.name) !== -1) return false;
+      if (inc.indexOf(m.name) !== -1) return true;
+      return names.some(function (n) { return boundTo(m, n); });
     });
   };
 
@@ -69,7 +102,8 @@
   class GameScene extends GF.Scene {
     /**
      * @param {string} name   scene name modules attach to (default 'Main')
-     * @param {Object} [opts] { phase, state, world } overrides
+     * @param {Object} [opts] { phase, state, world, modules } overrides.
+     *        `modules` is the selector documented on GF.sceneModulesFor.
      */
     constructor(name, opts) {
       super();
@@ -154,7 +188,7 @@
       this.config = cfgAll[this.sceneName] || {};
 
       var self = this;
-      this._mods = GF.sceneModulesFor(this.sceneName).map(function (m) {
+      this._mods = GF.sceneModulesFor(this.sceneName, this._opts.modules).map(function (m) {
         // Object.create, so a module can keep per-scene-instance state with a
         // plain `this.foo = …` while sharing its hooks via the prototype.
         var inst = Object.create(m.spec);

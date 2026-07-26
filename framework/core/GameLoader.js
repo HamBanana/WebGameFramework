@@ -31,6 +31,11 @@
   // predictable rather than about hard dependencies.
   var KIND_ORDER = ['data', 'sprites', 'behaviors', 'behaviours', 'prefabs', 'systems', 'modules', 'scenes'];
 
+  // `levels` holds JSON documents, not scripts, so it is fetched rather than
+  // injected — see loadLevels below. Keeping it out of KIND_ORDER stops
+  // manifestPaths from turning "boss" into a <script src="levels/boss.js">.
+  var DATA_KINDS = ['levels'];
+
   // ── ready gate ────────────────────────────────────────────────────────────
   // GF:ready must not fire until every part has registered itself, otherwise
   // boot would find an empty scene/module registry. Anything that loads game
@@ -69,7 +74,8 @@
     var kinds = KIND_ORDER.slice();
     // Allow a game to add its own folder kinds; they load after the known ones.
     Object.keys(manifest).forEach(function (k) {
-      if (k !== 'scripts' && kinds.indexOf(k) === -1 && Array.isArray(manifest[k])) kinds.push(k);
+      if (k === 'scripts' || DATA_KINDS.indexOf(k) !== -1) return;
+      if (kinds.indexOf(k) === -1 && Array.isArray(manifest[k])) kinds.push(k);
     });
 
     kinds.forEach(function (kind) {
@@ -111,6 +117,41 @@
   }
 
   /**
+   * Fetch the manifest's `levels` (JSON layout documents written by
+   * tools/editor.html) and register them under GF._levels.
+   *
+   * These are preloaded rather than fetched by the scene because a scene must
+   * know its name and module selection at CONSTRUCTION time — GF.GameScene
+   * resolves modules in init(). Loading them here, behind the same ready gate
+   * as the scripts, keeps `GF.dataScene('boss')` a synchronous lookup.
+   */
+  function loadLevels(manifest, baseDir) {
+    var names = [];
+    DATA_KINDS.forEach(function (kind) {
+      (Array.isArray(manifest[kind]) ? manifest[kind] : []).forEach(function (e) {
+        if (typeof e === 'string') names.push(e);
+      });
+    });
+    if (!names.length) return Promise.resolve();
+
+    return Promise.all(names.map(function (entry) {
+      var isPath = entry.indexOf('/') !== -1 || /\.json$/i.test(entry);
+      var url = isPath ? (/\.json$/i.test(entry) ? entry : entry + '.json')
+                       : 'levels/' + entry + '.json';
+      var name = entry.replace(/^.*\//, '').replace(/\.json$/i, '');
+      return fetch(baseDir + url)
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+          return r.json();
+        })
+        .then(function (doc) { GF._levels[name] = doc; })
+        .catch(function (err) {
+          console.error('[GF] level "' + name + '" failed to load:', err);
+        });
+    }));
+  }
+
+  /**
    * Load a game's parts from a manifest.
    * @param {string|Object} manifest - URL of a manifest.json, or the object itself.
    * @returns {Promise} resolves once every part script has executed.
@@ -131,7 +172,12 @@
     return got
       .then(function (m) {
         GF.MANIFEST = m;
-        return injectAll(GF.manifestPaths(m), baseDir);
+        // Levels are data and register no globals, so they can load in parallel
+        // with the scripts; both must finish before the ready gate is released.
+        return Promise.all([
+          injectAll(GF.manifestPaths(m), baseDir),
+          loadLevels(m, baseDir),
+        ]);
       })
       .catch(function (err) {
         console.error('[GF] loadGame("' + url + '") failed:', err);

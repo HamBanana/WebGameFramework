@@ -50,7 +50,7 @@
       "color": "#ffe57a"
     }
   ],
-  "numberOfPlayers": 2,
+  "numberOfPlayers": 4,
   "startingMoney": 1000,
   "startingResources": {
     "wood": 0,
@@ -83,7 +83,7 @@
     "threatPerLowHappiness": 1
   },
   "property": {
-    "basePrice": 200,
+    "basePrice": 300,
     "baseRent": 30,
     "baseRentRate": 0.15,
     "mayorBonus": 50,

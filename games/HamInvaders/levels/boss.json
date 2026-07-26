@@ -1,0 +1,35 @@
+{
+  "format": "gf-level@1",
+  "name": "boss",
+  "scene": "Boss",
+  "modules": {
+    "from": "Main",
+    "exclude": ["Waves", "Formation", "Ufo"]
+  },
+  "config": {
+    "background": "#1a1a2e",
+    "fireCooldown": 0.3,
+    "shotSpeed": 400,
+    "smartBombRows": 2,
+    "worldPhases": ["play"]
+  },
+  "state": {
+    "score": 0,
+    "level": 5
+  },
+  "entities": [
+    { "id": "player", "name": "Player", "prefab": "player", "x": 380, "y": 450 },
+
+    { "id": "boss", "name": "Mothership", "prefab": "boss", "x": 320, "y": 96 },
+
+    { "id": "d1", "prefab": "bossDrone", "x": 150, "y": 190 },
+    { "id": "d2", "prefab": "bossDrone", "x": 250, "y": 220 },
+    { "id": "d3", "prefab": "bossDrone", "x": 386, "y": 236 },
+    { "id": "d4", "prefab": "bossDrone", "x": 522, "y": 220 },
+    { "id": "d5", "prefab": "bossDrone", "x": 622, "y": 190 },
+
+    { "id": "d6", "prefab": "bossDrone", "x": 300, "y": 300 },
+    { "id": "d7", "prefab": "bossDrone", "x": 472, "y": 300 }
+  ],
+  "overlaps": []
+}
