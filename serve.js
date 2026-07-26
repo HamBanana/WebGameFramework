@@ -68,6 +68,13 @@ const MIME = {
   '.webm': 'video/webm',
   '.woff': 'font/woff',
   '.woff2':'font/woff2',
+  '.wasm': 'application/wasm',
+};
+
+// Pre-compressed content encodings Unity WebGL builds ship (foo.wasm.br etc.).
+const CONTENT_ENCODING = {
+  '.br': 'br',
+  '.gz': 'gzip',
 };
 
 const server = http.createServer((req, res) => {
@@ -595,11 +602,9 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const ext  = path.extname(filePath).toLowerCase();
-    const mime = MIME[ext] || 'application/octet-stream';
+    let ext = path.extname(filePath).toLowerCase();
 
-    res.writeHead(200, {
-      'Content-Type':   mime,
+    const headers = {
       'Content-Length': stat.size,
       // Allow audio/video range requests
       'Accept-Ranges':  'bytes',
@@ -609,7 +614,20 @@ const server = http.createServer((req, res) => {
       // which on an authoring server means an edited game file, tool or bundle
       // can keep serving a stale copy after a reload. Always revalidate.
       'Cache-Control':  'no-cache, must-revalidate',
-    });
+    };
+
+    // Unity WebGL builds ship pre-compressed assets (foo.wasm.br, foo.data.gz).
+    // The browser only decompresses them if we advertise Content-Encoding;
+    // otherwise Unity's loader aborts with a "still brotli-compressed" error.
+    // The Content-Type must reflect the *inner* type, so strip the .br/.gz first.
+    const encoding = CONTENT_ENCODING[ext];
+    if (encoding) {
+      headers['Content-Encoding'] = encoding;
+      ext = path.extname(filePath.slice(0, -ext.length)).toLowerCase();
+    }
+    headers['Content-Type'] = MIME[ext] || 'application/octet-stream';
+
+    res.writeHead(200, headers);
 
     fs.createReadStream(filePath).pipe(res);
   });
