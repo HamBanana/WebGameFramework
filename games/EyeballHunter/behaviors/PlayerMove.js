@@ -40,8 +40,8 @@ update(dt, e, world) {
           e.vy = 0;
           e.onGround = true;
         }
-        // Jumping up onto platform: feet were below, now at or above platform top
-        else if (prevBottom > p.y && feet <= p.y) {
+        // Jumping up onto platform: feet were below, now at/near/above it while moving upward
+        else if (prevBottom > p.y && feet <= p.y + 10 && e.vy < 0) {
           e.y = p.y - e.h;
           e.vy = 0;
           e.onGround = true;
@@ -57,18 +57,7 @@ update(dt, e, world) {
   }
 
   e.x = Math.max(16, Math.min(944 - e.w, e.x));
-}
-
-// Debug: log every frame
-_debug = function(e, prevBottom, feet, scene, platforms) {
-  if (!platforms) { console.warn('DEBUG: no platforms found'); return; }
-  for (const p of platforms) {
-    const horz = e.x + e.w > p.x + 2 && e.x < p.x + p.w - 2;
-    if (horz) {
-      console.log(`Platform p.y=${p.y} | feet=${feet} prevBottom=${prevBottom} | vy=${e.vy.toFixed(0)} | onGround=${e.onGround} | fall=${prevBottom < p.y && feet >= p.y} | jump=${prevBottom > p.y && feet <= p.y}`);
-    }
-  }
-};,
+},
 draw(ctx, e) {
   ctx.save();
   ctx.translate(e.x + e.w/2, e.y + e.h/2);
