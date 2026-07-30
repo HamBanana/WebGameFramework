@@ -1,0 +1,502 @@
+// parts/Main.js — scene, wired by owui-games-tool.
+(function (G, GF) {
+  'use strict';
+
+  class Main extends GF.Scene {
+    constructor() {
+      super();
+      this.name = 'Main';
+    }
+
+    init(engine) {
+      // Bind controls
+      engine.input.bind('left', 'ArrowLeft', 'KeyA');
+      engine.input.bind('right', 'ArrowRight', 'KeyD');
+      engine.input.bind('launch', 'Space', 'Enter');
+      engine.input.bind('restart', 'KeyR');
+
+      // Game state
+      this.lives = 3;
+      this.score = 0;
+      this.state = 'ready'; // ready, playing, paused, gameover, win
+
+      // Paddle
+      this.paddle = {
+        x: 350, y: 560, w: 100, h: 14,
+        speed: 400,
+        color: '#ff4444',
+        powerupType: null,
+        powerupTimer: 0
+      };
+
+      // Ball
+      this.balls = [];
+      this.resetBall();
+
+      // Bricks - classic Arkanoid pattern
+      this.bricks = [];
+      this.buildLevel();
+
+      // Powerups
+      this.powerups = [];
+
+      // Colors for brick rows
+      this.brickColors = ['#ff0044', '#ff8800', '#ffff00', '#44ff00', '#00aaff', '#aa00ff'];
+
+      // Audio — register procedural beep set
+      GF.Audio.registerStandardSet(engine.audio);
+      this.sfxCooldown = {};
+    }
+
+    resetBall() {
+      this.balls = [{
+        x: this.paddle.x + this.paddle.w / 2,
+        y: this.paddle.y - 10,
+        r: 7,
+        vx: 0,
+        vy: 0,
+        speed: 350
+      }];
+    }
+
+    buildLevel() {
+      const cols = 12;
+      const rows = 8;
+      const gap = 3;
+      const totalW = 700;
+      const brickW = (totalW - (cols - 1) * gap) / cols;
+      const brickH = 18;
+      const startX = (800 - totalW) / 2;
+      const startY = 60;
+
+      // Classic Arkanoid-ish layout with gaps
+      const pattern = [
+        'WWWWWWWWWWWW',  // row 0: weak
+        'WWWWWWWWWWWW',
+        'BBBBBBBBBBBB',
+        'BBBBBBBBBBBB',
+        'RRRRRRRRRRRR',
+        'RRRRRRRRRRRR',
+        'GGGGGGGGGGGG',
+        'GGGGGGGGGGGG'
+      ];
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const ch = pattern[row][col];
+          if (ch === 'W') this.addBrick(col, row, brickW, brickH, startX, startY, gap, 1, 10, '#ff6666');
+          else if (ch === 'B') this.addBrick(col, row, brickW, brickH, startX, startY, gap, 2, 20, '#ffaa00');
+          else if (ch === 'R') this.addBrick(col, row, brickW, brickH, startX, startY, gap, 3, 40, '#ff4444');
+          else if (ch === 'G') this.addBrick(col, row, brickW, brickH, startX, startY, gap, 1, 60, '#8888ff');
+        }
+      }
+    }
+
+    addBrick(col, row, w, h, startX, startY, gap, hp, points, color) {
+      const x = startX + col * (w + gap);
+      const y = startY + row * (h + gap);
+      this.bricks.push({ x, y, w, h, hp, maxHp: hp, points, color });
+    }
+
+    launchBall(ball) {
+      const angle = -Math.PI / 4 + Math.random() * Math.PI / 2;
+      ball.vx = Math.cos(angle) * ball.speed;
+      ball.vy = Math.sin(angle) * ball.speed;
+    }
+
+    spawnPowerup(x, y) {
+      const types = ['wide', 'multi', 'sticky', 'life', 'fire', 'slow'];
+      const weights = [25, 15, 20, 8, 20, 12];
+      const total = weights.reduce((a, b) => a + b, 0);
+      const r = Math.random() * total;
+      let sum = 0;
+      let type = types[0];
+      for (let i = 0; i < types.length; i++) {
+        sum += weights[i];
+        if (r < sum) { type = types[i]; break; }
+      }
+      this.powerups.push({
+        x, y, w: 24, h: 12,
+        vy: 120,
+        type,
+        active: true
+      });
+    }
+
+    launchStuckBall(b) {
+      // Launch with the same angle calculation as a normal paddle bounce
+      const hit = b.stickOffset / this.paddle.w - 0.5;
+      const angle = hit * Math.PI * 0.6 - Math.PI / 2;
+      b.vx = Math.cos(angle) * b.speed;
+      b.vy = Math.sin(angle) * b.speed;
+      if (b.vy > 0) b.vy = -b.vy;
+      b.stuck = false;
+      b.stickOffset = undefined;
+      this.sfx('shoot');
+    }
+
+    launchStuckBalls() {
+      this.balls.forEach(b => { if (b.stuck) this.launchStuckBall(b); });
+    }
+
+    activatePowerup(type) {
+      // If sticky was active and we're replacing it, launch stuck balls first
+      if (this.paddle.powerupType === 'sticky' && type !== 'sticky') {
+        this.launchStuckBalls();
+      }
+      switch (type) {
+        case 'wide':
+          this.paddle.w = 150;
+          this.paddle.powerupType = 'wide';
+          this.paddle.powerupTimer = 15;
+          break;
+        case 'sticky':
+          this.paddle.powerupType = 'sticky';
+          this.paddle.powerupTimer = 10;
+          break;
+        case 'life':
+          this.lives++;
+          this.sfx('coin', { pitch: 1.5, volume: 0.8 });
+          break;
+        case 'multi':
+          if (this.balls.length > 0) {
+            const b = this.balls[0];
+            for (let i = 0; i < 2; i++) {
+              this.balls.push({
+                x: b.x, y: b.y, r: b.r,
+                vx: -b.vx + (i === 0 ? 50 : -50),
+                vy: b.vy,
+                speed: b.speed
+              });
+            }
+          }
+          break;
+        case 'fire':
+          // Fire ball breaks all bricks in one hit
+          this.balls.forEach(b => b.fire = true);
+          this.paddle.powerupType = 'fire';
+          this.paddle.powerupTimer = 12;
+          break;
+        case 'slow':
+          this.balls.forEach(b => b.speed = Math.max(200, b.speed - 80));
+          break;
+      }
+    }
+    update(dt, engine) {
+      // Restart handling (works in gameover/win states)
+      if ((this.state === 'gameover' || this.state === 'win') && engine.input.wasPressed('restart')) {
+        this.lives = 3;
+        this.score = 0;
+        this.bricks = [];
+        this.powerups = [];
+        this.paddle.x = 350;
+        this.paddle.w = 100;
+        this.paddle.powerupType = null;
+        this.buildLevel();
+        this.resetBall();
+        this.state = 'ready';
+      }
+
+      // Handle state transitions
+      if (this.state === 'ready') {
+        if (engine.input.wasPressed('launch')) {
+          this.state = 'playing';
+          this.balls.forEach(b => this.launchBall(b));
+          this.sfx('shoot');
+        }
+        // Ball sticks to paddle
+        this.balls.forEach(b => {
+          b.x = this.paddle.x + this.paddle.w / 2;
+          b.y = this.paddle.y - b.r - 1;
+        });
+      }
+
+      if (this.state !== 'playing') return;
+
+      // Pause
+      if (engine.input.wasPressed('pause')) {
+        this.state = 'paused';
+        return;
+      }
+      if (this.state === 'paused') {
+        if (engine.input.wasPressed('pause')) {
+          this.state = 'playing';
+        }
+        return;
+      }
+
+      // Move paddle
+      if (engine.input.isDown('left')) this.paddle.x -= this.paddle.speed * dt;
+      if (engine.input.isDown('right')) this.paddle.x += this.paddle.speed * dt;
+      this.paddle.x = Math.max(0, Math.min(800 - this.paddle.w, this.paddle.x));
+
+      // Update powerup timer
+      if (this.paddle.powerupTimer > 0) {
+        this.paddle.powerupTimer -= dt;
+        if (this.paddle.powerupTimer <= 0) {
+          if (this.paddle.powerupType === 'wide') this.paddle.w = 100;
+          if (this.paddle.powerupType === 'sticky') {
+            this.launchStuckBalls();
+          }
+          this.paddle.powerupType = null;
+        }
+      }
+
+      // Update balls
+      for (let bi = this.balls.length - 1; bi >= 0; bi--) {
+        const b = this.balls[bi];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+
+        // Wall collisions
+        if (b.x - b.r <= 0) { b.x = b.r; b.vx = Math.abs(b.vx); }
+        if (b.x + b.r >= 800) { b.x = 800 - b.r; b.vx = -Math.abs(b.vx); }
+        if (b.y - b.r <= 0) { b.y = b.r; b.vy = Math.abs(b.vy); }
+
+        // Bottom - lose ball
+        if (b.y - b.r > 600) {
+          this.balls.splice(bi, 1);
+          this.sfx('explode', { volume: 0.5, pitch: 0.6 });
+          continue;
+        }
+
+        // Paddle collision
+        // For stuck balls, skip collision detection but still handle launch
+        if (b.stuck && this.paddle.powerupType === 'sticky') {
+          // Keep ball at the exact position where it was caught (stickOffset from paddle left)
+          b.x = this.paddle.x + b.stickOffset;
+          b.y = this.paddle.y - b.r;
+          if (engine.input.wasPressed('launch')) {
+            b.vx = 0;
+            b.vy = -b.speed;
+            b.stuck = false;
+            this.sfx('shoot');
+          }
+        } else if (b.vy > 0 &&
+             b.x >= this.paddle.x - b.r &&
+             b.x <= this.paddle.x + this.paddle.w + b.r &&
+             b.y + b.r >= this.paddle.y &&
+             b.y - b.r <= this.paddle.y + this.paddle.h + 10) {
+          b.y = this.paddle.y - b.r;
+
+          if (this.paddle.powerupType === 'sticky') {
+            b.vx = 0;
+            b.vy = 0;
+            b.stuck = true;
+            // Remember the exact offset from paddle left edge where it stuck
+            b.stickOffset = b.x - this.paddle.x;
+          } else {
+            b.stuck = false;
+            this.sfx('hit');
+            // Angle based on hit position
+            const hit = (b.x - this.paddle.x) / this.paddle.w - 0.5;
+            const angle = hit * Math.PI * 0.6 - Math.PI / 2;
+            b.vx = Math.cos(angle) * b.speed;
+            b.vy = Math.sin(angle) * b.speed;
+            // Ensure upward
+            if (b.vy > 0) b.vy = -b.vy;
+          }
+        }
+
+         // Brick collisions
+         for (let i = this.bricks.length - 1; i >= 0; i--) {
+           const br = this.bricks[i];
+           if (this.aabbCircle(b, br)) {
+             if (b.fire) {
+               br.hp = 0;
+             } else {
+               br.hp--;
+               // Hit sound pitched by remaining HP
+               const pitch = 0.8 + (br.hp / br.maxHp) * 0.4;
+               this.sfx('hit', { pitch });
+               // Reflect ball away from brick center
+               const dx = b.x - (br.x + br.w / 2);
+               const dy = b.y - (br.y + br.h / 2);
+               if (Math.abs(dx) > Math.abs(dy)) {
+                 b.vx = dx > 0 ? Math.abs(b.vx) : -Math.abs(b.vx);
+               } else {
+                 b.vy = dy > 0 ? Math.abs(b.vy) : -Math.abs(b.vy);
+               }
+             }
+
+             if (br.hp <= 0) {
+               this.score += br.points;
+               this.sfx('explode', { volume: 0.7 });
+               // Chance to drop powerup
+               if (Math.random() < 0.12) {
+                 this.spawnPowerup(br.x + br.w / 2, br.y + br.h / 2);
+               }
+               this.bricks.splice(i, 1);
+             }
+             // Don't break — let remaining bricks be checked in case ball
+             // overlaps multiple (fast movement or bounce into adjacent brick)
+           }
+         }
+      }
+
+      // Lose all balls
+      if (this.balls.length === 0) {
+        this.lives--;
+        if (this.lives <= 0) {
+          this.state = 'gameover';
+          this.sfx('gameOver');
+        } else {
+          this.state = 'ready';
+          this.resetBall();
+          this.paddle.powerupType = null;
+        }
+      }
+
+      // Update powerups
+      for (let i = this.powerups.length - 1; i >= 0; i--) {
+        const p = this.powerups[i];
+        if (!p.active) continue;
+        p.y += p.vy * dt;
+
+        // Collect by paddle
+        if (p.x + p.w >= this.paddle.x &&
+            p.x <= this.paddle.x + this.paddle.w &&
+            p.y + p.h >= this.paddle.y &&
+            p.y <= this.paddle.y + this.paddle.h) {
+          this.sfx('powerup', { pitch: 1.3 });
+          this.activatePowerup(p.type);
+          this.powerups.splice(i, 1);
+          continue;
+        }
+
+        // Fall off screen
+        if (p.y > 600) {
+          this.powerups.splice(i, 1);
+        }
+      }
+
+      // Win condition
+      if (this.bricks.length === 0) {
+        this.state = 'win';
+        this.sfx('levelUp');
+      }
+    }
+
+    aabbCircle(ball, rect) {
+      const cx = Math.max(rect.x, Math.min(ball.x, rect.x + rect.w));
+      const cy = Math.max(rect.y, Math.min(ball.y, rect.y + rect.h));
+      const dx = ball.x - cx;
+      const dy = ball.y - cy;
+      return (dx * dx + dy * dy) <= (ball.r * ball.r);
+    }
+
+    render(ctx, engine) {
+      // Clear
+      ctx.fillStyle = '#0a0a1a';
+      ctx.fillRect(0, 0, 800, 600);
+
+      // Draw bricks
+      this.bricks.forEach(br => {
+        const alpha = br.hp / br.maxHp;
+        ctx.fillStyle = this.shadeColor(br.color, alpha);
+        ctx.fillRect(br.x, br.y, br.w, br.h);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(br.x + 1, br.y + 1, br.w - 2, br.h - 2);
+      });
+
+      // Draw paddle
+      const pColor = this.paddle.powerupType === 'sticky' ? '#ffcc00' :
+                     this.paddle.powerupType === 'fire' ? '#ff8800' :
+                     this.paddle.color;
+      ctx.fillStyle = pColor;
+      ctx.shadowColor = pColor;
+      ctx.shadowBlur = 8;
+      ctx.fillRect(this.paddle.x, this.paddle.y, this.paddle.w, this.paddle.h);
+      ctx.shadowBlur = 0;
+
+      // Draw balls
+      this.balls.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = b.fire ? '#ffaa00' : '#ffffff';
+        ctx.shadowColor = b.fire ? '#ff6600' : '#ffffff';
+        ctx.shadowBlur = b.fire ? 12 : 6;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      // Draw powerups
+      this.powerups.forEach(p => {
+        if (!p.active) return;
+        const colors = { wide: '#00ff88', multi: '#ff00ff', sticky: '#ffff00',
+                         life: '#ff4444', fire: '#ff8800', slow: '#00ccff' };
+        const labels = { wide: 'W', multi: 'M', sticky: 'S',
+                         life: '+1', fire: 'F', slow: 'SL' };
+        ctx.fillStyle = colors[p.type];
+        ctx.shadowColor = colors[p.type];
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.roundRect(p.x, p.y, p.w, p.h, 4);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(labels[p.type], p.x + p.w / 2, p.y + 9);
+      });
+
+      // HUD
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '16px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`SCORE: ${this.score}`, 10, 24);
+      ctx.textAlign = 'right';
+      ctx.fillText(`LIVES: ${this.lives}`, 790, 24);
+
+      // State messages
+      ctx.textAlign = 'center';
+      if (this.state === 'ready') {
+        this.drawMessage(ctx, 'PRESS SPACE TO LAUNCH', '#ffffff');
+      } else if (this.state === 'paused') {
+        this.drawMessage(ctx, 'PAUSED', '#ffff00');
+      } else if (this.state === 'gameover') {
+        this.drawMessage(ctx, 'GAME OVER', '#ff4444');
+        ctx.font = '18px monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(`FINAL SCORE: ${this.score}`, 400, 320);
+        ctx.font = '14px monospace';
+        ctx.fillText('Press R to restart', 400, 360);
+      } else if (this.state === 'win') {
+        this.drawMessage(ctx, 'YOU WIN!', '#00ff88');
+        ctx.font = '18px monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(`FINAL SCORE: ${this.score}`, 400, 320);
+        ctx.font = '14px monospace';
+        ctx.fillText('Press R to restart', 400, 360);
+      }
+    }
+
+    drawMessage(ctx, text, color) {
+      ctx.font = 'bold 36px monospace';
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.fillText(text, 400, 300);
+      ctx.shadowBlur = 0;
+    }
+
+    shadeColor(color, alpha) {
+      // Simple brightness adjustment
+      if (alpha >= 1) return color;
+      return color;
+    }
+
+    // Play sound with simple rate limiting so rapid hits don't spam
+    sfx(name, options) {
+      const now = performance.now();
+      const key = name + (options?.pitch ? '_' + options.pitch : '');
+      const last = this.sfxCooldown[key] || 0;
+      if (now - last < 30) return; // 30ms min gap
+      this.sfxCooldown[key] = now;
+      G.game.audio.play(name, options || {});
+    }
+  }
+
+  G.scenes.Main = Main;
+})(window.GAME = window.GAME || { components: {}, scenes: {}, systems: {}, state: {} }, window.GF);

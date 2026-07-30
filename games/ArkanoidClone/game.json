@@ -1,0 +1,13 @@
+{
+  "id": "ArkanoidClone",
+  "title": "Arkanoid Clone",
+  "icon": "🧱",
+  "color": "#ff6600",
+  "tags": [
+    "ARCADE",
+    "BRICK BREAKER",
+    "1 PLAYER"
+  ],
+  "desc": "Classic brick-breaking game with power-ups. Move the paddle with arrow keys, bounce the ball to destroy all bricks, collect power-ups that drop from broken blocks. Features wide paddle, multi-ball, sticky paddle, extra life and more.",
+  "config": []
+}

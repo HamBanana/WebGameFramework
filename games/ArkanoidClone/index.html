@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Arkanoid Clone – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background:#000; display:flex; justify-content:center; align-items:center;
+           min-height:100vh; overflow:hidden; font-family:monospace; }
+    #gameContainer { position:relative; width:800px; height:600px; }
+    #gameCanvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+  </div>
+
+  <!-- GF:SCRIPTS start — auto-generated from parts/*.js by owui-games-tool; do not edit by hand -->
+  <script src="config.js"></script>
+  <script src="../../framework/GameFramework.bundle.js"></script>
+  <script src="behaviors/TopdownMove.js"></script>
+  <script src="prefabs/player.js"></script>
+  <script src="scenes/Main.js"></script>
+  <script src="scenes/boot.js"></script>
+  <!-- GF:SCRIPTS end -->
+</body>
+</html>

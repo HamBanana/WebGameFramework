@@ -1,0 +1,90 @@
+// behaviors/PlayerMove.js — reusable per-entity behavior.
+(function (GF) {
+  'use strict';
+  GF.behavior('PlayerMove', (cfg) => ({
+onAdd(e) {
+  e.speed = 180;
+  e.jumpForce = -380;
+  e.gravity = 900;
+  e.vx = 0;
+  e.vy = 0;
+  e.onGround = false;
+},
+update(dt, e, world) {
+  const input = world.engine.input;
+  const prevBottom = e.y + e.h; // feet before this frame's movement
+  e.vx = 0;
+  if (input.isDown('ArrowLeft') || input.isDown('KeyA')) { e.vx = -e.speed; e.flipX = true; }
+  if (input.isDown('ArrowRight') || input.isDown('KeyD')) { e.vx = e.speed; e.flipX = false; }
+  if ((input.wasPressed('ArrowUp') || input.wasPressed('KeyW') || input.wasPressed('Space')) && e.onGround) {
+    e.vy = e.jumpForce;
+    e.onGround = false;
+  }
+  e.vy += e.gravity * dt;
+  e.x += e.vx * dt;
+  e.y += e.vy * dt;
+  const feet = e.y + e.h;
+
+  // Ground (y=480)
+  if (feet > 480) { e.y = 480 - e.h; e.vy = 0; e.onGround = true; }
+
+  // Platforms — check each platform for collision
+  const scene = world.engine.scenes?.current();
+  if (scene && scene.platforms) {
+    for (const p of scene.platforms) {
+      // Horizontal overlap (with 2px padding)
+      if (e.x + e.w > p.x + 2 && e.x < p.x + p.w - 2) {
+        // Falling onto platform: feet were above, now at or below platform top
+        if (prevBottom < p.y && feet >= p.y) {
+          e.y = p.y - e.h;
+          e.vy = 0;
+          e.onGround = true;
+        }
+        // Jumping up onto platform: feet were below, now at or above platform top
+        else if (prevBottom > p.y && feet <= p.y) {
+          e.y = p.y - e.h;
+          e.vy = 0;
+          e.onGround = true;
+        }
+      }
+      // Standing stability: if on ground and feet very close to this platform
+      if (e.onGround && feet >= p.y - 2 && feet <= p.y + 2) {
+        e.y = p.y - e.h;
+        e.vy = 0;
+        e.onGround = true;
+      }
+    }
+  }
+
+  e.x = Math.max(16, Math.min(944 - e.w, e.x));
+}
+
+// Debug: log every frame
+function _dbg(e, prevBottom, feet, scene, platforms) {
+  if (!platforms) { console.warn('DEBUG: no platforms found'); return; }
+  for (const p of platforms) {
+    const horz = e.x + e.w > p.x + 2 && e.x < p.x + p.w - 2;
+    if (horz) {
+      console.log(`Platform p.y=${p.y} | feet=${feet} prevBottom=${prevBottom} | vy=${e.vy.toFixed(0)} | onGround=${e.onGround} | fall=${prevBottom < p.y && feet >= p.y} | jump=${prevBottom > p.y && feet <= p.y}`);
+    }
+  }
+},
+draw(ctx, e) {
+  ctx.save();
+  ctx.translate(e.x + e.w/2, e.y + e.h/2);
+  ctx.fillStyle = '#2d1b4e';
+  ctx.beginPath(); ctx.ellipse(0, 0, 14, 16, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#4a3070'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(-5,3); ctx.lineTo(-3,9); ctx.lineTo(-1,3); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(1,3); ctx.lineTo(3,9); ctx.lineTo(5,3); ctx.fill();
+  ctx.fillStyle = '#ff2200';
+  ctx.beginPath(); ctx.arc(e.flipX?6:-6, -6, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(e.flipX?-6:6, -6, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(e.flipX?7:-5, -6, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(e.flipX?-5:7, -6, 2, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+  }));
+})(window.GF);

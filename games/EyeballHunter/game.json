@@ -1,0 +1,13 @@
+{
+  "id": "EyeballHunter",
+  "title": "Eyeball Hunter",
+  "icon": "👁️",
+  "color": "#8b0000",
+  "tags": [
+    "PLATFORMER",
+    "1 PLAYER",
+    "HORROR COMEDY"
+  ],
+  "desc": "You are a spooky monster hunting eyeballs through creepy levels! Defeat enemies, collect their eyes, and grow your collection. Arrow keys to move, space to jump, get close to enemies to snatch their eyes!",
+  "config": []
+}
