@@ -1,0 +1,46 @@
+// behaviors/PlayerMove.js — reusable per-entity behavior.
+(function (GF) {
+  'use strict';
+  GF.behavior('PlayerMove', (cfg) => ({
+onAdd(e, world) {
+  e.w = 60;
+  e.h = 15;
+  e.speed = 400;
+  e.lang = 'en';
+  // tongue starts at bottom center
+  e.x = world.engine.width / 2;
+  e.y = world.engine.height - 30;
+},
+update(dt, e, world) {
+  const input = world.engine.input;
+  if (input.isDown('left')) e.x -= e.speed * dt;
+  if (input.isDown('right')) e.x += e.speed * dt;
+  // clamp to screen
+  e.x = Math.max(e.w/2, Math.min(world.engine.width - e.w/2, e.x));
+},
+draw(ctx, e, world) {
+  // Draw a pink tongue
+  ctx.fillStyle = '#ff6b8a';
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y, e.w/2, e.h/2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Tongue texture lines
+  ctx.strokeStyle = '#ff4d6d';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(e.x - 15, e.y);
+  ctx.quadraticCurveTo(e.x, e.y + 5, e.x + 15, e.y);
+  ctx.stroke();
+  // Little sparkles
+  ctx.fillStyle = '#ffffff';
+  const t = Date.now() / 200;
+  for (let i = 0; i < 3; i++) {
+    const sx = e.x + (i - 1) * 18;
+    const sy = e.y + Math.sin(t + i) * 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+  }));
+})(window.GF);

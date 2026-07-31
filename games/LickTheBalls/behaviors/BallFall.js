@@ -1,0 +1,99 @@
+// behaviors/BallFall.js — reusable per-entity behavior.
+(function (GF) {
+  'use strict';
+  GF.behavior('BallFall', (cfg) => ({
+onAdd(e, world) {
+  e.x = 40 + Math.random() * (world.engine.config.width - 80);
+  e.y = -20;
+  e.speed = 150 + Math.random() * 150;
+  e.rotation = 0;
+  e.rotSpeed = (Math.random() - 0.5) * 4;
+  // Random candy color
+  const colors = ['#ff6b9d', '#c44dff', '#4dff9d', '#ffdd4d', '#4dd8ff', '#ff9d4d'];
+  e.color = colors[Math.floor(Math.random() * colors.length)];
+  if (e.data.type === 'spicy') {
+    e.color = '#ff2244';
+    e.speed = 250 + Math.random() * 100;
+  }
+},
+update(dt, e, world) {
+  e.y += e.speed * dt;
+  e.rotation += e.rotSpeed * dt;
+  
+  // Check collision with tongue
+  const player = world.byTag('tongue')[0];
+  if (player && player.alive !== false) {
+    const dx = e.x - player.x;
+    const dy = e.y - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < (e.w/2 + player.w/2) * 0.7) {
+      // LICKED!
+      const score = world.data.score || { value: 0, best: 0 };
+      score.value += e.data.points;
+      if (score.value > score.best) score.best = score.value;
+      
+      // Visual feedback
+      if (e.data.type === 'spicy') {
+        // Burn effect - tongue turns red
+        player.burning = true;
+        player.burnTime = 1.5;
+        world.data.screenShake = 5;
+      } else {
+        // Happy lick!
+        world.data.popups.push({
+          text: '+' + e.data.points,
+          x: e.x,
+          y: e.y,
+          life: 0.8
+        });
+      }
+      e.destroy();
+      return;
+    }
+  }
+  
+  // Remove if off screen
+  if (e.y > world.engine.config.height + 30) {
+    e.destroy();
+  }
+},
+draw(ctx, e, world) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(e.rotation);
+  
+  // Ball glow
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, e.w);
+  gradient.addColorStop(0, e.color);
+  gradient.addColorStop(0.7, e.color + 'cc');
+  gradient.addColorStop(1, e.color + '44');
+  
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(0, 0, e.w/2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.arc(-6, -6, 6, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Fire for spicy balls
+  if (e.data.type === 'spicy') {
+    const t = Date.now() / 100;
+    ctx.fillStyle = '#ffaa00';
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2 + t;
+      const fx = Math.cos(angle) * 18;
+      const fy = Math.sin(angle) * 18;
+      ctx.beginPath();
+      ctx.arc(fx, fy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  ctx.restore();
+}
+  }));
+})(window.GF);
