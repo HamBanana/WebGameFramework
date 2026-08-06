@@ -1,0 +1,34 @@
+{
+  "name": "Kat Invaders",
+  "description": "A unique Space Invaders clone featuring a kawaii Japanese cat-girl pilot defending Earth from invading alien pets! Features progressive difficulty, power-ups, boss battles, combo system, and procedural kawaii pixel art. Built with the WebGameFramework.",
+  "version": "1.0.0",
+  "author": "little-coder",
+  "license": "MIT",
+  "tags": ["space-invaders", "shooter", "arcade", "kawaii", "cats", "retro"],
+  "input": {
+    "keyboard": {
+      "left": ["ArrowLeft", "KeyA"],
+      "right": ["ArrowRight", "KeyD"],
+      "fire": ["Space", "KeyZ", "KeyJ"],
+      "pause": ["Escape", "KeyP"]
+    }
+  },
+  "features": [
+    "Progressive difficulty with speed scaling",
+    "Combo system with score multipliers",
+    "Power-up drops (rapid fire, double shot, shield, mega laser, smart bomb, extra life)",
+    "Boss battles every 5 levels with minions",
+    "Destructible bunkers",
+    "Mystery UFO with bonus points",
+    "Particle effects and screen shake",
+    "Procedural kawaii pixel art sprites",
+    "Web Audio API sound effects",
+    "Viewport zoom on level completion"
+  ],
+  "difficulty": "medium",
+  "playTime": "10-30 minutes",
+  "assets": {
+    "sprites": "procedural/canvas",
+    "audio": "web-audio-api"
+  }
+}

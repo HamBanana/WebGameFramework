@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-07-25T20:53:39.531Z
+// Built: 2026-08-05T00:37:22.722Z
 // Source: framework/build.js (core)
 
 // -- utils/MathUtils.js ------------------------------------------
@@ -7988,8 +7988,10 @@
       blink:        true,            // pulse the subtitle
       confirmAction:'jump',          // input action that starts the game
       menuAction:   null,            // optional second action
+      bossAction:   null,            // optional boss shortcut action
       onStart:      null,            // (engine) => void
       onMenu:       null,
+      onBossStart:  null,
       drawBackground: null,          // (ctx, scene) => void  (optional)
     }, opts);
     this._t = 0;
@@ -8008,6 +8010,9 @@
     }
     if (input && this.opts.menuAction && input.wasPressed(this.opts.menuAction) && this.opts.onMenu) {
       this.opts.onMenu(engine);
+    }
+    if (input && this.opts.bossAction && input.wasPressed(this.opts.bossAction) && this.opts.onBossStart) {
+      this.opts.onBossStart(engine);
     }
   };
 
