@@ -13,7 +13,7 @@
       this.elapsed = (this.elapsed || 0) + dt;
       if (this.elapsed > 0.5 && engine.input.wasPressed('confirm')) {
         var sm = engine.getSystem('SceneManager');
-        sm.replace(window.GAME.scenes.TitleScene(), engine);
+        sm.replace(window.GAME.scenes.TitleScreen(), engine);
       }
     },
 

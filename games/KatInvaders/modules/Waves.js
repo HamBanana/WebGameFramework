@@ -12,7 +12,8 @@
 
     onPhase(phase, prev, scene) {
       if (phase === 'play' && prev === 'boss') {
-        // Just finished boss — spawn next wave at current level
+        // Clear leftover entities from boss phase before spawning next wave
+        scene.world.clear();
         this.spawnWave(scene, scene.engine);
       }
     },
