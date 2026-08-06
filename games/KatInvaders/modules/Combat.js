@@ -8,23 +8,27 @@
     phases: ['play', 'boss'],
 
     init(scene, engine) {
+      this._scene = scene;
       var world = scene.world;
       var cfg = GF.GAME_CONFIG || {};
 
       // Player shot → alien
       world.onOverlap('shot', 'alien', (shot, alien) => {
+        var x = alien.centerX, y = alien.centerY, tier = alien.data.tier || 0;
         shot.destroy();
         alien.destroy();
-        this.killAlien(scene, alien);
-        scene.events.emit('alien:killed', { x: alien.centerX, y: alien.centerY, tier: alien.data.tier });
+        this.killAlien(scene, { tier: tier });
+        scene.events.emit('alien:killed', { x: x, y: y, tier: tier });
       });
 
       // Player shot → UFO
       world.onOverlap('shot', 'ufo', (shot, ufo) => {
         shot.destroy();
+        var x = ufo.centerX, y = ufo.centerY;
         ufo.destroy();
         var ufoPoints = (cfg.ufo && cfg.ufo.points) || [50, 100, 150, 200];
         this.award(scene, ufoPoints[Math.min(ufoPoints.length - 1, Math.floor(Math.random() * ufoPoints.length))]);
+        scene.events.emit('ufo:killed', { x: x, y: y });
       });
 
       // Player shot → boss
@@ -122,9 +126,9 @@
       });
     },
 
-    killAlien(scene, alien) {
+    killAlien(scene, info) {
       var pointsCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.aliens && GF.GAME_CONFIG.aliens.points) || [30, 20, 20, 10, 10];
-      var tier = alien.data.tier || 0;
+      var tier = info.tier || 0;
       var points = pointsCfg[tier] || 10;
 
       // Apply combo multiplier
@@ -137,7 +141,6 @@
       comboState.comboMultiplier = mult;
 
       this.award(scene, Math.round(points * mult));
-      scene.events.emit('alien:killed', { x: alien.centerX, y: alien.centerY, tier: tier });
     },
 
     award(scene, points) {
@@ -153,7 +156,11 @@
       var vp = scene.module('Viewport');
       if (vp) vp.shake(4, 0.3);
 
+      // Particle event
+      scene.events.emit('player:hurt', { x: player.centerX, y: player.centerY });
+
       if (player.data.lives <= 0) {
+        scene.events.emit('player:died', { x: player.centerX, y: player.centerY });
         scene.state.won = false;
         scene.setPhase('over');
       }
@@ -162,6 +169,8 @@
     damageBunker(bunker, amount) {
       bunker.data.health = (bunker.data.health || 8) - amount;
       if (bunker.data.health <= 0) {
+        var scene = this._scene;
+        scene.events.emit('bunker:destroyed', { x: bunker.centerX, y: bunker.centerY });
         bunker.destroy();
       }
     },
