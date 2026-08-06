@@ -22,7 +22,7 @@ GameFramework is a modular JavaScript framework for building HTML-based games. A
 
 The framework spans several families of systems — enable the ones a game needs via `GF.createGame` flags:
 
-- **Core loop & I/O** — Engine, EventBus, InputManager (with synthetic input + on-screen TouchControls), AssetLoader, SceneManager (with animated transitions and Title / Game Over scene templates).
+- **Core loop & I/O** — Engine, EventBus, InputManager (with synthetic input + [on-screen TouchControls, attached automatically on phones](#touch-controls-mobile)), AssetLoader, SceneManager (with animated transitions and Title / Game Over scene templates).
 - **2D rendering** — programmatic *and* spritesheet-atlas sprites, Camera (follow/lerp/culling), TilemapSystem, ParallaxSystem, UISystem HUD helpers, ParticleSystem, TweenSystem.
 - **Worlds & composition** — WorldSystem (data-driven multi-area open worlds with portals), EntityWorld (behavior/prefab composition layer).
 - **Gameplay logic** — PhysicsSystem (AABB + gravity), PlayerController (platformer/topdown/sideways presets), StateMachine, ScoreManager (score/high-score/combo), WaveSpawner, GridSystem (tactical grid + A*/BFS pathfinding), CursorMenu, TurnBasedBattleSystem, DialogueSystem.
@@ -469,14 +469,45 @@ engine.input.tapAction('pause');     // wasPressed() true for exactly one frame
 
 ### Touch Controls (mobile)
 
-`GF.TouchControls` renders on-canvas buttons and virtual joysticks that feed
-the synthetic-input API. It auto-enables on touch devices (`{ force: true }`
-to override) and attaches its pointer handlers in the capture phase, so
-touches on a control never leak into OrbitControls or game canvas listeners.
+**Every game gets touch controls for free.** `GF.createGame()` attaches a
+`GF.TouchControls` overlay, and on a phone or tablet it lays itself out from
+the actions the game binds — no touch code in the game at all:
+
+```javascript
+engine.input.bind('left','ArrowLeft').bind('right','ArrowRight')
+            .bind('fire','Space').bind('pause','KeyP');
+// → joystick bottom-left (left/right), 🔥 bottom-right, ⏸ top-right
+```
+
+| Bound action | Control |
+|---|---|
+| `left` `right` `up` `down` | virtual joystick, bottom-left (only the bound axes) |
+| `fire` `shoot` `jump` `attack` `action` `use` `run` `roll` `launch` | button arc, bottom-right (held while touched) |
+| `confirm` `start` `restart` | tap buttons, bottom-centre |
+| `pause` `cancel` `menu` | small tap buttons, top-right |
+
+Buttons that resolve to the same key code are merged, so binding `fire` and
+`confirm` both to `Space` yields one button. The layout rebuilds whenever new
+actions are bound (a new scene, for instance) and scales with the canvas.
+
+Configure it from `GAME_CONFIG` — it is authoritative over everything else:
+
+```javascript
+touch: false                      // no touch controls
+touch: { force: true }            // show them on desktop too (handy for testing)
+touch: { opacity: 0.4, scale: 1.2 }
+touch: { joystick: { anchor:'bl', x:90, y:90, actions:{ left:'left', right:'right' } },
+         buttons:  [ { id:'fire', action:'fire', label:'A', anchor:'br', x:70, y:70, mode:'hold' } ] }
+```
+
+`?touch=1` on the URL forces the controls on (desktop testing), `?touch=0` off.
+
+**Hand-rolled layouts.** Adding your own `TouchControls` evicts the automatic
+one, so a game never ends up with two sets of buttons:
 
 ```javascript
 const touch = new GF.TouchControls();          // or { autoRender:false, force:true }
-engine.addSystem(touch);
+engine.addSystem(touch);                       // replaces the automatic overlay
 
 touch
   .addButton({ id:'pause', action:'pause', label:'⏯', anchor:'bc', x:0,  y:42 })
@@ -488,10 +519,21 @@ const v = touch.value('move');   // analog stick: { x:-1..1, y:-1..1 }
 ```
 
 Buttons: `mode:'tap'` (default, one-frame `wasPressed`) or `'hold'` (`isDown`
-while touched); `anchor` is one of `tl tr bl br tc bc` with `x/y` measured
-inward from that corner/edge. Games that draw their HUD in `onRender` should
-pass `{ autoRender:false }` and call `touch.draw(ctx)` last so controls stay
-on top.
+while touched, plus `wasPressed` on the press frame); `anchor` is one of
+`tl tr bl br tc bc` with `x/y` measured inward from that corner/edge.
+
+The system renders as an engine **overlay** — its render pass runs after the
+game's `onRender`, so controls always sit on top of the HUD. Pass
+`{ autoRender:false }` and call `touch.draw(ctx)` yourself to place the draw
+manually.
+
+Input plumbing, so controls behave on real hardware: `pointerdown` is taken on
+the canvas' parent in the capture phase (a touch on a control never reaches
+OrbitControls or the game's own canvas listeners, while touches elsewhere pass
+straight through), moves and releases are tracked on `window` (a finger that
+slides off the canvas keeps steering and can never leave an action stuck down),
+legacy `touchstart`/`touchmove` on a control is swallowed too, and losing focus
+or backgrounding the tab releases everything.
 
 ---
 

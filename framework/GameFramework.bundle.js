@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-08-05T00:37:22.722Z
+// Built: 2026-08-06T07:42:55.043Z
 // Source: framework/build.js (core)
 
 // -- utils/MathUtils.js ------------------------------------------
@@ -640,6 +640,7 @@
       this._justPressed = new Set();  // pressed this frame
       this._justReleased = new Set(); // released this frame
       this._bindings = {};            // action -> [code, ...]
+      this._bindVersion = 0;          // bumped on bind(), so overlays can re-read
 
       window.addEventListener('keydown', e => {
         if (!this._held.has(e.code)) {
@@ -672,7 +673,19 @@
      */
     bind(action, ...codes) {
       this._bindings[action] = codes;
+      this._bindVersion++;
       return this;
+    }
+
+    /** Names of every bound action, in bind order. */
+    boundActions() {
+      return Object.keys(this._bindings);
+    }
+
+    /** True when `action` has been bound to at least one key code. */
+    isBound(action) {
+      const codes = this._bindings[action];
+      return !!(codes && codes.length);
     }
 
     /** True while the key/action is held down. */
@@ -991,13 +1004,29 @@
 
       // Scale canvas to fill container while preserving aspect ratio
       this._setupScaling();
-      window.addEventListener('resize', () => this._setupScaling());
+      const rescale = () => this._setupScaling();
+      window.addEventListener('resize', rescale);
+      window.addEventListener('orientationchange', rescale);
+      // iOS reports the post-rotation size late; the visual viewport does not.
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', rescale);
     }
 
     _setupScaling() {
       const parent = this.canvas.parentElement || document.body;
-      const pW = parent.clientWidth  || window.innerWidth;
-      const pH = parent.clientHeight || window.innerHeight;
+      const vW = window.innerWidth  || this.config.width;
+      const vH = window.innerHeight || this.config.height;
+
+      // Game pages commonly wrap the canvas in a fixed-size div (800x600 and
+      // friends). On a phone that wrapper is wider than the screen, and since
+      // the page centres it, the canvas edges — where touch controls live —
+      // end up off-screen. Cap the wrapper at the viewport before measuring.
+      if (parent !== document.body && parent !== document.documentElement) {
+        parent.style.maxWidth  = vW + 'px';
+        parent.style.maxHeight = vH + 'px';
+      }
+
+      const pW = Math.min(parent.clientWidth  || vW, vW);
+      const pH = Math.min(parent.clientHeight || vH, vH);
       const scaleX = pW / this.config.width;
       const scaleY = pH / this.config.height;
       const scale  = Math.min(scaleX, scaleY);
@@ -1005,11 +1034,26 @@
       this.canvas.style.height = (this.config.height * scale) + 'px';
     }
 
-    /** Register a game system (must have optional update(dt,engine) / render(ctx,engine) methods). */
+    /**
+     * Register a game system (must have optional update(dt,engine) /
+     * render(ctx,engine) methods). A system with `overlay === true` renders
+     * after the game's own onRender callback, so it always stays on top.
+     */
     addSystem(system) {
       this._systems.push(system);
       if (system.init) system.init(this);
       return this;
+    }
+
+    /** Remove a system by name or reference; its destroy() runs if present. */
+    removeSystem(sysOrName) {
+      const i = typeof sysOrName === 'string'
+        ? this._systems.findIndex(s => s.name === sysOrName)
+        : this._systems.indexOf(sysOrName);
+      if (i < 0) return null;
+      const [sys] = this._systems.splice(i, 1);
+      if (sys.destroy) sys.destroy();
+      return sys;
     }
 
     /** Set the update callback: fn(dt, engine) */
@@ -1065,8 +1109,11 @@
         this.ctx.fillStyle = this.config.backgroundColor;
         this.ctx.fillRect(0, 0, this.config.width, this.config.height);
       }
-      this._systems.forEach(s => s.render && s.render(this.ctx, this));
+      this._systems.forEach(s => { if (s.render && !s.overlay) s.render(this.ctx, this); });
       if (this._onRender) this._onRender(this.ctx, this);
+      // Overlays (touch controls) paint last so a game that draws its HUD in
+      // onRender cannot bury them.
+      this._systems.forEach(s => { if (s.render && s.overlay) s.render(this.ctx, this); });
 
       // Flush one-frame input state
       this.input.flush();
@@ -6956,9 +7003,22 @@
 // through InputManager's synthetic-action API, so game code keeps reading
 // engine.input.isDown / wasPressed exactly as it does for the keyboard.
 //
-// Usage:
+// AUTOMATIC MODE (the default for every game): GF.createGame() attaches one of
+// these with { auto:true }. It watches the actions the game binds — 'left',
+// 'fire', 'confirm', … — and lays out a joystick plus the matching buttons on
+// its own, so a game gets working touch controls without writing any touch
+// code. See _buildAuto() for the action → control mapping.
+//
+// Opt out or override from GAME_CONFIG:
+//   touch: false                                  // no touch controls at all
+//   touch: { force: true }                        // also show them on desktop
+//   touch: { opacity: 0.4, scale: 1.2 }           // restyle the auto layout
+//   touch: { joystick: {...}, buttons: [ ... ] }  // replace the auto layout
+// ?touch=1 / ?touch=0 in the URL forces controls on/off for testing.
+//
+// MANUAL MODE:
 //   const touch = new GF.TouchControls();          // auto-enables on touch devices
-//   engine.addSystem(touch);
+//   engine.addSystem(touch);                       // evicts the automatic one
 //   touch.addButton({ id:'pause', action:'pause', label:'⏯', anchor:'bc', x:0,  y:42 });
 //   touch.addButton({ id:'fire',  action:'fire',  label:'A',  anchor:'br', x:60, y:60, mode:'hold' });
 //   touch.addJoystick({ id:'move', anchor:'bl', x:90, y:90,
@@ -6966,16 +7026,18 @@
 //   // Analog stick value (-1..1 per axis): touch.value('move')
 //
 // Buttons: mode 'tap' (default) fires wasPressed once; mode 'hold' keeps the
-// action isDown while touched.
+// action isDown while touched (wasPressed still fires on the press frame).
 //
-// Rendering: by default the system draws itself during the engine's system
-// render pass, which runs BEFORE the game's onRender callback — a game that
-// paints a HUD in onRender should pass { autoRender:false } and call
-// touch.draw(ctx) at the end of its own onRender so the controls stay on top.
+// Rendering: the system is an engine overlay, so its render pass runs AFTER
+// the game's onRender callback and the controls always sit on top. Games that
+// want to place the draw themselves pass { autoRender:false } and call
+// touch.draw(ctx) wherever they like.
 //
-// Event handling is attached to the canvas' parent in the CAPTURE phase, so
-// touches on a control never reach OrbitControls / game listeners on the
-// canvas, while touches elsewhere pass through untouched.
+// Event handling: pointerdown is taken on the canvas' parent in the CAPTURE
+// phase, so a touch on a control never reaches OrbitControls / game listeners
+// on the canvas, while touches elsewhere pass through untouched. Move and
+// release are tracked on window, so dragging off the canvas keeps working and
+// a pointer released outside it can never leave an action stuck down.
 //
 // Detection: enabled automatically when the device reports touch support;
 // override with { force:true } (always on) or { force:false } via .enabled.
@@ -6983,17 +7045,47 @@
 (function (GF) {
   'use strict';
 
+  // Action → control mapping for the automatic layout. Order matters: it is
+  // the order buttons are placed in each cluster.
+  var AUTO_BUTTONS = [
+    // primary (bottom-right cluster) — held, so isDown and wasPressed both work
+    { action: 'fire',    label: '🔥', mode: 'hold', cluster: 'primary' },
+    { action: 'shoot',   label: '🔥', mode: 'hold', cluster: 'primary' },
+    { action: 'jump',    label: '⤴',  mode: 'hold', cluster: 'primary' },
+    { action: 'attack',  label: '⚔',  mode: 'hold', cluster: 'primary' },
+    { action: 'action',  label: '✋', mode: 'hold', cluster: 'primary' },
+    { action: 'use',     label: '✋', mode: 'hold', cluster: 'primary' },
+    { action: 'run',     label: '»',  mode: 'hold', cluster: 'primary' },
+    { action: 'roll',    label: '🎲', mode: 'tap',  cluster: 'primary' },
+    { action: 'launch',  label: '🚀', mode: 'tap',  cluster: 'primary' },
+    // menu (bottom-centre) — one-frame taps
+    { action: 'confirm', label: '▶',  mode: 'tap',  cluster: 'menu' },
+    { action: 'start',   label: '▶',  mode: 'tap',  cluster: 'menu' },
+    { action: 'restart', label: '↺',  mode: 'tap',  cluster: 'menu' },
+    // system (top-right)
+    { action: 'pause',   label: '⏸',  mode: 'tap',  cluster: 'system' },
+    { action: 'cancel',  label: '✕',  mode: 'tap',  cluster: 'system' },
+    { action: 'menu',    label: '☰',  mode: 'tap',  cluster: 'system' },
+  ];
+
   class TouchControls {
     constructor(opts) {
       opts = opts || {};
       this.name = 'touch';
-      this.enabled = opts.force !== undefined ? !!opts.force : TouchControls.isTouchDevice();
+      this.overlay = true;               // Engine renders overlays last
+      this.enabled = TouchControls._resolveEnabled(opts);
       this.autoRender = opts.autoRender !== undefined ? !!opts.autoRender : true;
       this.opacity = opts.opacity !== undefined ? opts.opacity : 0.55;
+      this.scale = opts.scale || 1;
+
+      this._auto = !!opts.auto;          // framework-attached default layout
+      this._autoOpts = opts;
+      this._autoSig = null;              // binding signature the layout was built from
 
       this._buttons = [];
       this._sticks = [];
       this._pointers = new Map();   // pointerId → { kind:'button'|'stick', ref }
+      this._touchIds = new Set();   // legacy touch identifiers we own
       this._engine = null;
       this._listeners = [];
     }
@@ -7010,30 +7102,89 @@
       }
     }
 
+    /** ?touch=1 forces controls on (desktop testing), ?touch=0 forces them off. */
+    static _urlOverride() {
+      try {
+        var v = new URLSearchParams(window.location.search).get('touch');
+        if (v === null) return null;
+        return !(v === '0' || v === 'false' || v === 'off');
+      } catch (_) { return null; }
+    }
+
+    static _resolveEnabled(opts) {
+      var url = TouchControls._urlOverride();
+      if (url !== null) return url;
+      if (opts.force !== undefined) return !!opts.force;
+      return TouchControls.isTouchDevice();
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     init(engine) {
       this._engine = engine;
       const canvas = engine.canvas;
-      canvas.style.touchAction = 'none';   // stop browser pan/zoom on the game
+
+      // A game that builds its own controls wins: drop the automatic layer
+      // rather than stacking two sets of buttons on the same canvas.
+      if (!this._auto && engine.removeSystem) {
+        const prev = engine.getSystem && engine.getSystem('touch');
+        if (prev && prev !== this && prev._auto) engine.removeSystem(prev);
+      }
+
+      if (this.enabled) {
+        canvas.style.touchAction = 'none';   // stop browser pan/zoom on the game
+        canvas.style.userSelect = 'none';
+        canvas.style.webkitUserSelect = 'none';
+        canvas.style.webkitTouchCallout = 'none';   // no iOS long-press menu
+        // Pull-to-refresh / rubber-banding fires mid-drag on a phone and kills
+        // the gesture the player is making.
+        if (document.body) document.body.style.overscrollBehavior = 'none';
+      }
+
+      // Capture + explicitly non-passive: Chrome makes touch listeners passive
+      // by default on body/window, and a passive listener's preventDefault()
+      // is ignored — which is exactly the call that stops the page scrolling
+      // under a player's thumb.
+      const CAP = { capture: true, passive: false };
+      const on = (el, type, fn, capture) => {
+        el.addEventListener(type, fn, capture);
+        this._listeners.push([el, type, fn, capture]);
+      };
 
       // Capture phase on the parent → we run before canvas listeners
       // (OrbitControls, picking) and can swallow control touches.
       const parent = canvas.parentElement || document.body;
-      const on = (type, fn) => {
-        parent.addEventListener(type, fn, true);
-        this._listeners.push([parent, type, fn]);
-      };
-      on('pointerdown', e => this._onDown(e));
-      on('pointermove', e => this._onMove(e));
-      on('pointerup', e => this._onUp(e));
-      on('pointercancel', e => this._onUp(e));
+      on(parent, 'pointerdown', e => this._onDown(e), CAP);
+
+      // Legacy touch events are a separate stream from pointer events: a game
+      // (or a library) listening for touchstart on the canvas would still see
+      // a tap that landed on a button. Swallow those too — but only the ones
+      // that hit a control, so ordinary in-game touches still reach the game.
+      on(parent, 'touchstart', e => this._swallowTouch(e), CAP);
+      on(parent, 'touchmove', e => this._swallowTouch(e), CAP);
+      on(parent, 'touchend', e => this._swallowTouch(e), CAP);
+      on(parent, 'touchcancel', e => this._swallowTouch(e), CAP);
+
+      // Move/up on window: a finger that slides off the canvas keeps steering,
+      // and a release anywhere still lets go of the action. Listening on the
+      // parent alone strands held actions when the pointer leaves it.
+      on(window, 'pointermove', e => this._onMove(e), CAP);
+      on(window, 'pointerup', e => this._onUp(e), CAP);
+      on(window, 'pointercancel', e => this._onUp(e), CAP);
+
+      // Backgrounded tab / lost focus: never leave a direction held.
+      on(window, 'blur', () => this._releaseAll(), false);
+      on(document, 'visibilitychange', () => {
+        if (document.hidden) this._releaseAll();
+      }, false);
+
+      if (this._auto) this._syncAuto();
     }
 
     destroy() {
-      this._listeners.forEach(([el, type, fn]) => el.removeEventListener(type, fn, true));
-      this._listeners = [];
       this._releaseAll();
+      this._listeners.forEach(([el, type, fn, capture]) => el.removeEventListener(type, fn, capture));
+      this._listeners = [];
     }
 
     // ── Control registration ──────────────────────────────────────────────
@@ -7052,6 +7203,9 @@
      * @param {function} [def.onTap] optional callback fired on press
      */
     addButton(def) {
+      // A control added by hand takes the instance off automatic management,
+      // so the next rebuild cannot wipe it.
+      if (this._auto && !this._building) this._auto = false;
       this._buttons.push(Object.assign({
         r: 26, mode: 'tap', shape: 'circle', color: '#9bb8e8',
         anchor: 'br', label: '', pressed: false, visible: true,
@@ -7069,10 +7223,19 @@
      * @param {number} [def.deadzone=0.3]
      */
     addJoystick(def) {
+      if (this._auto && !this._building) this._auto = false;
       this._sticks.push(Object.assign({
         anchor: 'bl', radius: 64, deadzone: 0.3, actions: null,
         vx: 0, vy: 0, active: false, visible: true, color: '#9bb8e8',
       }, def));
+      return this;
+    }
+
+    /** Drop every registered control (the automatic layout rebuilds with it). */
+    clear() {
+      this._releaseAll();
+      this._buttons = [];
+      this._sticks = [];
       return this;
     }
 
@@ -7083,6 +7246,107 @@
     value(id) {
       const s = this.getJoystick(id);
       return s ? { x: s.vx, y: s.vy } : { x: 0, y: 0 };
+    }
+
+    // ── Automatic layout ──────────────────────────────────────────────────
+
+    /** Rebuild the default layout whenever the game's key bindings change. */
+    _syncAuto() {
+      const input = this._engine && this._engine.input;
+      if (!input) return;
+      const sig = input._bindVersion + '|' +
+        this._engine.canvas.width + 'x' + this._engine.canvas.height;
+      if (sig === this._autoSig) return;
+      this._autoSig = sig;
+      this._buildAuto();
+    }
+
+    _buildAuto() {
+      const input = this._engine.input;
+      const opts = this._autoOpts || {};
+      this._building = true;
+      try { this._buildAutoControls(input, opts); }
+      finally { this._building = false; }
+    }
+
+    _buildAutoControls(input, opts) {
+      this.clear();
+
+      // An explicit layout in GAME_CONFIG.touch replaces the derived one.
+      if (opts.joystick || opts.buttons) {
+        if (opts.joystick) this.addJoystick(Object.assign({ id: 'move' }, opts.joystick));
+        (opts.buttons || []).forEach(b => this.addButton(b));
+        return;
+      }
+
+      const W = this._engine.canvas.width, H = this._engine.canvas.height;
+      // Controls scale with the canvas so they stay thumb-sized on any game.
+      const k = this.scale * Math.max(0.7, Math.min(1.5, Math.min(W, H) / 600));
+      const bound = a => input.isBound(a);
+
+      // Movement stick: whichever axes the game actually binds.
+      const dirs = {};
+      ['up', 'down', 'left', 'right'].forEach(d => { if (bound(d)) dirs[d] = d; });
+      if (Object.keys(dirs).length) {
+        const radius = Math.round(58 * k);
+        this.addJoystick({
+          id: 'move', anchor: 'bl', x: radius + 22 * k, y: radius + 22 * k,
+          radius: radius, actions: dirs,
+          deadzone: (dirs.up || dirs.down) ? 0.3 : 0.22,
+        });
+      }
+
+      // Buttons, deduplicated by the key code they inject: a game that binds
+      // both 'confirm' and 'start' to Space gets one button, not two.
+      const usedCodes = {};
+      const clusters = { primary: [], menu: [], system: [] };
+      AUTO_BUTTONS.forEach(def => {
+        if (!bound(def.action)) return;
+        const code = input._codeFor(def.action);
+        if (usedCodes[code]) return;
+        usedCodes[code] = true;
+        clusters[def.cluster].push(def);
+      });
+
+      const R = Math.round(30 * k);
+      const pad = Math.round(22 * k);
+
+      // Primary actions: an arc up from the bottom-right corner.
+      const arc = [
+        { x: R + pad, y: R + pad },
+        { x: R + pad + 2.3 * R, y: R + pad + 0.4 * R },
+        { x: R + pad + 0.4 * R, y: R + pad + 2.3 * R },
+        { x: R + pad + 2.6 * R, y: R + pad + 2.6 * R },
+      ];
+      clusters.primary.slice(0, arc.length).forEach((def, i) => {
+        this.addButton({
+          id: 'auto_' + def.action, action: def.action, label: def.label,
+          mode: def.mode, anchor: 'br', r: R,
+          x: Math.round(arc[i].x), y: Math.round(arc[i].y),
+        });
+      });
+
+      // Menu actions along the bottom centre.
+      const mR = Math.round(24 * k);
+      const menu = clusters.menu;
+      menu.forEach((def, i) => {
+        const spread = (i - (menu.length - 1) / 2) * (2.6 * mR);
+        this.addButton({
+          id: 'auto_' + def.action, action: def.action, label: def.label,
+          mode: def.mode, anchor: 'bc', r: mR,
+          x: Math.round(spread), y: Math.round(mR + 14 * k),
+        });
+      });
+
+      // System actions down the top-right edge.
+      const sR = Math.round(21 * k);
+      clusters.system.forEach((def, i) => {
+        this.addButton({
+          id: 'auto_' + def.action, action: def.action, label: def.label,
+          mode: def.mode, anchor: 'tr', r: sR,
+          x: Math.round(sR + 14 * k), y: Math.round(sR + 14 * k + i * 2.5 * sR),
+        });
+      });
     }
 
     // ── Geometry ──────────────────────────────────────────────────────────
@@ -7149,6 +7413,33 @@
       }
     }
 
+    /**
+     * Stop a legacy touch event that landed on a control from reaching the
+     * game. Touches are tracked by identifier from touchstart onward, so a
+     * finger that started on the joystick keeps being swallowed after it has
+     * dragged clear of it.
+     */
+    _swallowTouch(e) {
+      if (!this.enabled || !this._engine) return;
+      const list = e.changedTouches || e.touches;
+      if (!list || !list.length) return;
+      let mine = false;
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i];
+        const id = t.identifier !== undefined ? t.identifier : 0;
+        if (e.type === 'touchstart') {
+          const p = this._toCanvas(t);
+          if (p && this._hit(p.x, p.y)) { this._touchIds.add(id); mine = true; }
+        } else if (this._touchIds.has(id)) {
+          mine = true;
+          if (e.type !== 'touchmove') this._touchIds.delete(id);
+        }
+      }
+      if (!mine) return;
+      e.preventDefault && e.preventDefault();
+      e.stopPropagation && e.stopPropagation();
+    }
+
     _onMove(e) {
       if (!this.enabled || !this._engine) return;
       const id = e.pointerId !== undefined ? e.pointerId : 1;
@@ -7185,6 +7476,8 @@
     }
 
     _releaseAll() {
+      this._touchIds.clear();
+      if (!this._engine) { this._pointers.clear(); return; }
       this._pointers.forEach(grab => this._release(grab));
       this._pointers.clear();
     }
@@ -7218,7 +7511,9 @@
 
     // ── Rendering ─────────────────────────────────────────────────────────
 
-    update() {}
+    update() {
+      if (this._auto && this.enabled) this._syncAuto();
+    }
 
     render(ctx) {
       if (this.autoRender) this.draw(ctx);
@@ -7988,10 +8283,8 @@
       blink:        true,            // pulse the subtitle
       confirmAction:'jump',          // input action that starts the game
       menuAction:   null,            // optional second action
-      bossAction:   null,            // optional boss shortcut action
       onStart:      null,            // (engine) => void
       onMenu:       null,
-      onBossStart:  null,
       drawBackground: null,          // (ctx, scene) => void  (optional)
     }, opts);
     this._t = 0;
@@ -8010,9 +8303,6 @@
     }
     if (input && this.opts.menuAction && input.wasPressed(this.opts.menuAction) && this.opts.onMenu) {
       this.opts.onMenu(engine);
-    }
-    if (input && this.opts.bossAction && input.wasPressed(this.opts.bossAction) && this.opts.onBossStart) {
-      this.opts.onBossStart(engine);
     }
   };
 
@@ -8834,6 +9124,21 @@
     // ParallaxSystem is intentionally NOT added to engine.systems by default;
     // games typically draw it themselves at the start of their scene's render.
 
+    // Touch controls, on by default: on a phone or tablet the overlay lays
+    // itself out from the actions the game binds (see systems/TouchControls).
+    // GAME_CONFIG.touch (or opts.touch) is authoritative: false disables it,
+    // an object configures it — { force:true } also shows it on desktop.
+    var touchCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.touch !== undefined)
+      ? GF.GAME_CONFIG.touch
+      : (opts.touch !== undefined ? opts.touch : true);
+    if (touchCfg !== false && GF.TouchControls) {
+      var touchOpts = Object.assign({ auto: true },
+        (touchCfg && typeof touchCfg === 'object') ? touchCfg : {});
+      var touch = new GF.TouchControls(touchOpts);
+      // Added last so its overlay pass paints above every other system.
+      engine.addSystem(touch);
+    }
+
     // `scenes` also accepts an array of scene instances (a common way games
     // try to boot); they are pushed in order, so the last one is on top.
     if (scenes && Array.isArray(opts.scenes)) {
@@ -8845,6 +9150,7 @@
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
       grids: grids, battle: battle, score: score, parallax: parallax,
+      touch: touch || null,
     };
   };
 

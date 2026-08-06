@@ -3,10 +3,11 @@
   'use strict';
   GF.sceneModule('Powerups', {
     scene: 'Main',
-    phases: ['play'],
+    phases: ['play', 'boss'],
 
     init(scene, engine) {
       scene.events.on('alien:killed', (hit) => this.maybeDrop(scene, hit));
+      scene.events.on('minion:killed', (hit) => this.maybeDropMinion(scene, hit));
     },
 
     enter(scene) { this.cooldown = 0; },
@@ -19,9 +20,24 @@
       if (scene.phase !== 'play' || this.cooldown > 0) return;
       var cfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.powerups) || {};
       if (Math.random() >= (cfg.dropChance != null ? cfg.dropChance : 0.12)) return;
+      var selected = this.selectPowerup(cfg);
+      if (!selected) return;
+      this.spawnPowerup(scene, hit, cfg, selected);
+    },
 
+    maybeDropMinion(scene, hit) {
+      if (scene.phase !== 'boss' || this.cooldown > 0) return;
+      var cfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.powerups) || {};
+      var chance = (cfg.minionDropChance != null ? cfg.minionDropChance : 0.25);
+      if (Math.random() >= chance) return;
+      var selected = this.selectPowerup(cfg);
+      if (!selected) return;
+      this.spawnPowerup(scene, hit, cfg, selected);
+    },
+
+    selectPowerup(cfg) {
       var types = cfg.types || [];
-      if (!types.length) return;
+      if (!types.length) return null;
       var weights = types.map(function (t) { return t.weight || 1; });
       var totalWeight = weights.reduce(function (a, b) { return a + b; }, 0);
       var r = Math.random() * totalWeight;
@@ -30,7 +46,10 @@
         r -= weights[i];
         if (r <= 0) { selected = types[i]; break; }
       }
+      return selected;
+    },
 
+    spawnPowerup(scene, hit, cfg, selected) {
       var pickup = scene.world.spawn('powerup', hit.x - 10, hit.y - 10);
       if (!pickup) return;
       pickup.data.type = selected.type;

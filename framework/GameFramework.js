@@ -104,6 +104,21 @@
     // ParallaxSystem is intentionally NOT added to engine.systems by default;
     // games typically draw it themselves at the start of their scene's render.
 
+    // Touch controls, on by default: on a phone or tablet the overlay lays
+    // itself out from the actions the game binds (see systems/TouchControls).
+    // GAME_CONFIG.touch (or opts.touch) is authoritative: false disables it,
+    // an object configures it — { force:true } also shows it on desktop.
+    var touchCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.touch !== undefined)
+      ? GF.GAME_CONFIG.touch
+      : (opts.touch !== undefined ? opts.touch : true);
+    if (touchCfg !== false && GF.TouchControls) {
+      var touchOpts = Object.assign({ auto: true },
+        (touchCfg && typeof touchCfg === 'object') ? touchCfg : {});
+      var touch = new GF.TouchControls(touchOpts);
+      // Added last so its overlay pass paints above every other system.
+      engine.addSystem(touch);
+    }
+
     // `scenes` also accepts an array of scene instances (a common way games
     // try to boot); they are pushed in order, so the last one is on top.
     if (scenes && Array.isArray(opts.scenes)) {
@@ -115,6 +130,7 @@
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
       grids: grids, battle: battle, score: score, parallax: parallax,
+      touch: touch || null,
     };
   };
 

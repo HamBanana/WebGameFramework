@@ -15,8 +15,11 @@
     layer: 300,
 
     init(scene, engine) {
+      // The framework attaches an automatic layout to every game; this module
+      // replaces it with a hand-tuned one (adding ours evicts the automatic
+      // system), because the fire button here also has to dismiss game over.
       let touch = engine.getSystem('touch');
-      if (!touch) {
+      if (!touch || touch._auto) {
         touch = new GF.TouchControls({ autoRender: false });
         engine.addSystem(touch);
         touch

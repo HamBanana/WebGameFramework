@@ -43,6 +43,7 @@
         shot.destroy();
         minion.destroy();
         this.award(scene, 25);
+        scene.events.emit('minion:killed', { x: minion.centerX, y: minion.centerY });
       });
 
       // Alien shot → player
@@ -74,6 +75,7 @@
       // Boss minion → player
       world.onOverlap('bossMinion', 'player', (minion, player) => {
         minion.destroy();
+        scene.events.emit('minion:killed', { x: minion.centerX, y: minion.centerY });
         if (player.data.invincible) return;
         if (player.data.shield) {
           player.data.shield = false;

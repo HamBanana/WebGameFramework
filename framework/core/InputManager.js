@@ -10,6 +10,7 @@
       this._justPressed = new Set();  // pressed this frame
       this._justReleased = new Set(); // released this frame
       this._bindings = {};            // action -> [code, ...]
+      this._bindVersion = 0;          // bumped on bind(), so overlays can re-read
 
       window.addEventListener('keydown', e => {
         if (!this._held.has(e.code)) {
@@ -42,7 +43,19 @@
      */
     bind(action, ...codes) {
       this._bindings[action] = codes;
+      this._bindVersion++;
       return this;
+    }
+
+    /** Names of every bound action, in bind order. */
+    boundActions() {
+      return Object.keys(this._bindings);
+    }
+
+    /** True when `action` has been bound to at least one key code. */
+    isBound(action) {
+      const codes = this._bindings[action];
+      return !!(codes && codes.length);
     }
 
     /** True while the key/action is held down. */
