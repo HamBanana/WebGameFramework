@@ -13,6 +13,8 @@
       engine.addSystem(this.world);
     
       engine.input.bind('restart', 'Space', 'Enter');
+      // Enable touch controls
+      this.world.spawn('TouchInput');
       // Spawn the tongue
       this.player = this.world.spawn('tonguePlayer', engine.config.width/2, engine.config.height - 30);
     
