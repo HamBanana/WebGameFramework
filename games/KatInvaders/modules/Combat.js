@@ -196,17 +196,47 @@
         console.log('[Combat] lowest alien y=' + lowestY.toFixed(1) + ' player.y=' + player.y);
       }
 
-      // Invaders reaching player row
+      // Invaders reaching player row — lose 1 life, reset formation
       if (player && !player.data.invincible) {
         for (var i = 0; i < aliens.length; i++) {
           if (aliens[i].bottom >= player.y) {
             console.log('[Combat] alien reached player! alien.bottom=' + aliens[i].bottom + ' player.y=' + player.y);
-            scene.state.won = false;
-            scene.setPhase('over');
+            this.hurt(scene, player);
+            if (player.data.lives > 0) {
+              this.resetFormation(scene);
+            }
             break;
           }
         }
       }
+    },
+
+    resetFormation(scene) {
+      var gameCfg = GF.GAME_CONFIG || {};
+      var aliensCfg = gameCfg.aliens || {};
+      var startX = aliensCfg.startX || 30;
+      var startY = aliensCfg.startY || 60;
+      var spacingX = aliensCfg.spacingX || 40;
+      var spacingY = aliensCfg.spacingY || 36;
+
+      var aliens = scene.world.byTag('alien');
+      // Sort by row then column to restore original grid order
+      aliens.sort(function (a, b) {
+        if (a.data.row !== b.data.row) return a.data.row - b.data.row;
+        return (a.data.col || 0) - (b.data.col || 0);
+      });
+      for (var i = 0; i < aliens.length; i++) {
+        var alien = aliens[i];
+        alien.x = startX + (alien.data.col || 0) * spacingX;
+        alien.y = startY + (alien.data.row || 0) * spacingY;
+      }
+      // Reset formation direction and speed
+      scene.world.data.dir = 1;
+      scene.world.data._edgeHitLogged = false;
+      var level = scene.state.level || 1;
+      var baseSpeed = aliensCfg.initialSpeed || 30;
+      var speedBonus = (gameCfg.levels || {}).alienSpeedBonus || 10;
+      scene.world.data.speed = baseSpeed + (level - 1) * speedBonus;
     },
 
     detonate(scene) {

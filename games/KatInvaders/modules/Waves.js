@@ -62,6 +62,7 @@
       console.log('[Waves] spawnGrid: startX=' + startX + ' startY=' + startY + ' spacingX=' + spacingX + ' spacingY=' + spacingY + ' W=' + W + ' H=' + H);
       scene.world.spawnGrid('alienCat', cols, rows, startX, startY, spacingX, spacingY, function (alien, c, r) {
         alien.data.row = r;
+        alien.data.col = c;
         var tier = r % 3;
         alien.data.tier = tier;
         // Replace with correct tier prefab
@@ -70,6 +71,7 @@
         var newAlien = scene.world.spawn(tierPrefab, alien.x, alien.y);
         if (newAlien) {
           newAlien.data.row = r;
+          newAlien.data.col = c;
           newAlien.data.tier = tier;
         }
       });
