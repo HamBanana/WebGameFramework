@@ -39,6 +39,7 @@
     },
 
     update(dt, scene, engine) {
+      var dt = scene.scaledDt || dt;
       if (this.state === 'warning') {
         this.timer -= dt;
         if (this.timer <= 0) {

@@ -8,6 +8,7 @@
     phases: ['play'],
 
     update(dt, scene) {
+      var dt = scene.scaledDt || dt;
       var gameCfg = GF.GAME_CONFIG || {};
       var aliensCfg = gameCfg.aliens || {};
       var maxSpeed = aliensCfg.maxSpeed || 180;

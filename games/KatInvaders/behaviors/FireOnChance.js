@@ -7,6 +7,7 @@
       e.data.reloadIn = 0;
     },
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       e.data.reloadIn = Math.max(0, e.data.reloadIn - dt);
       e.data.rollIn -= dt;
       if (e.data.rollIn > 0) return;

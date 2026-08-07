@@ -7,6 +7,7 @@
       e.data.timer = 0;
     },
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       var player = world.first('player');
       if (!player) return;
 

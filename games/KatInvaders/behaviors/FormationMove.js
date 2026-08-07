@@ -9,6 +9,7 @@
       console.log('[FormationMove] onAdd: e.x=' + e.x + ' e.y=' + e.y + ' e.w=' + e.w + ' e.h=' + e.h + ' W=' + W);
     },
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       var dir = world.data.dir || 1;
       var speed = world.data.speed || 30;
       e.x += dir * speed * dt;

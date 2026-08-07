@@ -15,7 +15,8 @@
       e.data.megaLaser = false;
       e.data.invincible = false;
     },
-    update(dt, e) {
+    update(dt, e, world) {
+      var dt = (world && world.scene && world.scene.scaledDt) || dt;
       var types = ['rapidFire', 'doubleShot', 'shield', 'megaLaser', 'invincible'];
       for (var i = 0; i < types.length; i++) {
         var t = types[i];

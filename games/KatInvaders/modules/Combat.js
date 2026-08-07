@@ -11,10 +11,27 @@
       this._scene = scene;
       var world = scene.world;
       var cfg = GF.GAME_CONFIG || {};
+      console.log('[Combat] init: registering overlap rules');
 
       // Player shot → alien
       world.onOverlap('shot', 'alien', (shot, alien) => {
         var x = alien.centerX, y = alien.centerY, tier = alien.data.tier || 0;
+        var alienCount = scene.world.count('alien');
+        var isLastAlien = alienCount === 1;
+
+        console.log('[Combat] shot→alien overlap: alienCount=' + alienCount + ' isLast=' + isLastAlien + ' scene.phase=' + scene.phase);
+
+        // Cinematic slow-motion + zoom for the last kill
+        if (isLastAlien) {
+          console.log('[Combat] *** LAST ALIEN! Triggering cinematic ***');
+          var vp = scene.module('Viewport');
+          console.log('[Combat] Viewport module found:', !!vp);
+          if (vp) {
+            vp.triggerCinematic();
+            console.log('[Combat] After trigger: timeScale=' + vp.timeScale + ' zoomTarget=' + vp.zoomTarget);
+          }
+        }
+
         shot.destroy();
         alien.destroy();
         this.killAlien(scene, { tier: tier });

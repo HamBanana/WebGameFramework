@@ -1,4 +1,4 @@
-// modules/Viewport.js — zoom on level complete, screen shake.
+// modules/Viewport.js — zoom on level complete, screen shake, slow-motion.
 (function (GF) {
   'use strict';
   GF.sceneModule('Viewport', {
@@ -14,6 +14,19 @@
       this.shakeTime = 0;
       this.shakeIntensity = 0;
       this._zoomTimer = 0;
+      this.timeScale = 1;
+      this._cinematicTimer = 0;
+      this._cinematicActive = false;
+      console.log('[Viewport] enter: module initialized');
+    },
+
+    // Trigger slow-motion + zoom for the last-kill cinematic
+    triggerCinematic() {
+      this._cinematicActive = true;
+      this.timeScale = 0.15;
+      this.zoomTarget = 1.6;
+      this._cinematicTimer = 0.4;
+      console.log('[Viewport] *** Cinematic TRIGGERED *** timeScale=0.15, zoom=1.6, timer=0.4');
     },
 
     shake(intensity, duration) {
@@ -28,6 +41,22 @@
     },
 
     update(dt, scene, engine) {
+      // Cinematic slow-motion recovery
+      if (this._cinematicActive) {
+        this._cinematicTimer -= dt;
+        console.log('[Viewport] cinematic active: timer=' + this._cinematicTimer.toFixed(3));
+        if (this._cinematicTimer <= 0) {
+          this._cinematicActive = false;
+          this.timeScale = 1;
+          this.zoomTarget = 1;
+          console.log('[Viewport] cinematic ended, returning to normal');
+        }
+      }
+
+      // Expose scaled dt for modules and behaviors
+      scene.scaledDt = dt * this.timeScale;
+      scene.world.scene = scene; // so behaviors can find it via world.scene
+
       // Smooth zoom return
       if (this.zoomTarget !== 1) {
         this._zoomTimer -= dt;
@@ -52,7 +81,7 @@
       var scale = this.zoom;
       canvas.style.transform = 'scale(' + scale + ') translate(' + this.shakeX + 'px,' + this.shakeY + 'px)';
       canvas.style.transformOrigin = 'center center';
-      console.log('[Viewport] zoom=' + scale.toFixed(2) + ' shake=(' + this.shakeX.toFixed(1) + ',' + this.shakeY.toFixed(1) + ')');
+      console.log('[Viewport] zoom=' + scale.toFixed(2) + ' timeScale=' + this.timeScale.toFixed(2) + ' cinematic=' + this._cinematicActive + ' shake=(' + this.shakeX.toFixed(1) + ',' + this.shakeY.toFixed(1) + ')');
     },
 
     // Called when a wave is cleared

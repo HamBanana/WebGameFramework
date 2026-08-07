@@ -6,6 +6,7 @@
       e.data.dir = 1;
     },
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       var W = world.engine.config.width;
       var speed = cfg.speed || 50;
       e.x += e.data.dir * speed * dt;

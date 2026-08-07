@@ -7,6 +7,7 @@
       e.data.interval = 1 / (cfg.fireRate || 0.03);
     },
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       e.data.timer += dt;
       if (e.data.timer >= e.data.interval) {
         e.data.timer = 0;

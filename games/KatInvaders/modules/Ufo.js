@@ -8,6 +8,7 @@
     enter(scene) { this.timer = 0; },
 
     update(dt, scene) {
+      var dt = scene.scaledDt || dt;
       var cfg = GF.GAME_CONFIG || {};
       var ufoCfg = cfg.ufo || {};
       var interval = ufoCfg.appearanceInterval || 25;

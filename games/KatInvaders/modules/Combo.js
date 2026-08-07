@@ -7,6 +7,7 @@
     phases: ['play', 'boss'],
 
     update(dt, scene) {
+      var dt = scene.scaledDt || dt;
       var state = scene.state;
       if (state.comboTimer > 0) {
         state.comboTimer -= dt;

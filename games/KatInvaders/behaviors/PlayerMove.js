@@ -3,6 +3,7 @@
   'use strict';
   GF.behavior('PlayerMove', (cfg) => ({
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       var inp = world.engine && world.engine.input;
       if (!inp) return;
       var speed = cfg.speed || 240;

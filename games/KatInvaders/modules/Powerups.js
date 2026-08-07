@@ -13,6 +13,7 @@
     enter(scene) { this.cooldown = 0; },
 
     update(dt, scene) {
+      var dt = scene.scaledDt || dt;
       this.cooldown = Math.max(0, this.cooldown - dt);
     },
 

@@ -9,6 +9,7 @@
       e.data.megaLaser = false;
     },
     update(dt, e, world) {
+      var dt = (world.scene && world.scene.scaledDt) || dt;
       var inp = world.engine && world.engine.input;
       if (!inp || !inp.isDown('fire')) return;
 
