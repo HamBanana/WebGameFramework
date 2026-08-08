@@ -8,6 +8,12 @@
       "port": 3007
     },
     {
+      "name": "katinvaders",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve.js", "3010"],
+      "port": 3010
+    },
+    {
       "name": "shadowstrike3d",
       "runtimeExecutable": "node",
       "runtimeArgs": ["games/ShadowStrike3D/launch.js", "3008"],

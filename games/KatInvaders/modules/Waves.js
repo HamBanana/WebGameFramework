@@ -97,14 +97,15 @@
           // Boss level — handled by Boss module
           scene.setPhase('boss');
         } else {
-          // Next level
+          // Next level. The final-invader cinematic (zoom/slow-mo + explosion)
+          // is driven by Combat. Hold the respawn until it finishes so the
+          // burst plays out before the next wave spawns.
+          var vp = scene.module('Viewport');
+          if (vp && vp._cinematicActive) {
+            return; // cinematic still playing — hold the respawn
+          }
           scene.state.level++;
           scene.world.clear();
-          // Trigger cinematic effects for the wave completion
-          var vp = scene.module('Viewport');
-          if (vp) {
-            vp.triggerCinematic();
-          }
           this.spawnWave(scene, engine);
         }
       }

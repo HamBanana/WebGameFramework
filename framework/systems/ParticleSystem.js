@@ -342,6 +342,12 @@
       this._pool  = new Pool(Particle, opts.poolSize ?? 512);
       /** @type {Set<ParticleEmitter>} */
       this._emitters = new Set();
+      /**
+       * Global time multiplier applied to every emitter update. 1 = real time.
+       * Set below 1 for slow-motion (e.g. a cinematic) so particle debris
+       * slows along with the rest of the scene. Default 1 (no change).
+       */
+      this.timeScale = 1;
     }
 
     // ── Engine hooks ──────────────────────────────────────────────────────────
@@ -349,9 +355,10 @@
     init(_engine) {}
 
     update(dt, _engine) {
+      const scaled = dt * this.timeScale;
       const dead = [];
       this._emitters.forEach(e => {
-        e.update(dt);
+        e.update(scaled);
         if (!e.active && !e.hasParticles) dead.push(e);
       });
       dead.forEach(e => this._emitters.delete(e));

@@ -16,26 +16,19 @@
       // Player shot → alien
       world.onOverlap('shot', 'alien', (shot, alien) => {
         var x = alien.centerX, y = alien.centerY, tier = alien.data.tier || 0;
-        var alienCount = scene.world.count('alien');
-        var isLastAlien = alienCount === 1;
-
-        console.log('[Combat] shot→alien overlap: alienCount=' + alienCount + ' isLast=' + isLastAlien + ' scene.phase=' + scene.phase);
-
-        // Cinematic slow-motion + zoom for the last kill
-        if (isLastAlien) {
-          console.log('[Combat] *** LAST ALIEN! Triggering cinematic ***');
-          var vp = scene.module('Viewport');
-          console.log('[Combat] Viewport module found:', !!vp);
-          if (vp) {
-            vp.triggerCinematic();
-            console.log('[Combat] After trigger: timeScale=' + vp.timeScale + ' zoomTarget=' + vp.zoomTarget);
-          }
-        }
 
         shot.destroy();
         alien.destroy();
         this.killAlien(scene, { tier: tier });
         scene.events.emit('alien:killed', { x: x, y: y, tier: tier });
+
+        // If that was the final invader, release the held cinematic so its
+        // explosion plays out inside the slow-mo/zoom. The cinematic is armed
+        // in update() as the killing shot closes in — see _armLastKill().
+        if (scene.world.count('alien') === 0) {
+          var vp = scene.module('Viewport');
+          if (vp) vp.releaseCinematic(0.6);
+        }
       });
 
       // Player shot → UFO
@@ -200,8 +193,11 @@
         this.detonate(scene);
       }
 
-      // Log lowest alien position periodically
+      // Arm the last-invader cinematic when a player shot is closing in on it.
       var aliens = scene.world.byTag('alien');
+      this._armLastKill(scene, aliens);
+
+      // Log lowest alien position periodically
       if (aliens.length > 0 && !this._logInterval) this._logInterval = 0;
       this._logInterval = (this._logInterval || 0) + dt;
       if (this._logInterval > 0.5) {
@@ -225,6 +221,39 @@
             break;
           }
         }
+      }
+    },
+
+    // Trigger the zoom/slow-mo only when a player shot is genuinely about to
+    // hit the final remaining invader — not the moment the count drops to one.
+    // A shot counts as "incoming" when it's horizontally aligned with the
+    // invader, still below it, and within `lead` pixels of impact. If no such
+    // shot remains (it missed and passed above, or expired) while the cinematic
+    // was already armed, we stand it back down.
+    _armLastKill(scene, aliens) {
+      var vp = scene.module('Viewport');
+      if (!vp) return;
+      if (aliens.length !== 1) return;
+
+      var target = aliens[0];
+      var lead = ((GF.GAME_CONFIG && GF.GAME_CONFIG.viewport) || {}).cinematicLeadDistance || 60;
+      var shots = scene.world.byTag('shot');
+
+      var incoming = false;      // a shot within `lead` of impact
+      var hasRelevantShot = false; // an aligned shot not yet passed above the invader
+      for (var s = 0; s < shots.length; s++) {
+        var sh = shots[s];
+        var aligned = sh.right >= target.x && sh.x <= target.right;
+        if (!aligned) continue;
+        if (sh.bottom <= target.y) continue; // shot has passed above — it missed
+        hasRelevantShot = true;
+        if (sh.y - target.bottom <= lead) { incoming = true; break; }
+      }
+
+      if (incoming) {
+        vp.startCinematic();                 // no-op if already active
+      } else if (!hasRelevantShot && vp._cinematicActive && vp._cinematicHold) {
+        vp.cancelCinematic();                // armed early, but the shot missed
       }
     },
 
