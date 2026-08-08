@@ -100,6 +100,11 @@
           // Next level
           scene.state.level++;
           scene.world.clear();
+          // Trigger cinematic effects for the wave completion
+          var vp = scene.module('Viewport');
+          if (vp) {
+            vp.triggerCinematic();
+          }
           this.spawnWave(scene, engine);
         }
       }
