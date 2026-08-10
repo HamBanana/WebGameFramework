@@ -112,7 +112,7 @@
         behaviors = ['BossMove', 'BossGun'];
       }
       
-      var boss = scene.world.spawn(selectedType.sprite,
+      var boss = scene.world.spawn(selectedType.prefab,
         (engine.config.width / 2) - 48,
         50
       );

@@ -90,23 +90,36 @@
     ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, W, H);
 
-    // Draw nebula effects
+    // Draw nebula effects (batched)
+    ctx.beginPath();
     for (var i = 0; i < 3; i++) {
       var offset = Math.sin(t + i) * 50;
-      ctx.fillStyle = 'rgba(' + [255, 100, 150 + i * 50, 0.15] + ')';
-      ctx.beginPath();
+      ctx.moveTo(W / 2 + offset + 120 + i * 30, H / 3 + i * 40);
       ctx.arc(W / 2 + offset, H / 3 + i * 40, 120 + i * 30, 0, Math.PI * 2);
-      ctx.fill();
     }
+    ctx.fillStyle = 'rgba(255, 100, 150, 0.15)';
+    ctx.fill();
 
-    // Animated stars
-    for (var i = 0; i < 80; i++) {
+    // Animated stars — batched by brightness
+    var dimStars = [], brightStars = [];
+    for (var i = 0; i < 40; i++) {
       var sx = ((i * 137 + t * 20) % W);
       var sy = ((i * 211 + t * 30) % H);
       var alpha = 0.4 + 0.4 * Math.sin(t * 2 + i * 0.5);
       var size = Math.abs(Math.sin(t + i * 0.3)) * 3;
-      ctx.fillStyle = 'rgba(255,' + (180 + i * 2) + ',' + (220 + i * 3) + ',' + alpha + ')';
-      ctx.fillRect(sx, sy, size, size);
+      if (alpha < 0.6) {
+        dimStars.push(sx, sy, size);
+      } else {
+        brightStars.push(sx, sy, size);
+      }
+    }
+    ctx.fillStyle = 'rgba(255, 200, 240, 0.5)';
+    for (var i = 0; i < dimStars.length; i += 3) {
+      ctx.fillRect(dimStars[i], dimStars[i+1], dimStars[i+2], dimStars[i+2]);
+    }
+    ctx.fillStyle = 'rgba(255, 220, 255, 0.8)';
+    for (var i = 0; i < brightStars.length; i += 3) {
+      ctx.fillRect(brightStars[i], brightStars[i+1], brightStars[i+2], brightStars[i+2]);
     }
 
     // Title glow with animated gradient

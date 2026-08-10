@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-08-06T07:42:55.043Z
+// Built: 2026-08-10T09:26:10.596Z
 // Source: framework/build.js (core)
 
 // -- utils/MathUtils.js ------------------------------------------
@@ -1690,14 +1690,18 @@
       const ox = def.originX || 0;
       const oy = def.originY || 0;
 
-      ctx.save();
-      ctx.translate(x, y);
       if (flipX) {
+        ctx.save();
+        ctx.translate(x - ox, y - oy);
         ctx.scale(-1, 1);
+        frame(ctx);
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.translate(x - ox, y - oy);
+        frame(ctx);
+        ctx.restore();
       }
-      ctx.translate(-ox, -oy);
-      frame(ctx);
-      ctx.restore();
     }
 
     update() {}
@@ -3033,8 +3037,12 @@
         anyAlive = true;
       }
 
-      // Clean up finished particles (return to pool)
-      this._particles = this._particles.filter(p => p.active);
+      // Clean up finished particles in-place
+      let write = 0;
+      for (let i = 0; i < this._particles.length; i++) {
+        if (this._particles[i].active) this._particles[write++] = this._particles[i];
+      }
+      this._particles.length = write;
 
       if (!anyAlive && !this._running) {
         this.active = false;
@@ -3043,25 +3051,30 @@
     }
 
     render(ctx) {
-      if (!this.active && this._particles.length === 0) return;
-
+      const ps = this._particles;
+      if (!this.active && ps.length === 0) return;
+      const shape = this.shape;
       ctx.save();
-      for (const p of this._particles) {
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
         if (!p.active) continue;
         ctx.globalAlpha = p.alpha;
-        ctx.fillStyle   = p.color;
-
+        ctx.fillStyle = p.color;
         if (p.rotation !== 0) {
           ctx.save();
           ctx.translate(p.x, p.y);
           ctx.rotate(p.rotation);
-          this._drawShape(ctx, 0, 0, p.size);
+          if (shape === 'square') ctx.fillRect(-p.size, -p.size, p.size * 2, p.size * 2);
+          else if (shape === 'star') this._drawStar(ctx, 0, 0, p.size);
+          else { ctx.beginPath(); ctx.arc(0, 0, p.size, 0, 6.283185307179586); ctx.fill(); }
           ctx.restore();
         } else {
-          this._drawShape(ctx, p.x, p.y, p.size);
+          const x = p.x, y = p.y, s = p.size;
+          if (shape === 'square') ctx.fillRect(x - s, y - s, s * 2, s * 2);
+          else if (shape === 'star') this._drawStar(ctx, x, y, s);
+          else { ctx.beginPath(); ctx.arc(x, y, s, 0, 6.283185307179586); ctx.fill(); }
         }
       }
-      ctx.globalAlpha = 1;
       ctx.restore();
     }
 
@@ -3150,8 +3163,7 @@
     constructor(opts = {}) {
       this.name   = 'ParticleSystem';
       this._pool  = new Pool(Particle, opts.poolSize ?? 512);
-      /** @type {Set<ParticleEmitter>} */
-      this._emitters = new Set();
+      this._emitters = [];  // array is faster than Set for iteration
       /**
        * Global time multiplier applied to every emitter update. 1 = real time.
        * Set below 1 for slow-motion (e.g. a cinematic) so particle debris
@@ -3166,16 +3178,23 @@
 
     update(dt, _engine) {
       const scaled = dt * this.timeScale;
-      const dead = [];
-      this._emitters.forEach(e => {
+      let write = 0;
+      const emitters = this._emitters;
+      for (let i = 0; i < emitters.length; i++) {
+        const e = emitters[i];
         e.update(scaled);
-        if (!e.active && !e.hasParticles) dead.push(e);
-      });
-      dead.forEach(e => this._emitters.delete(e));
+        if (e.active || e.hasParticles) {
+          emitters[write++] = e;
+        }
+      }
+      emitters.length = write;
     }
 
     render(ctx, _engine) {
-      this._emitters.forEach(e => e.render(ctx));
+      const emitters = this._emitters;
+      for (let i = 0; i < emitters.length; i++) {
+        emitters[i].render(ctx);
+      }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -3188,7 +3207,7 @@
      */
     create(config = {}) {
       const emitter = new ParticleEmitter(config, this._pool);
-      this._emitters.add(emitter);
+      this._emitters.push(emitter);
       return emitter;
     }
 
@@ -3220,17 +3239,22 @@
 
     /** Stop and remove all emitters immediately. */
     clear() {
-      this._emitters.forEach(e => { e.stop(); e._particles = []; });
-      this._emitters.clear();
+      for (let i = 0; i < this._emitters.length; i++) {
+        this._emitters[i].stop();
+        this._emitters[i]._particles = [];
+      }
+      this._emitters.length = 0;
     }
 
     /** Number of active emitters. */
-    get emitterCount() { return this._emitters.size; }
+    get emitterCount() { return this._emitters.length; }
 
     /** Total live particle count across all emitters. */
     get particleCount() {
       let n = 0;
-      this._emitters.forEach(e => n += e._particles.length);
+      for (let i = 0; i < this._emitters.length; i++) {
+        n += this._emitters[i]._particles.length;
+      }
       return n;
     }
   }
@@ -4200,6 +4224,9 @@
       this.sprites = opts.sprites || null;
       this._solid = opts.solidFn || null;   // (x,y) -> boolean
       this.data = {};            // shared world state (e.g. world.dir)
+      // Tag index: rebuild each frame, O(n) once, then O(1) lookups
+      this._tagIndex = {};
+      this._tagDirty = true;
     }
 
     init(engine) {
@@ -4262,9 +4289,33 @@
 
     destroy(obj) { if (obj) obj.alive = false; return this; }
     all()          { return this._objs; }
-    byTag(tag)     { return this._objs.filter(o => o.alive && o.tags.has(tag)); }
-    first(tag)     { return this._objs.find(o => o.alive && o.tags.has(tag)) || null; }
-    count(tag)     { return this.byTag(tag).length; }
+    _rebuildTagIndex() {
+      const idx = {};
+      for (let i = 0; i < this._objs.length; i++) {
+        const o = this._objs[i];
+        if (!o.alive) continue;
+        for (const t of o.tags) {
+          if (!idx[t]) idx[t] = [];
+          idx[t].push(o);
+        }
+      }
+      this._tagIndex = idx;
+      this._tagDirty = false;
+    }
+    byTag(tag) {
+      if (this._tagDirty) this._rebuildTagIndex();
+      return this._tagIndex[tag] || [];
+    }
+    first(tag) {
+      if (this._tagDirty) this._rebuildTagIndex();
+      const list = this._tagIndex[tag];
+      return list ? list[0] : null;
+    }
+    count(tag) {
+      if (this._tagDirty) this._rebuildTagIndex();
+      const list = this._tagIndex[tag];
+      return list ? list.length : 0;
+    }
     clear()        { this._objs.forEach(o => this._removeNow(o)); this._objs = []; return this; }
 
     /** Declarative collision: run cb(a,b) for every overlapping pair (tagA,tagB). */
@@ -4290,29 +4341,44 @@
         else { o.x += o.vx * dt; o.y += o.vy * dt; }
         if (o._anim) o._anim.update(dt);
       }
-      // 3. collision rules
+      // 3. collision rules (use indexed lookups)
       for (let r = 0; r < this._rules.length; r++) {
         const rule = this._rules[r];
-        const A = this.byTag(rule.a), B = this.byTag(rule.b);
+        const A = this._tagIndex[rule.a], B = this._tagIndex[rule.b];
+        if (!A || !B) continue;
         for (let i = 0; i < A.length; i++) {
-          const a = A[i]; if (!a.alive) continue;
+          const a = A[i];
+          if (!a.alive) continue;
           for (let j = 0; j < B.length; j++) {
             const b = B[j];
-            if (a === b || !b.alive || !a.alive) continue;
-            if (a.overlaps(b)) rule.cb(a, b, this);
+            if (a === b || !b.alive) continue;
+            if (a.x < b.x + b.w && a.x + a.w > b.x &&
+                a.y < b.y + b.h && a.y + a.h > b.y) {
+              rule.cb(a, b, this);
+            }
           }
         }
       }
       // 4. world tick
       if (this._tick) this._tick(dt, this);
-      // 5. sweep dead
+      // 5. sweep dead + rebuild tag index in one pass
       let write = 0;
+      const idx = {};
       for (let i = 0; i < objs.length; i++) {
         const o = objs[i];
-        if (o.alive) objs[write++] = o;
-        else this._removeNow(o);
+        if (o.alive) {
+          objs[write++] = o;
+          for (const t of o.tags) {
+            if (!idx[t]) idx[t] = [];
+            idx[t].push(o);
+          }
+        } else {
+          this._removeNow(o);
+        }
       }
       objs.length = write;
+      this._tagIndex = idx;
+      this._tagDirty = false;
     }
 
     _removeNow(o) {

@@ -169,8 +169,6 @@
      * @returns {SpriteAnimator}
      */
     createAnimator(spriteName, initialAnimation) {
-      const def = this._sprites[spriteName];
-      if (!def) console.warn(`SpriteSystem: sprite '${spriteName}' not registered.`);
       return new SpriteAnimator(this, spriteName, initialAnimation || 'idle');
     }
 
@@ -189,14 +187,18 @@
       const ox = def.originX || 0;
       const oy = def.originY || 0;
 
-      ctx.save();
-      ctx.translate(x, y);
       if (flipX) {
+        ctx.save();
+        ctx.translate(x - ox, y - oy);
         ctx.scale(-1, 1);
+        frame(ctx);
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.translate(x - ox, y - oy);
+        frame(ctx);
+        ctx.restore();
       }
-      ctx.translate(-ox, -oy);
-      frame(ctx);
-      ctx.restore();
     }
 
     update() {}

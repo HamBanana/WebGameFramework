@@ -19,7 +19,7 @@
 
     createStarField(width, height) {
       var stars = [];
-      for (var i = 0; i < 100; i++) {
+      for (var i = 0; i < 60; i++) {
         stars.push({
           x: Math.random() * width,
           y: Math.random() * height,
@@ -65,23 +65,37 @@
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // Drifting nebulae
+      // Drifting nebulae (batched)
       var nebulas = colors.nebula || [];
-      for (var i = 0; i < nebulas.length; i++) {
-        if (typeof nebulas[i] !== 'string') continue;
-        ctx.fillStyle = nebulas[i];
+      if (nebulas.length > 0) {
         ctx.beginPath();
-        ctx.arc(W / 2 + Math.sin(t * 0.3 + i) * 50, H / 3 + i * 30, 150 + i * 30, 0, Math.PI * 2);
+        for (var i = 0; i < nebulas.length; i++) {
+          if (typeof nebulas[i] !== 'string') continue;
+          ctx.moveTo(W / 2 + Math.sin(t * 0.3 + i) * 50 + 150 + i * 30, H / 3 + i * 30);
+          ctx.arc(W / 2 + Math.sin(t * 0.3 + i) * 50, H / 3 + i * 30, 150 + i * 30, 0, Math.PI * 2);
+        }
+        ctx.fillStyle = nebulas[0];
         ctx.fill();
       }
 
-      // Star field
+      // Star field — batch by brightness to minimize fillStyle changes
       var stars = scene._starField;
       if (!stars) return;
+      var buckets = [[], [], [], [], []]; // 5 brightness buckets
       for (var j = 0; j < stars.length; j++) {
         var s = stars[j];
-        ctx.fillStyle = 'rgba(255, 255, 255, ' + s.brightness.toFixed(2) + ')';
-        ctx.fillRect(s.x, s.y, s.size, s.size);
+        var bucket = Math.min(4, Math.floor(s.brightness * 5));
+        buckets[bucket].push(s);
+      }
+      var brightLevels = ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.4)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,1.0)'];
+      for (var b = 0; b < 5; b++) {
+        var bucket = buckets[b];
+        if (bucket.length === 0) continue;
+        ctx.fillStyle = brightLevels[b];
+        for (var k = 0; k < bucket.length; k++) {
+          var st = bucket[k];
+          ctx.fillRect(st.x, st.y, st.size, st.size);
+        }
       }
     },
   });

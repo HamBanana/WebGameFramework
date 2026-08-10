@@ -8,11 +8,7 @@
 
     init(scene, engine) {
       var p = (engine && engine.getSystem('ParticleSystem')) || (GF.game && GF.game.particles);
-      if (!p) {
-        console.warn('[Particles] No particle system available');
-        return;
-      }
-      console.log('[Particles] Module initialized');
+      if (!p) return;
 
       scene.events.on('alien:killed', function (hit) {
         var tierColors = [

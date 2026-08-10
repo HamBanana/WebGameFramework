@@ -223,8 +223,12 @@
         anyAlive = true;
       }
 
-      // Clean up finished particles (return to pool)
-      this._particles = this._particles.filter(p => p.active);
+      // Clean up finished particles in-place
+      let write = 0;
+      for (let i = 0; i < this._particles.length; i++) {
+        if (this._particles[i].active) this._particles[write++] = this._particles[i];
+      }
+      this._particles.length = write;
 
       if (!anyAlive && !this._running) {
         this.active = false;
@@ -233,25 +237,30 @@
     }
 
     render(ctx) {
-      if (!this.active && this._particles.length === 0) return;
-
+      const ps = this._particles;
+      if (!this.active && ps.length === 0) return;
+      const shape = this.shape;
       ctx.save();
-      for (const p of this._particles) {
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
         if (!p.active) continue;
         ctx.globalAlpha = p.alpha;
-        ctx.fillStyle   = p.color;
-
+        ctx.fillStyle = p.color;
         if (p.rotation !== 0) {
           ctx.save();
           ctx.translate(p.x, p.y);
           ctx.rotate(p.rotation);
-          this._drawShape(ctx, 0, 0, p.size);
+          if (shape === 'square') ctx.fillRect(-p.size, -p.size, p.size * 2, p.size * 2);
+          else if (shape === 'star') this._drawStar(ctx, 0, 0, p.size);
+          else { ctx.beginPath(); ctx.arc(0, 0, p.size, 0, 6.283185307179586); ctx.fill(); }
           ctx.restore();
         } else {
-          this._drawShape(ctx, p.x, p.y, p.size);
+          const x = p.x, y = p.y, s = p.size;
+          if (shape === 'square') ctx.fillRect(x - s, y - s, s * 2, s * 2);
+          else if (shape === 'star') this._drawStar(ctx, x, y, s);
+          else { ctx.beginPath(); ctx.arc(x, y, s, 0, 6.283185307179586); ctx.fill(); }
         }
       }
-      ctx.globalAlpha = 1;
       ctx.restore();
     }
 
@@ -340,8 +349,7 @@
     constructor(opts = {}) {
       this.name   = 'ParticleSystem';
       this._pool  = new Pool(Particle, opts.poolSize ?? 512);
-      /** @type {Set<ParticleEmitter>} */
-      this._emitters = new Set();
+      this._emitters = [];  // array is faster than Set for iteration
       /**
        * Global time multiplier applied to every emitter update. 1 = real time.
        * Set below 1 for slow-motion (e.g. a cinematic) so particle debris
@@ -356,16 +364,23 @@
 
     update(dt, _engine) {
       const scaled = dt * this.timeScale;
-      const dead = [];
-      this._emitters.forEach(e => {
+      let write = 0;
+      const emitters = this._emitters;
+      for (let i = 0; i < emitters.length; i++) {
+        const e = emitters[i];
         e.update(scaled);
-        if (!e.active && !e.hasParticles) dead.push(e);
-      });
-      dead.forEach(e => this._emitters.delete(e));
+        if (e.active || e.hasParticles) {
+          emitters[write++] = e;
+        }
+      }
+      emitters.length = write;
     }
 
     render(ctx, _engine) {
-      this._emitters.forEach(e => e.render(ctx));
+      const emitters = this._emitters;
+      for (let i = 0; i < emitters.length; i++) {
+        emitters[i].render(ctx);
+      }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -378,7 +393,7 @@
      */
     create(config = {}) {
       const emitter = new ParticleEmitter(config, this._pool);
-      this._emitters.add(emitter);
+      this._emitters.push(emitter);
       return emitter;
     }
 
@@ -410,17 +425,22 @@
 
     /** Stop and remove all emitters immediately. */
     clear() {
-      this._emitters.forEach(e => { e.stop(); e._particles = []; });
-      this._emitters.clear();
+      for (let i = 0; i < this._emitters.length; i++) {
+        this._emitters[i].stop();
+        this._emitters[i]._particles = [];
+      }
+      this._emitters.length = 0;
     }
 
     /** Number of active emitters. */
-    get emitterCount() { return this._emitters.size; }
+    get emitterCount() { return this._emitters.length; }
 
     /** Total live particle count across all emitters. */
     get particleCount() {
       let n = 0;
-      this._emitters.forEach(e => n += e._particles.length);
+      for (let i = 0; i < this._emitters.length; i++) {
+        n += this._emitters[i]._particles.length;
+      }
       return n;
     }
   }

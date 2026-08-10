@@ -1,5 +1,5 @@
 // GameFramework.sprites.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-08-06T07:42:55.047Z
+// Built: 2026-08-10T09:26:10.605Z
 // Source: framework/build.js (sprites (optional))
 
 // -- sprites/claude.js -------------------------------------------

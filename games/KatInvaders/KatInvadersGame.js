@@ -26,11 +26,9 @@
   MainScene.prototype = Object.create(GF.GameScene.prototype);
   MainScene.prototype.constructor = MainScene;
   MainScene.prototype.init = function(engine) {
-    console.log('[MainScene] init: engine.config.width=' + engine.config.width + ' height=' + engine.config.height);
     GF.GameScene.prototype.init.call(this, engine);
   };
   MainScene.prototype.enter = function(engine) {
-    console.log('[MainScene] enter');
     GF.GameScene.prototype.enter.call(this, engine);
   };
 
@@ -84,13 +82,14 @@
     ctx.fillStyle = '#0a0a1a';
     ctx.fillRect(0, 0, W, H);
 
-    // Animated stars
+    // Animated stars (batched, fewer save/restore)
     var t = this._t || 0;
-    for (var i = 0; i < 60; i++) {
+    ctx.textAlign = 'center';
+    for (var i = 0; i < 40; i++) {
       var sx = ((i * 137 + 50) % W);
       var sy = ((i * 211 + 30) % H);
       var alpha = 0.3 + 0.4 * Math.sin(t * 2 + i * 0.5);
-      ctx.fillStyle = 'rgba(255,180,220,' + alpha + ')';
+      ctx.fillStyle = 'rgba(255,180,220,' + alpha.toFixed(2) + ')';
       ctx.fillRect(sx, sy, 2, 2);
     }
 
@@ -100,32 +99,27 @@
     ctx.shadowBlur = 20;
     ctx.fillStyle = '#ff8ec4';
     ctx.font = 'bold 42px monospace';
-    ctx.textAlign = 'center';
     ctx.fillText('KAT INVADERS', W / 2, H * 0.32);
     ctx.restore();
 
     // Subtitle
-    var alpha = 0.55 + 0.45 * Math.sin(t * 4);
-    ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4);
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px monospace';
     ctx.fillText('Press SPACE to Start', W / 2, H * 0.52);
-    ctx.restore();
 
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#88aacc';
     ctx.font = '15px monospace';
     ctx.fillText('← → or A D to move  |  SPACE to fire', W / 2, H * 0.68);
     ctx.fillText('Collect powerups • Defeat the boss • Save Earth!', W / 2, H * 0.78);
     ctx.fillText('Every 5 levels: BOSS BATTLE!', W / 2, H * 0.88);
 
-    var bossAlpha = 0.55 + 0.45 * Math.sin(t * 3);
-    ctx.save();
-    ctx.globalAlpha = bossAlpha;
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 3);
     ctx.fillStyle = '#ffdd44';
     ctx.font = '18px monospace';
     ctx.fillText('Press B for Bossfight', W / 2, H * 0.96);
-    ctx.restore();
+    ctx.globalAlpha = 1;
   };
 
   // ── Scene: GameOver ────────────────────────────────────────────────────────
@@ -164,7 +158,6 @@
       var game = GF.game;
       if (game && game.sprites) {
         game.sprites.registerSprites(spriteMap);
-        console.log('[KatInvaders] Registered ' + Object.keys(spriteMap).length + ' sprites');
       }
     }
     // Bind input actions so TitleScene can use them.
@@ -177,9 +170,7 @@
         .bind('confirm', 'Space', 'Enter')
         .bind('boss', 'KeyB')
         .bind('pause', 'Escape', 'KeyP', 'KeyK');
-      console.log('[KatInvaders] Input actions bound');
     }
   });
-  console.log('[KatInvaders] Scenes registered immediately');
 
 })(window.GF = window.GF || {});

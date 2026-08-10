@@ -18,7 +18,6 @@
     enter(scene, engine) {
       // Only set up boss state when actually in boss phase.
       // Normal waves are handled by Waves module.
-      console.log('[Boss] enter: phase=' + scene.phase);
       if (scene.phase !== 'boss') return;
 
       scene.world.clear();

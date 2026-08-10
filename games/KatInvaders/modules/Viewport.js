@@ -18,19 +18,17 @@
       this._cinematicTimer = 0;
       this._cinematicActive = false;
       this._cinematicHold = false;
-      console.log('[Viewport] enter: module initialized');
     },
 
     // Begin the final-invader cinematic (zoom in + slow-mo) and HOLD it, so the
     // player's killing shot travels and connects while zoomed/slowed. Called
     // when only one invader remains — i.e. before the last one is hit.
     startCinematic() {
-      if (this._cinematicActive) return; // already running
+      if (this._cinematicActive) return;
       this._cinematicActive = true;
       this._cinematicHold = true;
       this.timeScale = 0.15;
       this.zoomTarget = 1.6;
-      console.log('[Viewport] *** Cinematic START (held) *** timeScale=0.15, zoom=1.6');
     },
 
     // Release the held cinematic: keep the zoom/slow-mo for `beat` seconds so
@@ -40,7 +38,6 @@
       if (!this._cinematicActive) return;
       this._cinematicHold = false;
       this._cinematicTimer = beat || 0.6;
-      console.log('[Viewport] *** Cinematic RELEASE *** explosion beat=' + this._cinematicTimer);
     },
 
     // Stand the cinematic down immediately (no explosion beat). Used when it was
@@ -51,7 +48,6 @@
       this._cinematicHold = false;
       this.timeScale = 1;
       this.zoomTarget = 1;
-      console.log('[Viewport] cinematic cancelled (shot missed)');
     },
 
     shake(intensity, duration) {
@@ -88,7 +84,6 @@
           this._cinematicActive = false;
           this.timeScale = 1;
           this.zoomTarget = 1;
-          console.log('[Viewport] cinematic ended, returning to normal');
         }
       }
 
@@ -126,9 +121,12 @@
       // Apply transform to canvas
       var canvas = engine.canvas;
       var scale = this.zoom;
-      canvas.style.transform = 'scale(' + scale + ') translate(' + this.shakeX + 'px,' + this.shakeY + 'px)';
-      canvas.style.transformOrigin = 'center center';
-      console.log('[Viewport] zoom=' + scale.toFixed(2) + ' timeScale=' + this.timeScale.toFixed(2) + ' cinematic=' + this._cinematicActive + ' shake=(' + this.shakeX.toFixed(1) + ',' + this.shakeY.toFixed(1) + ')');
+      if (scale !== 1 || this.shakeX !== 0 || this.shakeY !== 0) {
+        canvas.style.transform = 'scale(' + scale + ') translate(' + this.shakeX + 'px,' + this.shakeY + 'px)';
+        canvas.style.transformOrigin = 'center center';
+      } else if (canvas.style.transform) {
+        canvas.style.transform = '';
+      }
     },
 
     // Called when a wave is cleared

@@ -11,7 +11,6 @@
       this._scene = scene;
       var world = scene.world;
       var cfg = GF.GAME_CONFIG || {};
-      console.log('[Combat] init: registering overlap rules');
 
       // Player shot → alien
       world.onOverlap('shot', 'alien', (shot, alien) => {
@@ -197,23 +196,10 @@
       var aliens = scene.world.byTag('alien');
       this._armLastKill(scene, aliens);
 
-      // Log lowest alien position periodically
-      if (aliens.length > 0 && !this._logInterval) this._logInterval = 0;
-      this._logInterval = (this._logInterval || 0) + dt;
-      if (this._logInterval > 0.5) {
-        this._logInterval = 0;
-        var lowestY = 0;
-        for (var i = 0; i < aliens.length; i++) {
-          if (aliens[i].y > lowestY) lowestY = aliens[i].y;
-        }
-        console.log('[Combat] lowest alien y=' + lowestY.toFixed(1) + ' player.y=' + player.y);
-      }
-
       // Invaders reaching player row — lose 1 life, reset formation
       if (player && !player.data.invincible) {
         for (var i = 0; i < aliens.length; i++) {
           if (aliens[i].bottom >= player.y) {
-            console.log('[Combat] alien reached player! alien.bottom=' + aliens[i].bottom + ' player.y=' + player.y);
             this.hurt(scene, player);
             if (player.data.lives > 0) {
               this.resetFormation(scene);

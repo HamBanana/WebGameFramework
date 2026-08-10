@@ -59,7 +59,7 @@
       var spacingX = aliensCfg.spacingX || 40;
       var spacingY = aliensCfg.spacingY || 36;
 
-      console.log('[Waves] spawnGrid: startX=' + startX + ' startY=' + startY + ' spacingX=' + spacingX + ' spacingY=' + spacingY + ' W=' + W + ' H=' + H);
+
       scene.world.spawnGrid('alienCat', cols, rows, startX, startY, spacingX, spacingY, function (alien, c, r) {
         alien.data.row = r;
         alien.data.col = c;
@@ -75,7 +75,7 @@
           newAlien.data.tier = tier;
         }
       });
-      console.log('[Waves] spawnWave done: aliens=' + scene.world.count('alien') + ' player=' + scene.world.first('player'));
+
 
       // Bunkers module is registered for 'Main' scene — it's already attached.
       // No need to manually push it.
@@ -84,7 +84,7 @@
     update(dt, scene, engine) {
       // Check if all aliens are dead
       var alienCount = scene.world.count('alien');
-      console.log('[Waves] update: level=' + scene.state.level + ' aliens=' + alienCount + ' phase=' + scene.phase);
+
       if (alienCount === 0) {
         var levelsCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.levels) || {};
         var bossInterval = levelsCfg.bossInterval || 5;

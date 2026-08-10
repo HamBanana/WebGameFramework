@@ -199,7 +199,7 @@
   },
   "aliens": {
     "rows": 6,
-    "cols": 11,
+    "cols": 9,
     "startX": 30,
     "startY": 60,
     "spacingX": 38,
@@ -264,6 +264,7 @@
         "hp": 100,
         "speed": 50,
         "fireRate": 0.035,
+        "prefab": "bossMothership",
         "sprite": "bossMothership",
         "behavior": "patrol"
       },
@@ -272,6 +273,7 @@
         "hp": 150,
         "speed": 35,
         "fireRate": 0.045,
+        "prefab": "bossStarDestroyer",
         "sprite": "bossStarDestroyer",
         "behavior": "hover"
       },
@@ -280,6 +282,7 @@
         "hp": 180,
         "speed": 65,
         "fireRate": 0.05,
+        "prefab": "bossCrimsonReaper",
         "sprite": "bossCrimsonReaper",
         "behavior": "aggressive"
       },
@@ -288,6 +291,7 @@
         "hp": 200,
         "speed": 40,
         "fireRate": 0.04,
+        "prefab": "bossVoidHydra",
         "sprite": "bossVoidHydra",
         "behavior": "circle"
       },
@@ -296,6 +300,7 @@
         "hp": 250,
         "speed": 45,
         "fireRate": 0.055,
+        "prefab": "bossGalaxyDevourer",
         "sprite": "bossGalaxyDevourer",
         "behavior": "complex"
       }

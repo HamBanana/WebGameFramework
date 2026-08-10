@@ -59,23 +59,20 @@
       var spacingX = aliensCfg.spacingX || 40;
       var spacingY = aliensCfg.spacingY || 36;
 
-      console.log('[Waves] spawnGrid: startX=' + startX + ' startY=' + startY + ' spacingX=' + spacingX + ' spacingY=' + spacingY + ' W=' + W + ' H=' + H);
-      scene.world.spawnGrid('alienCat', cols, rows, startX, startY, spacingX, spacingY, function (alien, c, r) {
-        alien.data.row = r;
-        alien.data.col = c;
-        var tier = r % 3;
-        alien.data.tier = tier;
-        // Replace with correct tier prefab
-        scene.world.destroy(alien);
-        var tierPrefab = TIER_SPRITES[tier];
-        var newAlien = scene.world.spawn(tierPrefab, alien.x, alien.y);
-        if (newAlien) {
-          newAlien.data.row = r;
-          newAlien.data.col = c;
-          newAlien.data.tier = tier;
+      // Spawn alien grid directly with correct tier prefabs (no destroy+respawn)
+      for (var r = 0; r < rows; r++) {
+        for (var c = 0; c < cols; c++) {
+          var tier = r % 3;
+          var tierPrefab = TIER_SPRITES[tier];
+          var alien = scene.world.spawn(tierPrefab, startX + c * spacingX, startY + r * spacingY);
+          if (alien) {
+            alien.data.row = r;
+            alien.data.col = c;
+            alien.data.tier = tier;
+          }
         }
-      });
-      console.log('[Waves] spawnWave done: aliens=' + scene.world.count('alien') + ' player=' + scene.world.first('player'));
+      }
+
 
       // Bunkers module is registered for 'Main' scene — it's already attached.
       // No need to manually push it.
@@ -83,9 +80,7 @@
 
     update(dt, scene, engine) {
       // Check if all aliens are dead
-      var alienCount = scene.world.count('alien');
-      console.log('[Waves] update: level=' + scene.state.level + ' aliens=' + alienCount + ' phase=' + scene.phase);
-      if (alienCount === 0) {
+      if (scene.world.count('alien') === 0) {
         var levelsCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.levels) || {};
         var bossInterval = levelsCfg.bossInterval || 5;
         var maxLevels = levelsCfg.maxLevels || 99;

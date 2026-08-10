@@ -92,6 +92,9 @@
       this.sprites = opts.sprites || null;
       this._solid = opts.solidFn || null;   // (x,y) -> boolean
       this.data = {};            // shared world state (e.g. world.dir)
+      // Tag index: rebuild each frame, O(n) once, then O(1) lookups
+      this._tagIndex = {};
+      this._tagDirty = true;
     }
 
     init(engine) {
@@ -154,9 +157,33 @@
 
     destroy(obj) { if (obj) obj.alive = false; return this; }
     all()          { return this._objs; }
-    byTag(tag)     { return this._objs.filter(o => o.alive && o.tags.has(tag)); }
-    first(tag)     { return this._objs.find(o => o.alive && o.tags.has(tag)) || null; }
-    count(tag)     { return this.byTag(tag).length; }
+    _rebuildTagIndex() {
+      const idx = {};
+      for (let i = 0; i < this._objs.length; i++) {
+        const o = this._objs[i];
+        if (!o.alive) continue;
+        for (const t of o.tags) {
+          if (!idx[t]) idx[t] = [];
+          idx[t].push(o);
+        }
+      }
+      this._tagIndex = idx;
+      this._tagDirty = false;
+    }
+    byTag(tag) {
+      if (this._tagDirty) this._rebuildTagIndex();
+      return this._tagIndex[tag] || [];
+    }
+    first(tag) {
+      if (this._tagDirty) this._rebuildTagIndex();
+      const list = this._tagIndex[tag];
+      return list ? list[0] : null;
+    }
+    count(tag) {
+      if (this._tagDirty) this._rebuildTagIndex();
+      const list = this._tagIndex[tag];
+      return list ? list.length : 0;
+    }
     clear()        { this._objs.forEach(o => this._removeNow(o)); this._objs = []; return this; }
 
     /** Declarative collision: run cb(a,b) for every overlapping pair (tagA,tagB). */
@@ -182,29 +209,44 @@
         else { o.x += o.vx * dt; o.y += o.vy * dt; }
         if (o._anim) o._anim.update(dt);
       }
-      // 3. collision rules
+      // 3. collision rules (use indexed lookups)
       for (let r = 0; r < this._rules.length; r++) {
         const rule = this._rules[r];
-        const A = this.byTag(rule.a), B = this.byTag(rule.b);
+        const A = this._tagIndex[rule.a], B = this._tagIndex[rule.b];
+        if (!A || !B) continue;
         for (let i = 0; i < A.length; i++) {
-          const a = A[i]; if (!a.alive) continue;
+          const a = A[i];
+          if (!a.alive) continue;
           for (let j = 0; j < B.length; j++) {
             const b = B[j];
-            if (a === b || !b.alive || !a.alive) continue;
-            if (a.overlaps(b)) rule.cb(a, b, this);
+            if (a === b || !b.alive) continue;
+            if (a.x < b.x + b.w && a.x + a.w > b.x &&
+                a.y < b.y + b.h && a.y + a.h > b.y) {
+              rule.cb(a, b, this);
+            }
           }
         }
       }
       // 4. world tick
       if (this._tick) this._tick(dt, this);
-      // 5. sweep dead
+      // 5. sweep dead + rebuild tag index in one pass
       let write = 0;
+      const idx = {};
       for (let i = 0; i < objs.length; i++) {
         const o = objs[i];
-        if (o.alive) objs[write++] = o;
-        else this._removeNow(o);
+        if (o.alive) {
+          objs[write++] = o;
+          for (const t of o.tags) {
+            if (!idx[t]) idx[t] = [];
+            idx[t].push(o);
+          }
+        } else {
+          this._removeNow(o);
+        }
       }
       objs.length = write;
+      this._tagIndex = idx;
+      this._tagDirty = false;
     }
 
     _removeNow(o) {

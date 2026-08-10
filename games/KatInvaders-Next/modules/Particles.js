@@ -12,7 +12,7 @@
         console.warn('[Particles] No particle system available');
         return;
       }
-      console.log('[Particles] Module initialized');
+
 
       scene.events.on('alien:killed', function (hit) {
         var tierColors = [
@@ -78,20 +78,28 @@
 
       scene.events.on('boss:dead', function () {
         if (!p) return;
-        // Massive explosion
-        for (var i = 0; i < 5; i++) {
-          setTimeout((function (idx) {
-            if (p) {
+        // Massive explosion — staggered bursts using scene timer instead of setTimeout
+        var bursts = [{}, {}, {}, {}, {}];
+        var timer = 0;
+        var done = 0;
+        var update = function(dt) {
+          timer += dt;
+          for (var i = 0; i < 5; i++) {
+            if (!bursts[i].done && timer >= i * 0.18) {
+              bursts[i].done = true;
               p.burst(
                 engine.config.width / 2 + (Math.random() - 0.5) * 120,
                 80 + (Math.random() - 0.5) * 50,
-                { count: 25, speed: [80, 220], life: [0.4, 0.9], size: [3, 8],
+                { count: 20, speed: [80, 220], life: [0.4, 0.9], size: [3, 8],
                   colors: ['#ff2277', '#ff4488', '#ff66aa', '#ffbbcc', '#ffffff'],
                   gravity: 200, fadeOut: true, shrink: true }
               );
+              done++;
             }
-          }).bind(null, i), i * 180);
-        }
+          }
+          if (done < 5) scene._bossExplosionUpdate = update;
+        };
+        scene._bossExplosionUpdate = update;
       });
 
       // Player hurt (lose a life)
@@ -110,20 +118,28 @@
 
       // Player died (game over)
       scene.events.on('player:died', function (hit) {
-        // Big heartbreak explosion
-        for (var i = 0; i < 3; i++) {
-          setTimeout((function (idx) {
-            if (p) {
+        // Big heartbreak explosion — staggered bursts using scene timer
+        var bursts = [{}, {}, {}];
+        var timer = 0;
+        var done = 0;
+        var update = function(dt) {
+          timer += dt;
+          for (var i = 0; i < 3; i++) {
+            if (!bursts[i].done && timer >= i * 0.15) {
+              bursts[i].done = true;
               p.burst(
                 hit.x + (Math.random() - 0.5) * 20,
                 hit.y + (Math.random() - 0.5) * 10,
-                { count: 30, speed: [60, 200], life: [0.5, 1.2], size: [3, 9],
+                { count: 25, speed: [60, 200], life: [0.5, 1.2], size: [3, 9],
                   colors: ['#ff8ec4', '#ff4488', '#ff2277', '#ff69b4', '#ffffff', '#ff0044'],
                   gravity: 200, fadeOut: true, shrink: true }
               );
+              done++;
             }
-          }).bind(null, i), i * 150);
-        }
+          }
+          if (done < 3) scene._playerDeathExplosionUpdate = update;
+        };
+        scene._playerDeathExplosionUpdate = update;
       });
 
       // Bunker destroyed
@@ -139,6 +155,12 @@
           shrink: true,
         });
       });
+    },
+
+    update(dt, scene, engine) {
+      var step = scene.scaledDt || dt;
+      if (scene._bossExplosionUpdate) scene._bossExplosionUpdate(step);
+      if (scene._playerDeathExplosionUpdate) scene._playerDeathExplosionUpdate(step);
     },
   });
 })(window.GF);
