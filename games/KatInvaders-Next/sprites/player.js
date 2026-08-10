@@ -281,6 +281,136 @@
     r(ctx, sparkleX, sparkleY, 2, 2, '#ffffff');
   }
 
+  function drawPUSpreadShot(ctx) {
+    // Spread Shot - rainbow cone icon
+    ctx.shadowColor = '#00ccff';
+    ctx.shadowBlur = 8;
+    
+    var coneWidth = Math.sin(Date.now() / 150) * 4 + 10;
+    
+    r(ctx, 10, 18, 2, 2, '#00ccff');
+    r(ctx, 6, 14, 8, 4, '#00ccff');
+    r(ctx, 2, 10, 16, 4, '#00ccff');
+    r(ctx, 0, 6, 20, 4, '#00ccff');
+    r(ctx, 4, 2, 12, 4, '#00ccff');
+    
+    // Rainbow gradient effect
+    var rainbowFrame = Math.floor(Date.now() / 100) % 4;
+    if (rainbowFrame === 0) {
+      ctx.fillStyle = '#00ccff';
+    } else if (rainbowFrame === 1) {
+      ctx.fillStyle = '#00ffcc';
+    } else if (rainbowFrame === 2) {
+      ctx.fillStyle = '#ccff00';
+    } else {
+      ctx.fillStyle = '#ffcc00';
+    }
+    r(ctx, 8, 6, 4, 10, ctx.fillStyle);
+    
+    ctx.shadowBlur = 0;
+  }
+
+  function drawPUSlowMo(ctx) {
+    // Slow Mo - turtle/minute icon
+    ctx.shadowColor = '#ccffff';
+    ctx.shadowBlur = 8;
+    
+    var pulse = Math.sin(Date.now() / 180) * 2;
+    
+    // Clock hands
+    var hourAngle = (Date.now() / 10000) % (Math.PI * 2);
+    var minuteAngle = (Date.now() / 1000) % (Math.PI * 2);
+    
+    var cx = 10, cy = 10;
+    var radius = 6;
+    
+    ctx.save();
+    ctx.translate(cx, cy);
+    
+    // Outer circle
+    ctx.strokeStyle = '#ccffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Hour hand
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(hourAngle) * 3, -Math.sin(hourAngle) * 3);
+    ctx.stroke();
+    
+    // Minute hand
+    ctx.strokeStyle = '#aaffff';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(minuteAngle) * 4.5, -Math.sin(minuteAngle) * 4.5);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    // Turtle shell detail
+    ctx.fillStyle = '#ccffff';
+    r(ctx, 8, 12, 4, 4, '#ccffff');
+    ctx.fillStyle = '#aaffff';
+    r(ctx, 7, 13, 6, 2, '#aaffff');
+    
+    ctx.shadowBlur = 0;
+  }
+
+  function drawPUTripleShot(ctx) {
+    // Triple Shot - three lasers
+    ctx.shadowColor = '#ff00cc';
+    ctx.shadowBlur = 8;
+    
+    var offset = Math.sin(Date.now() / 130) * 2;
+    
+    r(ctx, 2 + offset, 5, 4, 11, '#ff00cc');
+    r(ctx, 10, 5, 4, 11, '#ff00cc');
+    r(ctx, 18 - offset, 5, 4, 11, '#ff00cc');
+    r(ctx, 3 + offset, 3, 2, 3, '#ff00cc');
+    r(ctx, 11, 3, 2, 3, '#ff00cc');
+    r(ctx, 17 - offset, 3, 2, 3, '#ff00cc');
+    r(ctx, 3 + offset, 6, 2, 7, '#ff88ff');
+    r(ctx, 11, 6, 2, 7, '#ff88ff');
+    r(ctx, 17 - offset, 6, 2, 7, '#ff88ff');
+    
+    ctx.shadowBlur = 0;
+  }
+
+  function drawPUInvincible(ctx) {
+    // Invincible - sparkle/magic icon
+    ctx.shadowColor = '#ffff00';
+    ctx.shadowBlur = 10;
+    
+    var sparkleCount = 8;
+    for (var i = 0; i < sparkleCount; i++) {
+      var angle = (Date.now() / 500) + (i * (Math.PI * 2) / sparkleCount);
+      var radius = Math.sin(Date.now() / 300 + i) * 6 + 10;
+      var sx = 10 + Math.cos(angle) * radius;
+      var sy = 10 + Math.sin(angle) * radius;
+      
+      var size = Math.sin(Date.now() / 200 + i) * 3 + 3;
+      r(ctx, sx - size/2, sy - size/2, size, size, '#ffff00');
+    }
+    
+    // Inner core
+    ctx.shadowBlur = 0;
+    var coreSize = Math.sin(Date.now() / 250) * 4 + 6;
+    r(ctx, 10 - coreSize/2, 10 - coreSize/2, coreSize, coreSize, '#ffffff');
+    r(ctx, 10 - coreSize/3, 10 - coreSize/3, coreSize/1.5, coreSize/1.5, '#ffff00');
+    
+    // Outer aura
+    var auraSize = 14;
+    var auraFrame = Math.sin(Date.now() / 200) * 2;
+    ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(10, 10, auraSize + auraFrame, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   // ── Register sprites synchronously so they're ready before GF:ready fires ──
 
   if (!GF.spriteRegistrations) GF.spriteRegistrations = {};
@@ -414,6 +544,50 @@
         idle: { fps: 6, loop: true, frames: [
           ctx => { drawPowerupBg(ctx, '#44ff88', 0); drawPUExtraLife(ctx); },
           ctx => { drawPowerupBg(ctx, '#77ffaa', 1); drawPUExtraLife(ctx); },
+        ]},
+      },
+    },
+
+    powerupSpreadShot: {
+      frameWidth: 20, frameHeight: 20,
+      originX: 10, originY: 10,
+      animations: {
+        idle: { fps: 5, loop: true, frames: [
+          ctx => { drawPowerupBg(ctx, '#00ccff', 0); drawPUSpreadShot(ctx); },
+          ctx => { drawPowerupBg(ctx, '#00ffcc', 1); drawPUSpreadShot(ctx); },
+        ]},
+      },
+    },
+
+    powerupSlowMo: {
+      frameWidth: 20, frameHeight: 20,
+      originX: 10, originY: 10,
+      animations: {
+        idle: { fps: 6, loop: true, frames: [
+          ctx => { drawPowerupBg(ctx, '#ccffff', 0); drawPUSlowMo(ctx); },
+          ctx => { drawPowerupBg(ctx, '#e0ffff', 1); drawPUSlowMo(ctx); },
+        ]},
+      },
+    },
+
+    powerupTripleShot: {
+      frameWidth: 20, frameHeight: 20,
+      originX: 10, originY: 10,
+      animations: {
+        idle: { fps: 5, loop: true, frames: [
+          ctx => { drawPowerupBg(ctx, '#ff00cc', 0); drawPUTripleShot(ctx); },
+          ctx => { drawPowerupBg(ctx, '#ff44ee', 1); drawPUTripleShot(ctx); },
+        ]},
+      },
+    },
+
+    powerupInvincible: {
+      frameWidth: 20, frameHeight: 20,
+      originX: 10, originY: 10,
+      animations: {
+        idle: { fps: 6, loop: true, frames: [
+          ctx => { drawPowerupBg(ctx, '#ffff00', 0); drawPUInvincible(ctx); },
+          ctx => { drawPowerupBg(ctx, '#ffff44', 1); drawPUInvincible(ctx); },
         ]},
       },
     },

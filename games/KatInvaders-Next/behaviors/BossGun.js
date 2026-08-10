@@ -4,7 +4,8 @@
   GF.behavior('BossGun', (cfg) => ({
     onAdd(e) {
       e.data.timer = 0;
-      e.data.interval = 1 / (cfg.fireRate || 0.03);
+      // Use boss-specific fire rate if available
+      e.data.interval = 1 / (e.data.fireRate || cfg.fireRate || 0.03);
     },
     update(dt, e, world) {
       var dt = (world.scene && world.scene.scaledDt) || dt;
@@ -14,7 +15,7 @@
         var shot = world.spawn('bossShot', 0, e.bottom);
         if (!shot) return;
         shot.x = e.centerX - shot.w / 2;
-        shot.vy = cfg.bulletSpeed || 180;
+        shot.vy = e.data.bulletSpeed || cfg.bulletSpeed || 180;
       }
     },
   }));

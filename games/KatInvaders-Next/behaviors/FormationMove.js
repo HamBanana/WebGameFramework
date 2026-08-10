@@ -10,6 +10,10 @@
     },
     update(dt, e, world) {
       var dt = (world.scene && world.scene.scaledDt) || dt;
+      var gameCfg = GF.GAME_CONFIG || {};
+      var aliensCfg = gameCfg.aliens || {};
+      
+      // Normal formation movement
       var dir = world.data.dir || 1;
       var speed = world.data.speed || 30;
       e.x += dir * speed * dt;

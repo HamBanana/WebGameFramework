@@ -79,5 +79,93 @@
       
       this.cooldown = cfg.cooldown != null ? cfg.cooldown : 5;
     },
+    
+    applyPowerup(scene, player, powerupType) {
+      var durations = (GF.GAME_CONFIG && GF.GAME_CONFIG.powerups && GF.GAME_CONFIG.powerups.durations) || {};
+      var duration = durations[powerupType] || 10;
+      
+      switch (powerupType) {
+        case 'rapidFire':
+          player.data.fireRate = (player.data.baseFireRate || 0.22) * 0.5;
+          setTimeout(function() {
+            player.data.fireRate = player.data.baseFireRate || 0.22;
+          }, duration * 1000);
+          break;
+        case 'doubleShot':
+          player.data.weaponMode = 'double';
+          setTimeout(function() {
+            player.data.weaponMode = 'single';
+          }, duration * 1000);
+          break;
+        case 'tripleShot':
+          player.data.weaponMode = 'triple';
+          setTimeout(function() {
+            player.data.weaponMode = 'single';
+          }, duration * 1000);
+          break;
+        case 'spreadShot':
+          player.data.weaponMode = 'spread';
+          setTimeout(function() {
+            player.data.weaponMode = 'single';
+          }, duration * 1000);
+          break;
+        case 'shield':
+          player.data.hasShield = true;
+          setTimeout(function() {
+            player.data.hasShield = false;
+          }, duration * 1000);
+          break;
+        case 'megaLaser':
+          player.data.weaponMode = 'mega';
+          setTimeout(function() {
+            player.data.weaponMode = 'single';
+          }, duration * 1000);
+          break;
+        case 'slowMo':
+          var originalDt = scene.scaledDt || 1;
+          scene.scaledDt = 0.5;
+          setTimeout(function() {
+            scene.scaledDt = originalDt;
+          }, duration * 1000);
+          break;
+        case 'invincible':
+          player.data.invincible = true;
+          setTimeout(function() {
+            player.data.invincible = false;
+          }, duration * 1000);
+          break;
+        case 'smartBomb':
+          // Kill all aliens and boss minions
+          var aliens = scene.world.byTag('alien');
+          var minions = scene.world.byTag('bossMinion');
+          var shots = scene.world.byTag('enemyShot');
+          for (var i = 0; i < aliens.length; i++) {
+            aliens[i].destroy();
+          }
+          for (var j = 0; j < minions.length; j++) {
+            minions[j].destroy();
+          }
+          for (var k = 0; k < shots.length; k++) {
+            shots[k].destroy();
+          }
+          // Explosion effect
+          var particles = GF.game.particles;
+          if (particles) {
+            particles.burst(player.x + player.w / 2, player.y, {
+              count: 50,
+              colors: ['#ffcc00', '#ff6600', '#ffffff'],
+              speed: [100, 300],
+              life: [0.5, 1.5],
+              size: [4, 10]
+            });
+          }
+          break;
+        case 'extraLife':
+          if (player.data.lives !== undefined) {
+            player.data.lives++;
+          }
+          break;
+      }
+    }
   });
 })(window.GF);

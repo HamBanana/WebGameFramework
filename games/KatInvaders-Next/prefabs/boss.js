@@ -1,10 +1,34 @@
-// prefabs/boss.js — mothership and minions.
+// prefabs/boss.js — bosses and minions.
 (function (GF) {
   'use strict';
   GF.prefab('bossMothership', {
     tags: ['boss'], w: 96, h: 56, sprite: 'bossMothership',
-    data: { hp: 80, maxHp: 80 },
+    data: { hp: 100, maxHp: 100 },
     behaviors: ['BossMove', 'BossGun'],
+  });
+
+  GF.prefab('bossStarDestroyer', {
+    tags: ['boss'], w: 100, h: 60, sprite: 'bossStarDestroyer',
+    data: { hp: 150, maxHp: 150 },
+    behaviors: ['BossHover', 'BossGun'],
+  });
+
+  GF.prefab('bossCrimsonReaper', {
+    tags: ['boss'], w: 90, h: 50, sprite: 'bossCrimsonReaper',
+    data: { hp: 180, maxHp: 180 },
+    behaviors: ['BossAggressive', 'BossGun'],
+  });
+
+  GF.prefab('bossVoidHydra', {
+    tags: ['boss'], w: 95, h: 55, sprite: 'bossVoidHydra',
+    data: { hp: 200, maxHp: 200 },
+    behaviors: ['BossCircle', 'BossGun'],
+  });
+
+  GF.prefab('bossGalaxyDevourer', {
+    tags: ['boss'], w: 110, h: 65, sprite: 'bossGalaxyDevourer',
+    data: { hp: 250, maxHp: 250 },
+    behaviors: ['BossComplex', 'BossGun'],
   });
 
   GF.prefab('bossMinion', {

@@ -65,19 +65,20 @@
         return;
       }
 
-      // Spawn minions periodically
+      // Spawn minions periodically - only one at a time, every 5 seconds
       var cfg = GF.GAME_CONFIG || {};
       var bossCfg = cfg.boss || {};
       this.minionTimer = (this.minionTimer || 0) + dt;
-      if (this.minionTimer >= (bossCfg.spawnMinionInterval || 8)) {
+      var spawnInterval = bossCfg.spawnMinionInterval || 5;
+      
+      if (this.minionTimer >= spawnInterval) {
         this.minionTimer = 0;
         var boss = scene.world.first('boss');
         if (boss) {
-          for (var i = 0; i < (bossCfg.minionCount || 3); i++) {
-            var minion = scene.world.spawn('bossMinion', boss.x + i * 30, boss.bottom + 10);
-            if (minion) {
-              minion.data.target = 'player';
-            }
+          // Spawn only one minion at a time
+          var minion = scene.world.spawn('bossMinion', boss.x + 15, boss.bottom + 10);
+          if (minion) {
+            // Minion will capture player position on add
           }
         }
       }
@@ -86,13 +87,41 @@
     spawnBoss(scene, engine) {
       var cfg = GF.GAME_CONFIG || {};
       var bossCfg = cfg.boss || {};
-      var boss = scene.world.spawn('bossMothership',
+      var bossTypes = bossCfg.bossTypes || [];
+      
+      // Select boss type based on level (cycling through types)
+      var level = scene.state.level || 1;
+      var typeIndex = (level / bossCfg.bossInterval - 1) % bossTypes.length;
+      var selectedType = bossTypes[Math.floor(typeIndex)];
+      
+      // Map behavior types to actual behaviors
+      var behavior = selectedType.behavior;
+      var behaviors = [];
+      
+      if (behavior === 'patrol') {
+        behaviors = ['BossMove', 'BossGun'];
+      } else if (behavior === 'hover') {
+        behaviors = ['BossHover', 'BossGun'];
+      } else if (behavior === 'aggressive') {
+        behaviors = ['BossAggressive', 'BossGun'];
+      } else if (behavior === 'circle') {
+        behaviors = ['BossCircle', 'BossGun'];
+      } else if (behavior === 'complex') {
+        behaviors = ['BossComplex', 'BossGun'];
+      } else {
+        behaviors = ['BossMove', 'BossGun'];
+      }
+      
+      var boss = scene.world.spawn(selectedType.sprite,
         (engine.config.width / 2) - 48,
         50
       );
       if (boss) {
-        boss.data.hp = bossCfg.hp || 80;
-        boss.data.maxHp = bossCfg.hp || 80;
+        boss.data.hp = selectedType.hp || bossCfg.hp;
+        boss.data.maxHp = selectedType.hp || bossCfg.hp;
+        boss.data.fireRate = selectedType.fireRate || bossCfg.fireRate;
+        boss.data.speed = selectedType.speed || bossCfg.speed;
+        boss.data.behavior = behavior;
       }
     },
 

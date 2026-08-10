@@ -5,15 +5,16 @@
     onAdd(e) {
       e.data.fireTimer = 0;
       e.data.rapidFire = false;
-      e.data.doubleShot = false;
-      e.data.megaLaser = false;
+      e.data.weaponMode = 'single';
+      e.data.baseFireRate = cfg.fireRate || 0.28;
     },
     update(dt, e, world) {
       var dt = (world.scene && world.scene.scaledDt) || dt;
       var inp = world.engine && world.engine.input;
       if (!inp || !inp.isDown('fire')) return;
 
-      var rate = e.data.rapidFire ? 0.10 : (cfg.fireRate || 0.28);
+      // Determine fire rate based on rapid fire status
+      var rate = e.data.rapidFire ? 0.10 : e.data.baseFireRate;
       e.data.fireTimer += dt;
       if (e.data.fireTimer < rate) return;
       e.data.fireTimer = 0;
@@ -22,7 +23,9 @@
       var mx = e.centerX;
       var speed = -(cfg.bulletSpeed || 480);
 
-      if (e.data.megaLaser) {
+      var weaponMode = e.data.weaponMode || 'single';
+      
+      if (weaponMode === 'mega') {
         // Mega laser: wide beams
         for (var i = -1; i <= 1; i++) {
           var shot = world.spawn('megaLaser', 0, my);
@@ -30,7 +33,25 @@
           shot.x = mx - shot.w / 2 + i * 10;
           shot.vy = speed;
         }
-      } else if (e.data.doubleShot) {
+      } else if (weaponMode === 'triple') {
+        // Triple shot: three parallel beams
+        for (var j = -1; j <= 1; j++) {
+          var shot = world.spawn('playerBullet', 0, my);
+          if (!shot) continue;
+          shot.x = mx - shot.w / 2 + j * 10;
+          shot.vy = speed;
+        }
+      } else if (weaponMode === 'spread') {
+        // Spread shot: cone of bullets
+        for (var k = -2; k <= 2; k++) {
+          var shot = world.spawn('playerBullet', 0, my);
+          if (!shot) continue;
+          shot.x = mx - shot.w / 2 + k * 8;
+          shot.vy = speed;
+          // Add slight horizontal movement for spread
+          shot.vx = k * 50;
+        }
+      } else if (weaponMode === 'double') {
         // Double shot: two parallel beams
         for (var j = -1; j <= 1; j += 2) {
           var shot2 = world.spawn('playerBullet', 0, my);

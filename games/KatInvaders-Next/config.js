@@ -204,14 +204,16 @@
     "startY": 60,
     "spacingX": 38,
     "spacingY": 34,
-    "initialSpeed": 25,
-    "maxSpeed": 120,
-    "speedIncrease": 1.8,
+    "initialSpeed": 18,
+    "maxSpeed": 80,
+    "speedIncrease": 1.2,
     "dropAmount": 18,
     "fireRate": 0.0025,
     "bulletSpeed": 180,
     "bulletWidth": 5,
     "bulletHeight": 12,
+    "diveSpeed": 180,
+    "diveChance": 0.01,
     "points": [
       30,
       25,
@@ -253,47 +255,90 @@
     "bulletSpeed": 200,
     "bulletWidth": 9,
     "bulletHeight": 14,
-    "spawnMinionInterval": 6,
-    "minionCount": 4,
-    "warningDuration": 3.5
+    "spawnMinionInterval": 5,
+    "minionCount": 1,
+    "warningDuration": 3.5,
+    "bossTypes": [
+      {
+        "name": "Mothership",
+        "hp": 100,
+        "speed": 50,
+        "fireRate": 0.035,
+        "sprite": "bossMothership",
+        "behavior": "patrol"
+      },
+      {
+        "name": "Star Destroyer",
+        "hp": 150,
+        "speed": 35,
+        "fireRate": 0.045,
+        "sprite": "bossStarDestroyer",
+        "behavior": "hover"
+      },
+      {
+        "name": "Crimson Reaper",
+        "hp": 180,
+        "speed": 65,
+        "fireRate": 0.05,
+        "sprite": "bossCrimsonReaper",
+        "behavior": "aggressive"
+      },
+      {
+        "name": "Void Hydra",
+        "hp": 200,
+        "speed": 40,
+        "fireRate": 0.04,
+        "sprite": "bossVoidHydra",
+        "behavior": "circle"
+      },
+      {
+        "name": "Galaxy Devourer",
+        "hp": 250,
+        "speed": 45,
+        "fireRate": 0.055,
+        "sprite": "bossGalaxyDevourer",
+        "behavior": "complex"
+      }
+    ]
   },
   "powerups": {
     "dropChance": 0.12,
+    "minionDropChance": 0.25,
     "types": [
       {
         "type": "rapidFire",
         "color": "#ff6633",
         "sprite": "powerupRapidFire",
         "icon": "⚡",
-        "weight": 25
+        "weight": 20
       },
       {
         "type": "doubleShot",
         "color": "#ffcc00",
         "sprite": "powerupDoubleShot",
         "icon": "⬆⬆",
-        "weight": 25
+        "weight": 20
       },
       {
         "type": "shield",
         "color": "#4488ff",
         "sprite": "powerupShield",
         "icon": "🛡",
-        "weight": 20
+        "weight": 15
       },
       {
         "type": "megaLaser",
         "color": "#aa44ff",
         "sprite": "powerupMegaLaser",
         "icon": "★",
-        "weight": 15
+        "weight": 10
       },
       {
         "type": "smartBomb",
         "color": "#ff2266",
         "sprite": "powerupSmartBomb",
         "icon": "💣",
-        "weight": 10
+        "weight": 8
       },
       {
         "type": "extraLife",
@@ -301,6 +346,34 @@
         "sprite": "powerupExtraLife",
         "icon": "♥",
         "weight": 5
+      },
+      {
+        "type": "spreadShot",
+        "color": "#00ccff",
+        "sprite": "powerupSpreadShot",
+        "icon": "🌈",
+        "weight": 12
+      },
+      {
+        "type": "slowMo",
+        "color": "#ccffff",
+        "sprite": "powerupSlowMo",
+        "icon": "🐢",
+        "weight": 8
+      },
+      {
+        "type": "tripleShot",
+        "color": "#ff00cc",
+        "sprite": "powerupTripleShot",
+        "icon": "⬆⬆⬆",
+        "weight": 10
+      },
+      {
+        "type": "invincible",
+        "color": "#ffff00",
+        "sprite": "powerupInvincible",
+        "icon": "✨",
+        "weight": 7
       }
     ],
     "durations": {
@@ -309,7 +382,11 @@
       "shield": 12,
       "megaLaser": 8,
       "smartBomb": null,
-      "extraLife": null
+      "extraLife": null,
+      "spreadShot": 8,
+      "slowMo": 6,
+      "tripleShot": 8,
+      "invincible": 5
     }
   },
   "combo": {
