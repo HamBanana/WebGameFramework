@@ -453,6 +453,7 @@
           type: 'wall',
           seen: false,
           visited: false,
+          visible: false,
         };
       }
     }
@@ -477,7 +478,7 @@
       // Carve out the room
       for (let ry = roomY; ry < roomY + roomHeight; ry++) {
         for (let rx = roomX; rx < roomX + roomWidth; rx++) {
-          map[ry][rx] = { type: 'floor', seen: false, visited: false };
+          map[ry][rx] = { type: 'floor', seen: false, visited: false, visible: false };
         }
       }
 
@@ -499,14 +500,14 @@
       const startX = Math.min(prevCenterX, currCenterX);
       const endX = Math.max(prevCenterX, currCenterX);
       for (let x = startX; x <= endX; x++) {
-        map[prevCenterY][x] = { type: 'floor', seen: false, visited: false };
+        map[prevCenterY][x] = { type: 'floor', seen: false, visited: false, visible: false };
       }
 
       // Vertical corridor
       const startY = Math.min(prevCenterY, currCenterY);
       const endY = Math.max(prevCenterY, currCenterY);
       for (let y = startY; y <= endY; y++) {
-        map[y][currCenterX] = { type: 'floor', seen: false, visited: false };
+        map[y][currCenterX] = { type: 'floor', seen: false, visited: false, visible: false };
       }
     }
 
@@ -520,7 +521,7 @@
       // Replace the room with a boss room
       for (let ry = bossRoom.y; ry < bossRoom.y + bossRoom.height; ry++) {
         for (let rx = bossRoom.x; rx < bossRoom.x + bossRoom.width; rx++) {
-          map[ry][rx] = { type: 'boss_floor', seen: false, visited: false };
+          map[ry][rx] = { type: 'boss_floor', seen: false, visited: false, visible: false };
         }
       }
     }
@@ -1056,17 +1057,76 @@
 
     updateVision() {
       const player = State.player;
+      if (!player || !State.map) return;
       
+      // Clear current visibility flags, keep explored 'seen'
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        for (let x = 0; x < MAP_WIDTH; x++) {
+          State.map[y][x].visible = false;
+        }
+      }
+
       // Update visited status
       State.map[player.y][player.x].visited = true;
       State.map[player.y][player.x].seen = true;
+      State.map[player.y][player.x].visible = true;
 
-      // Update nearby tiles (vision radius)
-      const VISION_RADIUS = 4;
-      for (let y = Math.max(0, player.y - VISION_RADIUS); y <= Math.min(MAP_HEIGHT - 1, player.y + VISION_RADIUS); y++) {
-        for (let x = Math.max(0, player.x - VISION_RADIUS); x <= Math.min(MAP_WIDTH - 1, player.x + VISION_RADIUS); x++) {
-          State.map[y][x].seen = true;
-          State.map[y][x].visited = true;
+      // Raycasting line of sight with Bresenham
+      const VISION_RADIUS = 9;
+      const px = player.x;
+      const py = player.y;
+
+      const inBounds = (x, y) => x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
+      const revealTile = (x, y) => {
+        if (!inBounds(x, y)) return true;
+        State.map[y][x].seen = true;
+        State.map[y][x].visited = true;
+        State.map[y][x].visible = true;
+        return State.map[y][x].type !== 'wall';
+      };
+
+      // Cast rays to every tile on the perimeter of the visibility radius
+      for (let dy = -VISION_RADIUS; dy <= VISION_RADIUS; dy++) {
+        for (let dx = -VISION_RADIUS; dx <= VISION_RADIUS; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const distSq = dx * dx + dy * dy;
+          if (distSq > VISION_RADIUS * VISION_RADIUS) continue;
+          if (distSq < (VISION_RADIUS - 1) * (VISION_RADIUS - 1)) continue;
+          
+          const tx = px + dx;
+          const ty = py + dy;
+          if (!inBounds(tx, ty)) continue;
+
+          // Generalized Bresenham line algorithm
+          let x0 = px;
+          let y0 = py;
+          const x1 = tx;
+          const y1 = ty;
+          const dxAbs = Math.abs(x1 - x0);
+          const dyAbs = Math.abs(y1 - y0);
+          const sx = x1 > x0 ? 1 : -1;
+          const sy = y1 > y0 ? 1 : -1;
+          let err = dxAbs - dyAbs;
+
+          while (true) {
+            // Skip player tile (already revealed)
+            if (!(x0 === px && y0 === py)) {
+              const canContinue = revealTile(x0, y0);
+              if (!canContinue) break; // Wall blocks vision
+            }
+            if (x0 === x1 && y0 === y1) break;
+            
+            const e2 = 2 * err;
+            if (e2 > -dyAbs) {
+              err -= dyAbs;
+              x0 += sx;
+            }
+            if (e2 < dxAbs) {
+              err += dxAbs;
+              y0 += sy;
+            }
+            if (!inBounds(x0, y0)) break;
+          }
         }
       }
     }
@@ -1097,14 +1157,26 @@
           const tile = State.map[y][x];
           if (tile.seen) {
             let color;
-            if (tile.type === 'wall') {
-              color = '#444';
-            } else if (tile.type === 'floor') {
-              color = '#222';
-            } else if (tile.type === 'boss_floor') {
-              color = '#522';
+            if (tile.visible) {
+              if (tile.type === 'wall') {
+                color = '#666';
+              } else if (tile.type === 'floor') {
+                color = '#444';
+              } else if (tile.type === 'boss_floor') {
+                color = '#733';
+              } else {
+                color = '#222';
+              }
             } else {
-              color = '#111';
+              if (tile.type === 'wall') {
+                color = '#444';
+              } else if (tile.type === 'floor') {
+                color = '#222';
+              } else if (tile.type === 'boss_floor') {
+                color = '#522';
+              } else {
+                color = '#111';
+              }
             }
             
             ctx.fillStyle = color;
