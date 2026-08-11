@@ -95,7 +95,7 @@
     }
 
     get hp() {
-      return this._hp || this.maxHp;
+      return this._hp !== undefined ? this._hp : this.maxHp;
     }
 
     set hp(value) {
@@ -275,6 +275,47 @@
     }
   }
 
+  // ── Map Utilities ───────────────────────────────────────────────────────────
+  function isFloorTile(x, y) {
+    if (x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return false;
+    return State.map[y][x].type !== 'wall';
+  }
+
+  function findNearestFloorTile(targetX, targetY, maxRadius = 5) {
+    // Check the target tile first
+    if (isFloorTile(targetX, targetY)) return { x: targetX, y: targetY };
+    
+    // Expand in a spiral to find the nearest floor tile
+    for (let radius = 1; radius <= maxRadius; radius++) {
+      // Check perimeter of square
+      for (let x = targetX - radius; x <= targetX + radius; x++) {
+        for (let y = targetY - radius; y <= targetY + radius; y++) {
+          if (Math.abs(x - targetX) === radius || Math.abs(y - targetY) === radius) {
+            if (isFloorTile(x, y)) {
+              return { x, y };
+            }
+          }
+        }
+      }
+    }
+    
+    // Fallback: scan entire map for any floor tile
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      for (let x = 0; x < MAP_WIDTH; x++) {
+        if (isFloorTile(x, y)) {
+          return { x, y };
+        }
+      }
+    }
+    return { x: targetX, y: targetY }; // Should never reach here
+  }
+
+  function placeInRoomCenter(room) {
+    const cx = room.x + Math.floor(room.width / 2);
+    const cy = room.y + Math.floor(room.height / 2);
+    return findNearestFloorTile(cx, cy, 3);
+  }
+
   // ── Map Generation ──────────────────────────────────────────────────────────
   function generateMap() {
     const map = [];
@@ -450,8 +491,8 @@
     }
 
     setupGame(stairsOverride) {
-      // Initialize player if first floor
-      if (State.floor === 1) {
+      // Initialize player only on very first floor (not when returning via stairs_up)
+      if (!State.player || State.player.x === undefined) {
         State.player = new Player();
         State.npcsJoined = [];
       }
@@ -461,24 +502,60 @@
       State.map = mapData.map;
       const rooms = mapData.rooms;
 
-      // Place player in first room
-      const playerRoom = rooms[0];
-      State.player.x = playerRoom.x + Math.floor(playerRoom.width / 2);
-      State.player.y = playerRoom.y + Math.floor(playerRoom.height / 2);
+      // Place both stairs: stairs_override for returning, and stairs_down for progressing
+      const exitRoom = rooms[rooms.length - 1];
+      const downStairPos = placeInRoomCenter(exitRoom);
 
-      // Place stairs: use override (for returning stairs) or default to exit room
       if (stairsOverride) {
-        State.stairs = stairsOverride;
-      } else {
-        const exitRoom = rooms[rooms.length - 1];
+        // Place the override stairs (up stairs when going down floors, down stairs when going up)
+        const nearestOverride = findNearestFloorTile(stairsOverride.x, stairsOverride.y);
         State.stairs = {
-          x: exitRoom.x + Math.floor(exitRoom.width / 2),
-          y: exitRoom.y + Math.floor(exitRoom.height / 2),
+          x: nearestOverride.x,
+          y: nearestOverride.y,
+          direction: stairsOverride.direction,
+        };
+        State.downStairs = {
+          x: downStairPos.x,
+          y: downStairPos.y,
+        };
+
+        // Spawn player near the override stairs
+        const stairDirections = [
+          { dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+          { dx: 1, dy: 1 }, { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 1 },
+        ];
+        let playerPos = null;
+        for (const dir of stairDirections) {
+          const nx = State.stairs.x + dir.dx;
+          const ny = State.stairs.y + dir.dy;
+          if (isFloorTile(nx, ny)) {
+            playerPos = { x: nx, y: ny };
+            break;
+          }
+        }
+        if (!playerPos) {
+          playerPos = findNearestFloorTile(State.stairs.x + 3, State.stairs.y, 5);
+        }
+        State.player.x = playerPos.x;
+        State.player.y = playerPos.y;
+      } else {
+        // First floor: stairs_down only, no stairs_up needed
+        State.stairs = {
+          x: downStairPos.x,
+          y: downStairPos.y,
           direction: 'down',
         };
+        State.downStairs = null;
+
+        // Place player in first room
+        const playerRoom = rooms[0];
+        const playerPos = placeInRoomCenter(playerRoom);
+        State.player.x = playerPos.x;
+        State.player.y = playerPos.y;
       }
 
-
+      // Initialize vision for the new floor so player's starting area is lit
+      this.updateVision();
 
       // Generate enemies (skip first room where player starts, and keep far from player)
       State.enemies = [];
@@ -501,8 +578,9 @@
         // Skip if player is there
         if (enemyX === State.player.x && enemyY === State.player.y) continue;
 
-        // Skip if stairs are there
+        // Skip if stairs are there (check both stairs_up and stairs_down)
         if (enemyX === State.stairs.x && enemyY === State.stairs.y) continue;
+        if (State.downStairs && enemyX === State.downStairs.x && enemyY === State.downStairs.y) continue;
 
         // Check if an enemy is already there
         if (State.enemies.some(e => e.x === enemyX && e.y === enemyY)) continue;
@@ -518,8 +596,22 @@
       if (State.floor === FLOORS) {
         const bossRoom = rooms[rooms.length - 1];
         const boss = new Enemy('boss', State.floor);
-        boss.x = bossRoom.x + Math.floor(bossRoom.width / 2);
-        boss.y = bossRoom.y + Math.floor(bossRoom.height / 2);
+        let bossPos = placeInRoomCenter(bossRoom);
+        boss.x = bossPos.x;
+        boss.y = bossPos.y;
+        // Ensure boss doesn't overlap with stairs or other enemies
+        let attempts = 0;
+        while (
+          ((boss.x === State.stairs.x && boss.y === State.stairs.y) ||
+           (State.downStairs && boss.x === State.downStairs.x && boss.y === State.downStairs.y)) ||
+          State.enemies.some(e => e.x === boss.x && e.y === boss.y)
+        ) {
+          const altPos = findNearestFloorTile(bossPos.x + 2 + attempts, bossPos.y + attempts, 5);
+          boss.x = altPos.x;
+          boss.y = altPos.y;
+          attempts++;
+          if (attempts > 20) break;
+        }
         State.enemies.push(boss);
       }
 
@@ -530,11 +622,13 @@
         if (rooms.length >= 3) {
           const npcRoomIndex = randomInt(1, rooms.length - 2);
           const npcRoom = rooms[npcRoomIndex];
-          npc.x = npcRoom.x + Math.floor(npcRoom.width / 2);
-          npc.y = npcRoom.y + Math.floor(npcRoom.height / 2);
+          const npcPos = placeInRoomCenter(npcRoom);
+          npc.x = npcPos.x;
+          npc.y = npcPos.y;
         } else {
-          npc.x = 5;
-          npc.y = 5;
+          const fallbackPos = findNearestFloorTile(5, 5, 10);
+          npc.x = fallbackPos.x;
+          npc.y = fallbackPos.y;
         }
         State.npcs = [npc];
       }
@@ -613,12 +707,19 @@
         return; // Don't move into enemies
       }
 
-      // Check stairs
+      // Check stairs_down (to go deeper)
+      if (State.downStairs && newX === State.downStairs.x && newY === State.downStairs.y) {
+        this.nextFloor();
+        return;
+      }
+
+      // Check stairs_up (to go back)
       if (newX === State.stairs.x && newY === State.stairs.y) {
-        if (State.stairs.direction === 'down') {
-          this.nextFloor();
-        } else {
+        if (State.stairs.direction === 'up') {
           this.prevFloor();
+        } else if (State.stairs.direction === 'down' && !State.downStairs) {
+          // Floor 1: only stairs_down, no separate up stairs
+          this.nextFloor();
         }
         return;
       }
@@ -644,30 +745,46 @@
           const dx = Math.sign(player.x - enemy.x);
           const dy = Math.sign(player.y - enemy.y);
 
-          // Try moving horizontally first
-          let newX = enemy.x + dx;
-          let newY = enemy.y;
+          let newX = -1, newY = -1;
 
-          // Check if blocked
-          if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT || 
-              State.map[newY][newX].type === 'wall') {
-            // Try vertically
-            newX = enemy.x;
-            newY = enemy.y + dy;
-            
-            if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT ||
-                State.map[newY][newX].type === 'wall') {
-              return; // Can't move
+          // Try horizontal move first (only if dx is non-zero, meaning player is horizontally offset)
+          if (dx !== 0) {
+            const hX = enemy.x + dx;
+            const hY = enemy.y;
+            if (hX >= 0 && hX < MAP_WIDTH && hY >= 0 && hY < MAP_HEIGHT && 
+                State.map[hY][hX].type !== 'wall') {
+              newX = hX;
+              newY = hY;
             }
           }
 
-          // Check if player is there
+          // If horizontal didn't work or wasn't possible, try vertical move
+          if (newX === -1 && dy !== 0) {
+            const vX = enemy.x;
+            const vY = enemy.y + dy;
+            if (vX >= 0 && vX < MAP_WIDTH && vY >= 0 && vY < MAP_HEIGHT &&
+                State.map[vY][vX].type !== 'wall') {
+              newX = vX;
+              newY = vY;
+            }
+          }
+
+          // Can't move
+          if (newX === -1) return;
+
+          // Check if player is at target position - attack instead of moving into them
           if (newX === player.x && newY === player.y) {
             this.enemyAttack(enemy);
-          } else {
-            enemy.x = newX;
-            enemy.y = newY;
+            return;
           }
+
+          // Prevent enemies overlapping - don't move into cell occupied by another enemy
+          if (State.enemies.some(e => e !== enemy && e.x === newX && e.y === newY)) {
+            return;
+          }
+
+          enemy.x = newX;
+          enemy.y = newY;
         }
       });
     }
@@ -711,11 +828,13 @@
         this.victory();
         return;
       }
-      
-      // Pass stairs override to setupGame so it keeps the 'up' stairs at player position
+
+      // Use the down stairs position (where player went down) for the up stairs on the next floor
+      // On floor 1, State.stairs IS the down stairs; on floors 2+, use State.downStairs
+      const downStairsPos = State.downStairs || State.stairs;
       const upStairs = {
-        x: State.player.x,
-        y: State.player.y,
+        x: downStairsPos.x,
+        y: downStairsPos.y,
         direction: 'up',
       };
       this.setupGame(upStairs);
@@ -725,10 +844,10 @@
       if (State.floor > 1) {
         State.floor--;
 
-        // Pass stairs override to keep the 'down' stairs at player position
+        // Use the up stairs position (where player went up) for the down stairs on the previous floor
         const downStairs = {
-          x: State.player.x,
-          y: State.player.y,
+          x: State.stairs.x,
+          y: State.stairs.y,
           direction: 'down',
         };
         this.setupGame(downStairs);
@@ -818,15 +937,29 @@
         }
       }
 
-      // Render stairs
-      const stairColor = State.stairs.direction === 'down' ? '#66ccff' : '#ffcc66';
-      ctx.fillStyle = stairColor;
-      ctx.fillRect(
-        offsetX + State.stairs.x * TILE_SIZE + 8,
-        offsetY + State.stairs.y * TILE_SIZE + 8,
-        TILE_SIZE - 16,
-        TILE_SIZE - 16
-      );
+      // Render stairs_up (yellow) - returns to previous floor
+      if (State.stairs && State.stairs.direction === 'up' && State.map[State.stairs.y][State.stairs.x].seen) {
+        ctx.fillStyle = '#ffcc66';
+        ctx.fillRect(
+          offsetX + State.stairs.x * TILE_SIZE + 8,
+          offsetY + State.stairs.y * TILE_SIZE + 8,
+          TILE_SIZE - 16,
+          TILE_SIZE - 16
+        );
+      }
+
+      // Render stairs_down (cyan) - goes to next floor
+      // On floors 2+, use State.downStairs; on floor 1, use State.stairs
+      const downStairs = State.downStairs || (State.stairs && State.stairs.direction === 'down' ? State.stairs : null);
+      if (downStairs && State.map[downStairs.y][downStairs.x].seen) {
+        ctx.fillStyle = '#66ccff';
+        ctx.fillRect(
+          offsetX + downStairs.x * TILE_SIZE + 8,
+          offsetY + downStairs.y * TILE_SIZE + 8,
+          TILE_SIZE - 16,
+          TILE_SIZE - 16
+        );
+      }
 
       // Render player
       ctx.fillStyle = '#66ccff';
@@ -881,10 +1014,6 @@
         );
       });
 
-      // Render UI overlay
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(0, 0, width, 80); // Top info area
-      ctx.fillRect(0, height - 120, width, 120); // Bottom log area
     }
 
     victory() {
