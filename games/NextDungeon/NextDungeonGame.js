@@ -11,7 +11,6 @@
     level: document.getElementById('levelDisplay'),
     hp: document.getElementById('hpDisplay'),
     mana: document.getElementById('manaDisplay'),
-    xp: document.getElementById('xpDisplay'),
     xpBar: document.getElementById('xpBar'),
     xpText: document.getElementById('xpText'),
     str: document.getElementById('strDisplay'),
@@ -92,7 +91,23 @@
       this._hp = this.maxHp; // Start with full HP
       this._mana = this.maxMana;
       this.inventory = [];
-      this.equipment = { weapon: null, armor: null, accessory: null };
+      this.equipment = {
+        rightHandWeapon: null,
+        leftHandWeapon: null,
+        rightHandAccessory: null,
+        leftHandAccessory: null,
+        chest: null,
+        legs: null,
+        feet: null,
+        shoulders: null,
+        head: null,
+        knees: null,
+        neck: null,
+        eyes: null,
+        weapon: null,
+        armor: null,
+        accessory: null
+      };
       this.spells = [{ name: 'Fireball', manaCost: 5, damage: 8 }, { name: 'Heal', manaCost: 8, heal: 20 }, { name: 'Shield', manaCost: 6, defenseBoost: 5, duration: 3 }];
       this.shieldTurns = 0;
     }
@@ -124,7 +139,11 @@
     get damage() {
       // Melee damage based on STR + weapon
       const base = 3 + Math.floor(this.stats.STR / 3);
-      const weaponBonus = this.equipment.weapon ? this.equipment.weapon.damageBonus : 0;
+      let weaponBonus = 0;
+      for (const slot in this.equipment) {
+        const item = this.equipment[slot];
+        if (item && item.damageBonus) weaponBonus += item.damageBonus;
+      }
       return base + weaponBonus;
     }
 
@@ -136,7 +155,11 @@
     get defense() {
       // Defense based on DEX and CON + armor + shield
       const base = this.stats.DEX / 2 + this.stats.CON / 3;
-      const armorBonus = this.equipment.armor ? this.equipment.armor.defenseBonus : 0;
+      let armorBonus = 0;
+      for (const slot in this.equipment) {
+        const item = this.equipment[slot];
+        if (item && item.defenseBonus) armorBonus += item.defenseBonus;
+      }
       const shieldBonus = this.shieldTurns > 0 ? 5 : 0;
       return base + armorBonus + shieldBonus;
     }
@@ -202,17 +225,19 @@
         this.hp = Math.min(this.maxHp, this.hp + heal);
         log(`Picked up ${item.name} and healed ${heal} HP!`, 'gain');
       } else if (item.type === 'weapon') {
-        if (!this.equipment.weapon || item.damageBonus > this.equipment.weapon.damageBonus) {
-          this.equipment.weapon = item;
-          log(`Equipped ${item.name}! Damage +${item.damageBonus}`, 'gain');
+        if (!this.equipment.rightHandWeapon || item.damageBonus > this.equipment.rightHandWeapon.damageBonus) {
+          if (this.equipment.rightHandWeapon) this.inventory.push(this.equipment.rightHandWeapon);
+          this.equipment.rightHandWeapon = item;
+          log(`Equipped ${item.name} to Right hand! Damage +${item.damageBonus}`, 'gain');
         } else {
           this.inventory.push(item);
           log(`Picked up ${item.name} (added to inventory)`, 'info');
         }
       } else if (item.type === 'armor') {
-        if (!this.equipment.armor || item.defenseBonus > this.equipment.armor.defenseBonus) {
-          this.equipment.armor = item;
-          log(`Equipped ${item.name}! Defense +${item.defenseBonus}`, 'gain');
+        if (!this.equipment.chest || item.defenseBonus > this.equipment.chest.defenseBonus) {
+          if (this.equipment.chest) this.inventory.push(this.equipment.chest);
+          this.equipment.chest = item;
+          log(`Equipped ${item.name} to Chest! Defense +${item.defenseBonus}`, 'gain');
         } else {
           this.inventory.push(item);
           log(`Picked up ${item.name} (added to inventory)`, 'info');
@@ -651,8 +676,9 @@
           y: downStairPos.y,
         };
 
-        // Spawn player near the override stairs
+        // Spawn player near the override stairs, with a small buffer to avoid immediate stair re-entry
         const stairDirections = [
+          { dx: 2, dy: 0 }, { dx: -2, dy: 0 }, { dx: 0, dy: 2 }, { dx: 0, dy: -2 },
           { dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
           { dx: 1, dy: 1 }, { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 1 },
         ];
@@ -666,7 +692,7 @@
           }
         }
         if (!playerPos) {
-          playerPos = findNearestFloorTile(State.stairs.x + 3, State.stairs.y, 5);
+          playerPos = findNearestFloorTile(State.stairs.x + 2, State.stairs.y, 5);
         }
         State.player.x = playerPos.x;
         State.player.y = playerPos.y;
@@ -803,13 +829,6 @@
       if (State.shakeTimer > 0) State.shakeTimer--;
 
       const player = State.player;
-      if (player) {
-        // Mana regen and shield decay
-        player.mana = Math.min(player.maxMana, player.mana + 0.2);
-        if (player.shieldTurns > 0) player.shieldTurns--;
-        // Update mana display
-        if (UI.mana) UI.mana.textContent = `${player.mana}/${player.maxMana}`;
-      }
 
       // Handle input (using KeyboardEvent.code values for turn-based movement)
       const input = engine.input;
@@ -844,6 +863,12 @@
 
       // Turn-based: enemies only move after the player moves
       if (moved) {
+        // Mana regen per turn and shield decay
+        if (player) {
+          player.mana = Math.min(player.maxMana, player.mana + 1);
+          if (player.shieldTurns > 0) player.shieldTurns--;
+          updateUI();
+        }
         this.updateEnemies();
       }
 
@@ -1085,13 +1110,12 @@
         return State.map[y][x].type !== 'wall';
       };
 
-      // Cast rays to every tile on the perimeter of the visibility radius
+      // Cast rays to every tile within the visibility radius
       for (let dy = -VISION_RADIUS; dy <= VISION_RADIUS; dy++) {
         for (let dx = -VISION_RADIUS; dx <= VISION_RADIUS; dx++) {
           if (dx === 0 && dy === 0) continue;
           const distSq = dx * dx + dy * dy;
           if (distSq > VISION_RADIUS * VISION_RADIUS) continue;
-          if (distSq < (VISION_RADIUS - 1) * (VISION_RADIUS - 1)) continue;
           
           const tx = px + dx;
           const ty = py + dy;
@@ -1314,9 +1338,10 @@
 
     UI.floor.textContent = State.floor;
     UI.level.textContent = State.player.level;
-    UI.hp.textContent = `${State.player.hp}/${State.player.maxHp}`;
-    UI.mana.textContent = `${State.player.mana}/${State.player.maxMana}`;
-    UI.xp.textContent = `${State.player.xp}/${State.player.xpReq}`;
+    const hpPercent = Math.max(0, Math.min(100, (State.player.hp / State.player.maxHp) * 100));
+    UI.hp.style.height = `${hpPercent}%`;
+    const manaPercent = Math.max(0, Math.min(100, (State.player.mana / State.player.maxMana) * 100));
+    UI.mana.style.height = `${manaPercent}%`;
     UI.xpText.textContent = `${State.player.xp}/${State.player.xpReq}`;
 
     const xpPercent = (State.player.xp / State.player.xpReq) * 100;
@@ -1410,22 +1435,78 @@
     const screen = document.getElementById('inventoryScreen');
     if (!screen) return;
     if (screen.classList.contains('hidden')) {
-      // Populate inventory
       const player = State.player;
       const equipList = document.getElementById('equipmentList');
       const itemsList = document.getElementById('itemsList');
       equipList.innerHTML = '';
       itemsList.innerHTML = '';
       if (player) {
-        const equip = player.equipment;
-        const equipItems = [];
-        if (equip.weapon) equipItems.push(`Weapon: ${equip.weapon.name} (+${equip.weapon.damageBonus} dmg)`);
-        if (equip.armor) equipItems.push(`Armor: ${equip.armor.name} (+${equip.armor.defenseBonus} def)`);
-        if (equip.accessory) equipItems.push(`Accessory: ${equip.accessory.name}`);
-        if (equipItems.length === 0) equipList.innerHTML = '<div>No equipment</div>';
-        else equipItems.forEach(t => { const d = document.createElement('div'); d.textContent = t; equipList.appendChild(d); });
-        if (player.inventory.length === 0) itemsList.innerHTML = '<div>Empty</div>';
-        else player.inventory.forEach(it => { const d = document.createElement('div'); d.textContent = `${it.name} (${it.type})`; itemsList.appendChild(d); });
+        const slots = [
+          { key: 'rightHandWeapon', label: 'Right hand (Weapon)' },
+          { key: 'leftHandWeapon', label: 'Left hand (Weapon)' },
+          { key: 'rightHandAccessory', label: 'Right hand (Accessory)' },
+          { key: 'leftHandAccessory', label: 'Left hand (Accessory)' },
+          { key: 'chest', label: 'Chest' },
+          { key: 'legs', label: 'Legs' },
+          { key: 'feet', label: 'Feet' },
+          { key: 'shoulders', label: 'Shoulders' },
+          { key: 'head', label: 'Head' },
+          { key: 'knees', label: 'Knees' },
+          { key: 'neck', label: 'Neck (Accessory)' },
+          { key: 'eyes', label: 'Eyes' },
+        ];
+        slots.forEach(s => {
+          const div = document.createElement('div');
+          div.style.padding = '4px';
+          div.style.border = '1px solid #444';
+          div.style.margin = '2px 0';
+          div.style.cursor = 'pointer';
+          const item = player.equipment[s.key];
+          div.textContent = `${s.label}: ${item ? item.name : 'Empty'}`;
+          div.dataset.slot = s.key;
+          div.onclick = () => {
+            if (window._selectedItemIndex !== undefined) {
+              const itemToEquip = player.inventory[window._selectedItemIndex];
+              const prev = player.equipment[s.key];
+              player.inventory.splice(window._selectedItemIndex, 1);
+              if (prev) player.inventory.push(prev);
+              player.equipment[s.key] = itemToEquip;
+              window._selectedItemIndex = undefined;
+              screen.classList.add('hidden');
+              toggleInventory();
+              log(`Equipped ${itemToEquip.name} to ${s.label}`, 'success');
+            } else if (item) {
+              // Unequip item back to inventory
+              player.inventory.push(item);
+              player.equipment[s.key] = null;
+              screen.classList.add('hidden');
+              toggleInventory();
+              log(`Unequipped ${item.name} from ${s.label}`, 'info');
+            }
+          };
+          equipList.appendChild(div);
+        });
+
+        if (player.inventory.length === 0) {
+          itemsList.innerHTML = '<div>Empty</div>';
+        } else {
+          player.inventory.forEach((it, idx) => {
+            const d = document.createElement('div');
+            d.style.padding = '4px';
+            d.style.border = '1px solid #444';
+            d.style.margin = '2px 0';
+            d.style.cursor = 'pointer';
+            d.textContent = `${it.name} (${it.type})`;
+            d.dataset.idx = idx;
+            d.onclick = () => {
+              [...itemsList.children].forEach(ch => ch.style.background = '');
+              d.style.background = '#334455';
+              window._selectedItemIndex = idx;
+              log(`Selected ${it.name}`, 'info');
+            };
+            itemsList.appendChild(d);
+          });
+        }
       }
       State.paused = true;
       screen.classList.remove('hidden');
@@ -1438,6 +1519,7 @@
     const screen = document.getElementById('inventoryScreen');
     if (screen) screen.classList.add('hidden');
     State.paused = false;
+    window._selectedItemIndex = undefined;
   };
 
   window.startGame = function() {

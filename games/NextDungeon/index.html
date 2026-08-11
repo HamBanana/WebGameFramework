@@ -55,6 +55,50 @@
       text-shadow: 1px 1px 0 #000;
     }
 
+    .hp-mana-bars {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .vertical-bar {
+      width: 24px;
+      height: 100px;
+      background: #222;
+      border: 2px solid #555;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      transition: height 0.2s ease;
+    }
+
+    .hp-fill {
+      background: linear-gradient(to top, #ff4444, #ff8888);
+    }
+
+    .mana-fill {
+      background: linear-gradient(to top, #4488ff, #88aaff);
+    }
+
+    .bar-label {
+      position: absolute;
+      top: -20px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      font-size: 12px;
+      color: #ffcc66;
+    }
+
     .floor-info {
       position: absolute;
       top: 10px;
@@ -225,19 +269,22 @@
   <div id="gameContainer">
     <canvas id="gameCanvas" width="832" height="640"></canvas>
     <div id="uiLayer">
-      <div class="stat-bar">
+      <div class="hp-mana-bars">
+        <div class="vertical-bar">
+          <div class="bar-label">HP</div>
+          <div id="hpDisplay" class="bar-fill hp-fill" style="height:100%"></div>
+        </div>
+        <div class="vertical-bar">
+          <div class="bar-label">Mana</div>
+          <div id="manaDisplay" class="bar-fill mana-fill" style="height:100%"></div>
+        </div>
+      </div>
+      <div class="left-info" style="position:absolute; top:130px; left:10px; color:#ffcc66; font-size:14px; text-shadow:1px 1px 0 #000;">
         <div>Floor: <span id="floorDisplay">1</span></div>
         <div>Level: <span id="levelDisplay">1</span></div>
-        <div>HP: <span id="hpDisplay">100/100</span></div>
-        <div>Mana: <span id="manaDisplay">0/0</span></div>
-      </div>
-      <div class="floor-info">
-        <div>XP: <span id="xpDisplay">0/10</span></div>
         <div>STR: <span id="strDisplay">10</span></div>
         <div>DEX: <span id="dexDisplay">10</span></div>
         <div>INT: <span id="intDisplay">10</span></div>
-      </div>
-      <div class="stat-bar" style="top: 60px;">
         <div>CON: <span id="conDisplay">10</span></div>
         <div>WIS: <span id="wisDisplay">10</span></div>
         <div>CHA: <span id="chaDisplay">10</span></div>
