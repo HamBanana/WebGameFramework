@@ -21,6 +21,8 @@
       width: 100vw;
       height: 100vh;
       background: #000;
+      padding-right: 250px;
+      box-sizing: border-box;
     }
 
     #gameCanvas {
@@ -40,7 +42,7 @@
       transform: translateX(-50%);
       width: 100%;
       max-width: 832px;
-      height: calc(100vh - 120px);
+      height: 100vh;
       pointer-events: none;
     }
 
@@ -92,13 +94,13 @@
 
     .log-container {
       position: absolute;
-      bottom: 0;
-      left: 0;
+      top: 0;
       right: 0;
-      height: 120px;
+      width: 250px;
+      height: 100vh;
       overflow-y: auto;
       background: rgba(0, 0, 0, 0.9);
-      border-top: 1px solid #444;
+      border-left: 1px solid #444;
       padding: 5px;
       font-size: 12px;
       color: #ccddff;
@@ -227,6 +229,7 @@
         <div>Floor: <span id="floorDisplay">1</span></div>
         <div>Level: <span id="levelDisplay">1</span></div>
         <div>HP: <span id="hpDisplay">100/100</span></div>
+        <div>Mana: <span id="manaDisplay">0/0</span></div>
       </div>
       <div class="floor-info">
         <div>XP: <span id="xpDisplay">0/10</span></div>
@@ -292,6 +295,18 @@
       <p>You have defeated the boss and conquered the dungeon!</p>
       <p>You reached floor <span id="victoryFloor">100</span></p>
       <button class="btn" onclick="startGame()">Play Again</button>
+    </div>
+
+    <!-- Inventory Screen -->
+    <div id="inventoryScreen" class="overlay hidden">
+      <h1 style="color: #ffcc66;">Inventory</h1>
+      <div id="inventoryContent" style="color:#ccddff; max-width:600px; text-align:left;">
+        <p><strong>Equipment:</strong></p>
+        <div id="equipmentList"></div>
+        <p style="margin-top:15px;"><strong>Items:</strong></p>
+        <div id="itemsList"></div>
+      </div>
+      <button class="btn" onclick="closeInventory()" style="margin-top:20px;">Close</button>
     </div>
   </div>
 

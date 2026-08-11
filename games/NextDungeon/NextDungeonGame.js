@@ -10,6 +10,7 @@
     floor: document.getElementById('floorDisplay'),
     level: document.getElementById('levelDisplay'),
     hp: document.getElementById('hpDisplay'),
+    mana: document.getElementById('manaDisplay'),
     xp: document.getElementById('xpDisplay'),
     xpBar: document.getElementById('xpBar'),
     xpText: document.getElementById('xpText'),
@@ -40,6 +41,7 @@
     map: null,
     enemies: [],
     npcs: [],
+    items: [],
     stairs: null,
     input: null,
     gameOver: false,
@@ -88,10 +90,19 @@
       };
       this.pointsToSpend = 0;
       this._hp = this.maxHp; // Start with full HP
+      this._mana = this.maxMana;
+      this.inventory = [];
+      this.equipment = { weapon: null, armor: null, accessory: null };
+      this.spells = [{ name: 'Fireball', manaCost: 5, damage: 8 }, { name: 'Heal', manaCost: 8, heal: 20 }, { name: 'Shield', manaCost: 6, defenseBoost: 5, duration: 3 }];
+      this.shieldTurns = 0;
     }
 
     get maxHp() {
       return 20 + this.stats.CON * 3 + (this.level - 1) * 5;
+    }
+
+    get maxMana() {
+      return 10 + this.stats.INT * 2 + (this.level - 1) * 3;
     }
 
     get hp() {
@@ -102,9 +113,19 @@
       this._hp = Math.max(0, Math.min(value, this.maxHp));
     }
 
+    get mana() {
+      return this._mana !== undefined ? this._mana : this.maxMana;
+    }
+
+    set mana(value) {
+      this._mana = Math.max(0, Math.min(value, this.maxMana));
+    }
+
     get damage() {
-      // Melee damage based on STR
-      return 3 + Math.floor(this.stats.STR / 3);
+      // Melee damage based on STR + weapon
+      const base = 3 + Math.floor(this.stats.STR / 3);
+      const weaponBonus = this.equipment.weapon ? this.equipment.weapon.damageBonus : 0;
+      return base + weaponBonus;
     }
 
     get accuracy() {
@@ -113,8 +134,11 @@
     }
 
     get defense() {
-      // Defense based on DEX and CON
-      return this.stats.DEX / 2 + this.stats.CON / 3;
+      // Defense based on DEX and CON + armor + shield
+      const base = this.stats.DEX / 2 + this.stats.CON / 3;
+      const armorBonus = this.equipment.armor ? this.equipment.armor.defenseBonus : 0;
+      const shieldBonus = this.shieldTurns > 0 ? 5 : 0;
+      return base + armorBonus + shieldBonus;
     }
 
     gainXp(amount) {
@@ -170,6 +194,85 @@
         log(`You missed ${target.name}!`, 'info');
         return false;
       }
+    }
+
+    pickupItem(item) {
+      if (item.type === 'potion') {
+        const heal = item.healAmount;
+        this.hp = Math.min(this.maxHp, this.hp + heal);
+        log(`Picked up ${item.name} and healed ${heal} HP!`, 'gain');
+      } else if (item.type === 'weapon') {
+        if (!this.equipment.weapon || item.damageBonus > this.equipment.weapon.damageBonus) {
+          this.equipment.weapon = item;
+          log(`Equipped ${item.name}! Damage +${item.damageBonus}`, 'gain');
+        } else {
+          this.inventory.push(item);
+          log(`Picked up ${item.name} (added to inventory)`, 'info');
+        }
+      } else if (item.type === 'armor') {
+        if (!this.equipment.armor || item.defenseBonus > this.equipment.armor.defenseBonus) {
+          this.equipment.armor = item;
+          log(`Equipped ${item.name}! Defense +${item.defenseBonus}`, 'gain');
+        } else {
+          this.inventory.push(item);
+          log(`Picked up ${item.name} (added to inventory)`, 'info');
+        }
+      } else if (item.type === 'scroll') {
+        this.mana = Math.min(this.maxMana, this.mana + 10);
+        log(`Picked up ${item.name} and restored mana!`, 'gain');
+      }
+      updateUI();
+    }
+
+    castSpell(index) {
+      const spell = this.spells[index];
+      if (!spell) return;
+      if (this.mana < spell.manaCost) {
+        log(`Not enough mana for ${spell.name}!`, 'info');
+        return;
+      }
+      this.mana -= spell.manaCost;
+      if (spell.name === 'Fireball') {
+        let target = null;
+        let bestDist = Infinity;
+        State.enemies.forEach(e => {
+          const d = dist(this.x, this.y, e.x, e.y);
+          if (d < bestDist && d <= 5) { bestDist = d; target = e; }
+        });
+        if (target) {
+          const dmg = spell.damage + Math.floor(this.stats.INT / 2);
+          target.hp -= dmg;
+          log(`Fireball hits ${target.name} for ${dmg} damage!`, 'success');
+          if (target.isDead()) {
+            log(`${target.name} defeated! +${target.xpValue} XP`, 'success');
+            this.gainXp(target.xpValue);
+            if (Math.random() < 0.5) {
+              const types = ['potion','weapon','armor','scroll'];
+              const type = randomChoice(types);
+              let name = '';
+              if (type === 'potion') name = 'Health Potion';
+              else if (type === 'weapon') name = 'Rusty Dagger';
+              else if (type === 'armor') name = 'Chain Vest';
+              else name = 'Mystic Scroll';
+              const drop = new Item(type, name, State.floor);
+              drop.x = target.x;
+              drop.y = target.y;
+              State.items.push(drop);
+            }
+            State.enemies = State.enemies.filter(e => e !== target);
+          }
+        } else {
+          log(`Fireball fizzles - no target in range!`, 'info');
+        }
+      } else if (spell.name === 'Heal') {
+        const heal = spell.heal + Math.floor(this.stats.WIS / 2);
+        this.hp = Math.min(this.maxHp, this.hp + heal);
+        log(`Heal restores ${heal} HP!`, 'gain');
+      } else if (spell.name === 'Shield') {
+        this.shieldTurns = spell.duration;
+        log(`Shield active for ${spell.duration} turns!`, 'info');
+      }
+      updateUI();
     }
   }
 
@@ -240,6 +343,29 @@
 
     isDead() {
       return this.hp <= 0;
+    }
+  }
+
+  // ── Item Class ──────────────────────────────────────────────────────────────
+  class Item {
+    constructor(type, name, floor) {
+      this.type = type;
+      this.name = name;
+      this.floor = floor;
+      const scale = 1 + (floor - 1) * 0.1;
+      if (type === 'potion') {
+        this.healAmount = Math.floor(20 * scale);
+        this.color = '#ff4444';
+      } else if (type === 'weapon') {
+        this.damageBonus = Math.floor(2 * scale);
+        this.color = '#aaaaaa';
+      } else if (type === 'armor') {
+        this.defenseBonus = Math.floor(1 * scale);
+        this.color = '#4444ff';
+      } else if (type === 'scroll') {
+        this.spellPower = Math.floor(5 * scale);
+        this.color = '#ffaa44';
+      }
     }
   }
 
@@ -468,6 +594,7 @@
       ctx.fillText('A procedurally generated dungeon crawler', W / 2, H / 2 - 20);
       ctx.fillText('Use Arrow Keys or WASD to move', W / 2, H / 2 + 5);
       ctx.fillText('Collect XP to level up and increase stats', W / 2, H / 2 + 25);
+      ctx.fillText('Q/E/R to cast spells, pick up items', W / 2, H / 2 + 45);
 
       ctx.fillStyle = '#66ccff';
       ctx.font = '18px monospace';
@@ -487,6 +614,10 @@
   class MainScene extends GF.Scene {
     init(engine) {
       this.t = 0;
+      engine.input.bind('spell1', 'KeyQ');
+      engine.input.bind('spell2', 'KeyE');
+      engine.input.bind('spell3', 'KeyR');
+      engine.input.bind('inventory', 'KeyI');
       this.setupGame();
     }
 
@@ -633,6 +764,31 @@
         State.npcs = [npc];
       }
 
+      // Place items
+      State.items = [];
+      const itemCount = randomInt(2, 4) + Math.floor(State.floor / 10);
+      const itemTypes = ['potion', 'weapon', 'armor', 'scroll'];
+      for (let i = 0; i < itemCount; i++) {
+        const roomIndex = randomInt(1, rooms.length - 1);
+        const room = rooms[roomIndex];
+        const ix = room.x + randomInt(1, room.width - 2);
+        const iy = room.y + randomInt(1, room.height - 2);
+        if (State.enemies.some(e => e.x === ix && e.y === iy)) continue;
+        if (ix === State.player.x && iy === State.player.y) continue;
+        if (ix === State.stairs.x && iy === State.stairs.y) continue;
+        if (State.downStairs && ix === State.downStairs.x && iy === State.downStairs.y) continue;
+        const type = randomChoice(itemTypes);
+        let name = '';
+        if (type === 'potion') name = 'Health Potion';
+        else if (type === 'weapon') name = 'Iron Sword';
+        else if (type === 'armor') name = 'Leather Armor';
+        else name = 'Fire Scroll';
+        const item = new Item(type, name, State.floor);
+        item.x = ix;
+        item.y = iy;
+        State.items.push(item);
+      }
+
       log(`Entered floor ${State.floor}`, 'info');
       updateUI();
     }
@@ -645,9 +801,31 @@
       // Decrement shake timer
       if (State.shakeTimer > 0) State.shakeTimer--;
 
+      const player = State.player;
+      if (player) {
+        // Mana regen and shield decay
+        player.mana = Math.min(player.maxMana, player.mana + 0.2);
+        if (player.shieldTurns > 0) player.shieldTurns--;
+        // Update mana display
+        if (UI.mana) UI.mana.textContent = `${player.mana}/${player.maxMana}`;
+      }
+
       // Handle input (using KeyboardEvent.code values for turn-based movement)
       const input = engine.input;
       let moved = false;
+
+      if (input.wasPressed('inventory')) {
+        toggleInventory();
+      } else if (input.wasPressed('spell1')) {
+        player.castSpell(0);
+        moved = true;
+      } else if (input.wasPressed('spell2')) {
+        player.castSpell(1);
+        moved = true;
+      } else if (input.wasPressed('spell3')) {
+        player.castSpell(2);
+        moved = true;
+      }
 
       if (input.wasPressed('ArrowUp') || input.wasPressed('KeyW') || input.wasPressed('KeyK')) {
         this.movePlayer(0, -1);
@@ -699,6 +877,20 @@
         if (enemy.isDead()) {
           log(`${enemy.name} defeated! +${enemy.xpValue} XP`, 'success');
           player.gainXp(enemy.xpValue);
+          // Drop item chance
+          if (Math.random() < 0.5) {
+            const types = ['potion','weapon','armor','scroll'];
+            const type = randomChoice(types);
+            let name = '';
+            if (type === 'potion') name = 'Health Potion';
+            else if (type === 'weapon') name = 'Rusty Dagger';
+            else if (type === 'armor') name = 'Chain Vest';
+            else name = 'Mystic Scroll';
+            const drop = new Item(type, name, State.floor);
+            drop.x = enemy.x;
+            drop.y = enemy.y;
+            State.items.push(drop);
+          }
           // Remove enemy
           State.enemies = State.enemies.filter(e => e !== enemy);
           // Check for NPC interaction
@@ -727,6 +919,14 @@
       // Move player
       player.x = newX;
       player.y = newY;
+
+      // Pick up items
+      const itemIndex = State.items.findIndex(it => it.x === newX && it.y === newY);
+      if (itemIndex !== -1) {
+        const item = State.items[itemIndex];
+        player.pickupItem(item);
+        State.items.splice(itemIndex, 1);
+      }
 
       // Update vision
       this.updateVision();
@@ -961,6 +1161,19 @@
         );
       }
 
+      // Render items
+      State.items.forEach(item => {
+        if (State.map[item.y] && State.map[item.y][item.x] && State.map[item.y][item.x].seen) {
+          ctx.fillStyle = item.color;
+          ctx.fillRect(
+            offsetX + item.x * TILE_SIZE + 10,
+            offsetY + item.y * TILE_SIZE + 10,
+            TILE_SIZE - 20,
+            TILE_SIZE - 20
+          );
+        }
+      });
+
       // Render player
       ctx.fillStyle = '#66ccff';
       ctx.fillRect(
@@ -1030,6 +1243,7 @@
     UI.floor.textContent = State.floor;
     UI.level.textContent = State.player.level;
     UI.hp.textContent = `${State.player.hp}/${State.player.maxHp}`;
+    UI.mana.textContent = `${State.player.mana}/${State.player.maxMana}`;
     UI.xp.textContent = `${State.player.xp}/${State.player.xpReq}`;
     UI.xpText.textContent = `${State.player.xp}/${State.player.xpReq}`;
 
@@ -1120,6 +1334,40 @@
     State.paused = false;
   };
 
+  window.toggleInventory = function() {
+    const screen = document.getElementById('inventoryScreen');
+    if (!screen) return;
+    if (screen.classList.contains('hidden')) {
+      // Populate inventory
+      const player = State.player;
+      const equipList = document.getElementById('equipmentList');
+      const itemsList = document.getElementById('itemsList');
+      equipList.innerHTML = '';
+      itemsList.innerHTML = '';
+      if (player) {
+        const equip = player.equipment;
+        const equipItems = [];
+        if (equip.weapon) equipItems.push(`Weapon: ${equip.weapon.name} (+${equip.weapon.damageBonus} dmg)`);
+        if (equip.armor) equipItems.push(`Armor: ${equip.armor.name} (+${equip.armor.defenseBonus} def)`);
+        if (equip.accessory) equipItems.push(`Accessory: ${equip.accessory.name}`);
+        if (equipItems.length === 0) equipList.innerHTML = '<div>No equipment</div>';
+        else equipItems.forEach(t => { const d = document.createElement('div'); d.textContent = t; equipList.appendChild(d); });
+        if (player.inventory.length === 0) itemsList.innerHTML = '<div>Empty</div>';
+        else player.inventory.forEach(it => { const d = document.createElement('div'); d.textContent = `${it.name} (${it.type})`; itemsList.appendChild(d); });
+      }
+      State.paused = true;
+      screen.classList.remove('hidden');
+    } else {
+      closeInventory();
+    }
+  };
+
+  window.closeInventory = function() {
+    const screen = document.getElementById('inventoryScreen');
+    if (screen) screen.classList.add('hidden');
+    State.paused = false;
+  };
+
   window.startGame = function() {
     // Restart from title screen (called by buttons in overlays)
     const game = window.game;
@@ -1138,7 +1386,7 @@
     State.levelUpPending = false;
 
     // Hide all overlays
-    ['gameOverScreen', 'victoryScreen', 'levelUpScreen', 'npcScreen'].forEach(id => {
+    ['gameOverScreen', 'victoryScreen', 'levelUpScreen', 'npcScreen', 'inventoryScreen'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
     });
