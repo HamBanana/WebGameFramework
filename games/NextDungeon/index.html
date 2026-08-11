@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>NextDungeon – WebGameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a1a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 832px;
+      height: 640px;
+      border: 2px solid #4466aa;
+      box-shadow: 0 0 30px rgba(68, 102, 170, 0.4);
+      background: #000;
+    }
+
+    #gameCanvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    #uiLayer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .stat-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #ffcc66;
+      font-size: 14px;
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    .floor-info {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      text-align: right;
+      color: #66ccff;
+      font-size: 14px;
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    .xp-bar-container {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      height: 20px;
+      background: #222;
+      border: 1px solid #555;
+    }
+
+    .xp-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #66cc66, #339933);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .xp-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 12px;
+      color: #fff;
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    .log-container {
+      position: absolute;
+      bottom: 0;
+      left: 10px;
+      right: 10px;
+      height: 100px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.7);
+      border-top: 1px solid #444;
+      padding: 5px;
+      font-size: 12px;
+      color: #ccddff;
+    }
+
+    .log-entry {
+      margin: 2px 0;
+      padding: 2px;
+    }
+
+    .log-entry.danger { color: #ff8866; }
+    .log-entry.success { color: #88ff88; }
+    .log-entry.info { color: #66ccff; }
+    .log-entry.gain { color: #ffff88; }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      pointer-events: auto;
+      z-index: 100;
+    }
+
+    .overlay.hidden { display: none; }
+
+    .overlay h1 {
+      font-size: 48px;
+      color: #ffcc66;
+      text-shadow: 2px 2px 0 #000;
+      margin-bottom: 20px;
+    }
+
+    .overlay p {
+      color: #ccddff;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .btn {
+      background: #4466aa;
+      color: #fff;
+      border: 2px solid #6688cc;
+      padding: 10px 30px;
+      font-size: 18px;
+      font-family: inherit;
+      cursor: pointer;
+      margin: 5px;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: #5577bb;
+      transform: scale(1.05);
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 20px 0;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #112233;
+      padding: 8px;
+      border: 1px solid #334455;
+    }
+
+    .stat-name { color: #66ccff; font-weight: bold; }
+    .stat-value { color: #ffcc66; font-weight: bold; }
+    .stat-plus-btn {
+      background: #338833;
+      border: 1px solid #55aa55;
+      color: #fff;
+      padding: 4px 8px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .stat-plus-btn:hover { background: #44aa44; }
+    .stat-plus-btn:disabled { background: #224422; opacity: 0.5; cursor: not-allowed; }
+
+    .dialog-text {
+      max-width: 600px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .dialog-options {
+      display: flex;
+      gap: 20px;
+      margin-top: 30px;
+    }
+
+    .npc-card {
+      background: #112233;
+      border: 1px solid #446688;
+      padding: 15px;
+      margin: 10px;
+      min-width: 200px;
+      color: #ccddff;
+    }
+
+    .npc-name { font-weight: bold; color: #66ccff; }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="832" height="640"></canvas>
+    <div id="uiLayer">
+      <div class="stat-bar">
+        <div>Floor: <span id="floorDisplay">1</span></div>
+        <div>Level: <span id="levelDisplay">1</span></div>
+        <div>HP: <span id="hpDisplay">100/100</span></div>
+      </div>
+      <div class="floor-info">
+        <div>XP: <span id="xpDisplay">0/10</span></div>
+        <div>STR: <span id="strDisplay">10</span></div>
+        <div>DEX: <span id="dexDisplay">10</span></div>
+        <div>INT: <span id="intDisplay">10</span></div>
+      </div>
+      <div class="stat-bar" style="top: 60px;">
+        <div>CON: <span id="conDisplay">10</span></div>
+        <div>WIS: <span id="wisDisplay">10</span></div>
+        <div>CHA: <span id="chaDisplay">10</span></div>
+      </div>
+      <div class="xp-bar-container">
+        <div class="xp-bar-fill" id="xpBar"></div>
+        <div class="xp-text">XP: <span id="xpText">0/10</span></div>
+      </div>
+      <div class="log-container" id="gameLog"></div>
+    </div>
+
+    <!-- Start Screen is rendered by TitleScene on canvas -->
+
+    <!-- Level Up Screen -->
+    <div id="levelUpScreen" class="overlay hidden">
+      <h1>Level Up!</h1>
+      <p>You've reached level <span id="nextLevelDisplay">2</span></p>
+      <p>Points to spend: <span id="pointsToSpendDisplay" style="color:#ffcc66">1</span></p>
+      <p>Choose a stat to increase:</p>
+      <div class="stat-grid" id="statGrid">
+        <!-- Stats will be generated here -->
+      </div>
+    </div>
+
+    <!-- NPC Dialogue Screen -->
+    <div id="npcScreen" class="overlay hidden">
+      <h1 style="color: #66ccff;">NPC Joins!</h1>
+      <div class="npc-card">
+        <div class="npc-name" id="npcName">NPC Name</div>
+        <p id="npcQuote">"Hello traveler!"</p>
+        <p class="stat-bar">
+          <div>LVL: <span id="npcLevel">1</span></div>
+          <div>HP: <span id="npcHp">100</span></div>
+        </p>
+      </div>
+      <p>Will you invite them to join your party?</p>
+      <div class="dialog-options">
+        <button class="btn" onclick="acceptNpc()">Yes</button>
+        <button class="btn" onclick="rejectNpc()">No</button>
+      </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="overlay hidden">
+      <h1 style="color: #ff6666;">Game Over</h1>
+      <p>You reached floor <span id="finalFloor">1</span></p>
+      <p>Final Level: <span id="finalLevel">1</span></p>
+      <button class="btn" onclick="startGame()">Try Again</button>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="victoryScreen" class="overlay hidden">
+      <h1 style="color: #66ff66;">VICTORY!</h1>
+      <p>You have defeated the boss and conquered the dungeon!</p>
+      <p>You reached floor <span id="victoryFloor">100</span></p>
+      <button class="btn" onclick="startGame()">Play Again</button>
+    </div>
+  </div>
+
+  <!-- GameFramework bundle -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- Game config -->
+  <script src="config.js"></script>
+
+  <!-- Game logic -->
+  <script src="NextDungeonGame.js"></script>
+</body>
+</html>
