@@ -488,21 +488,33 @@
     const numRooms = randomInt(8, 12);
 
     for (let i = 0; i < numRooms; i++) {
-      const roomWidth = randomInt(4, 8);
-      const roomHeight = randomInt(4, 6);
-      const roomX = randomInt(1, MAP_WIDTH - roomWidth - 1);
-      const roomY = randomInt(1, MAP_HEIGHT - roomHeight - 1);
-
-      const room = {
-        x: roomX,
-        y: roomY,
-        width: roomWidth,
-        height: roomHeight,
-      };
+      let room;
+      let attempts = 0;
+      do {
+        const roomWidth = randomInt(4, 8);
+        const roomHeight = randomInt(4, 6);
+        const roomX = randomInt(1, MAP_WIDTH - roomWidth - 1);
+        const roomY = randomInt(1, MAP_HEIGHT - roomHeight - 1);
+        room = {
+          x: roomX,
+          y: roomY,
+          width: roomWidth,
+          height: roomHeight,
+        };
+        attempts++;
+        // Check for overlap with existing rooms (with 1-tile buffer)
+        const overlaps = rooms.some(r => 
+          !(room.x + room.width + 1 < r.x || r.x + r.width + 1 < room.x ||
+            room.y + room.height + 1 < r.y || r.y + r.height + 1 < room.y)
+        );
+      } while (attempts < 50 && rooms.some(r => 
+        !(room.x + room.width + 1 < r.x || r.x + r.width + 1 < room.x ||
+          room.y + room.height + 1 < r.y || r.y + r.height + 1 < room.y)
+      ));
 
       // Carve out the room
-      for (let ry = roomY; ry < roomY + roomHeight; ry++) {
-        for (let rx = roomX; rx < roomX + roomWidth; rx++) {
+      for (let ry = room.y; ry < room.y + room.height; ry++) {
+        for (let rx = room.x; rx < room.x + room.width; rx++) {
           map[ry][rx] = { type: 'floor', seen: false, visited: false, visible: false };
         }
       }
@@ -644,6 +656,15 @@
       engine.input.bind('spell2', 'KeyE');
       engine.input.bind('spell3', 'KeyR');
       engine.input.bind('inventory', 'KeyI');
+      // Touch controls bindings
+      engine.input.bind('up', 'ArrowUp', 'KeyW', 'KeyK');
+      engine.input.bind('down', 'ArrowDown', 'KeyS', 'KeyJ');
+      engine.input.bind('left', 'ArrowLeft', 'KeyA', 'KeyH');
+      engine.input.bind('right', 'ArrowRight', 'KeyD', 'KeyL');
+      engine.input.bind('fire', 'KeyQ');
+      engine.input.bind('attack', 'KeyE');
+      engine.input.bind('action', 'KeyR');
+      engine.input.bind('menu', 'KeyI');
       this.setupGame();
     }
 
@@ -665,10 +686,25 @@
 
       if (stairsOverride) {
         // Place the override stairs (up stairs when going down floors, down stairs when going up)
-        const nearestOverride = findNearestFloorTile(stairsOverride.x, stairsOverride.y);
+        // Ensure stairs are placed in room center to avoid edge spawn issues
+        let stairRoom = null;
+        for (const room of rooms) {
+          if (stairsOverride.x >= room.x && stairsOverride.x < room.x + room.width &&
+              stairsOverride.y >= room.y && stairsOverride.y < room.y + room.height) {
+            stairRoom = room;
+            break;
+          }
+        }
+        let stairPos;
+        if (stairRoom) {
+          stairPos = placeInRoomCenter(stairRoom);
+        } else {
+          const nearestOverride = findNearestFloorTile(stairsOverride.x, stairsOverride.y);
+          stairPos = nearestOverride;
+        }
         State.stairs = {
-          x: nearestOverride.x,
-          y: nearestOverride.y,
+          x: stairPos.x,
+          y: stairPos.y,
           direction: stairsOverride.direction,
         };
         State.downStairs = {
@@ -847,16 +883,16 @@
         moved = true;
       }
 
-      if (input.wasPressed('ArrowUp') || input.wasPressed('KeyW') || input.wasPressed('KeyK')) {
+      if (input.wasPressed('up')) {
         this.movePlayer(0, -1);
         moved = true;
-      } else if (input.wasPressed('ArrowDown') || input.wasPressed('KeyS') || input.wasPressed('KeyJ')) {
+      } else if (input.wasPressed('down')) {
         this.movePlayer(0, 1);
         moved = true;
-      } else if (input.wasPressed('ArrowLeft') || input.wasPressed('KeyA') || input.wasPressed('KeyH')) {
+      } else if (input.wasPressed('left')) {
         this.movePlayer(-1, 0);
         moved = true;
-      } else if (input.wasPressed('ArrowRight') || input.wasPressed('KeyD') || input.wasPressed('KeyL')) {
+      } else if (input.wasPressed('right')) {
         this.movePlayer(1, 0);
         moved = true;
       }
@@ -893,6 +929,7 @@
       // Check walls
       if (State.map[newY][newX].type === 'wall') {
         State.shakeTimer = 3; // Visual feedback for blocked movement
+        log('You bump into a wall!', 'info');
         return;
       }
 
@@ -995,8 +1032,23 @@
             }
           }
 
-          // Can't move
-          if (newX === -1) return;
+          // Can't move toward player, try random adjacent move to avoid getting stuck
+          if (newX === -1) {
+            const moves = [[1,0],[-1,0],[0,1],[0,-1]];
+            for (const [mx, my] of moves) {
+              const rx = enemy.x + mx;
+              const ry = enemy.y + my;
+              if (rx >= 0 && rx < MAP_WIDTH && ry >= 0 && ry < MAP_HEIGHT && 
+                  State.map[ry][rx].type !== 'wall' &&
+                  !State.enemies.some(e => e !== enemy && e.x === rx && e.y === ry) &&
+                  !(rx === player.x && ry === player.y)) {
+                enemy.x = rx;
+                enemy.y = ry;
+                break;
+              }
+            }
+            return;
+          }
 
           // Check if player is at target position - attack instead of moving into them
           if (newX === player.x && newY === player.y) {
@@ -1091,65 +1143,44 @@
         }
       }
 
-      // Update visited status
-      State.map[player.y][player.x].visited = true;
-      State.map[player.y][player.x].seen = true;
-      State.map[player.y][player.x].visible = true;
-
-      // Raycasting line of sight with Bresenham
       const VISION_RADIUS = 9;
       const px = player.x;
       const py = player.y;
 
       const inBounds = (x, y) => x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
       const revealTile = (x, y) => {
-        if (!inBounds(x, y)) return true;
+        if (!inBounds(x, y)) return;
         State.map[y][x].seen = true;
         State.map[y][x].visited = true;
         State.map[y][x].visible = true;
-        return State.map[y][x].type !== 'wall';
       };
 
-      // Cast rays to every tile within the visibility radius
-      for (let dy = -VISION_RADIUS; dy <= VISION_RADIUS; dy++) {
-        for (let dx = -VISION_RADIUS; dx <= VISION_RADIUS; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const distSq = dx * dx + dy * dy;
-          if (distSq > VISION_RADIUS * VISION_RADIUS) continue;
-          
-          const tx = px + dx;
-          const ty = py + dy;
-          if (!inBounds(tx, ty)) continue;
+      // Flood fill BFS for performance instead of raycasting every tile
+      const queue = [{x: px, y: py, dist: 0}];
+      const visited = new Set();
+      visited.add(px + ',' + py);
+      revealTile(px, py);
 
-          // Generalized Bresenham line algorithm
-          let x0 = px;
-          let y0 = py;
-          const x1 = tx;
-          const y1 = ty;
-          const dxAbs = Math.abs(x1 - x0);
-          const dyAbs = Math.abs(y1 - y0);
-          const sx = x1 > x0 ? 1 : -1;
-          const sy = y1 > y0 ? 1 : -1;
-          let err = dxAbs - dyAbs;
+      const dirs = [
+        [1,0], [-1,0], [0,1], [0,-1],
+        [1,1], [1,-1], [-1,1], [-1,-1]
+      ];
 
-          while (true) {
-            // Skip player tile (already revealed)
-            if (!(x0 === px && y0 === py)) {
-              const canContinue = revealTile(x0, y0);
-              if (!canContinue) break; // Wall blocks vision
-            }
-            if (x0 === x1 && y0 === y1) break;
-            
-            const e2 = 2 * err;
-            if (e2 > -dyAbs) {
-              err -= dyAbs;
-              x0 += sx;
-            }
-            if (e2 < dxAbs) {
-              err += dxAbs;
-              y0 += sy;
-            }
-            if (!inBounds(x0, y0)) break;
+      while (queue.length) {
+        const {x, y, dist} = queue.shift();
+        if (dist >= VISION_RADIUS) continue;
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!inBounds(nx, ny)) continue;
+          const key = nx + ',' + ny;
+          if (visited.has(key)) continue;
+          const distFromPlayer = Math.sqrt((nx - px) ** 2 + (ny - py) ** 2);
+          if (distFromPlayer > VISION_RADIUS) continue;
+          visited.add(key);
+          revealTile(nx, ny);
+          if (State.map[ny][nx].type !== 'wall') {
+            queue.push({x: nx, y: ny, dist: dist + 1});
           }
         }
       }
@@ -1499,6 +1530,44 @@
             d.textContent = `${it.name} (${it.type})`;
             d.dataset.idx = idx;
             d.onclick = () => {
+              // Auto-equip weapon/armor on single click for better UX
+              if (it.type === 'weapon' || it.type === 'armor') {
+                const equipSlots = it.type === 'weapon' 
+                  ? ['rightHandWeapon','leftHandWeapon','weapon']
+                  : ['chest','legs','feet','shoulders','head','knees','armor'];
+                let targetSlot = null;
+                for (const slotKey of equipSlots) {
+                  if (!player.equipment[slotKey]) {
+                    targetSlot = slotKey;
+                    break;
+                  }
+                }
+                // If no empty slot, try to swap with weaker item
+                if (!targetSlot) {
+                  for (const slotKey of equipSlots) {
+                    const equipped = player.equipment[slotKey];
+                    if (equipped) {
+                      const itemBonus = it.type === 'weapon' ? (it.damageBonus || 0) : (it.defenseBonus || 0);
+                      const equippedBonus = it.type === 'weapon' ? (equipped.damageBonus || 0) : (equipped.defenseBonus || 0);
+                      if (itemBonus > equippedBonus) {
+                        targetSlot = slotKey;
+                        break;
+                      }
+                    }
+                  }
+                }
+                if (targetSlot) {
+                  const prev = player.equipment[targetSlot];
+                  player.inventory.splice(idx, 1);
+                  if (prev) player.inventory.push(prev);
+                  player.equipment[targetSlot] = it;
+                  log(`Equipped ${it.name} to ${targetSlot}`, 'success');
+                  screen.classList.add('hidden');
+                  toggleInventory();
+                  return;
+                }
+              }
+              // Fallback to selection for non-equippable items
               [...itemsList.children].forEach(ch => ch.style.background = '');
               d.style.background = '#334455';
               window._selectedItemIndex = idx;
