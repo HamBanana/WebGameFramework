@@ -2,7 +2,7 @@
   "sprites":   ["player", "enemies", "boss", "powerups"],
   "behaviors": ["Bob", "CullOffscreen", "PlayerMove", "FireOnChance",
                 "FormationMove", "BossMove", "BossGun", "MinionBehavior",
-                "PlayerFire", "PowerupCollect"],
+                "PlayerFire", "PowerupCollect", "BossHover", "BossAggressive", "BossCircle", "BossComplex"],
   "prefabs":   ["player", "alien", "shot", "ufo", "powerup", "boss", "bunker"],
   "modules":   ["Controls", "Hud", "Waves", "Formation", "Combat",
                 "Powerups", "Ufo", "Boss", "GameOver", "Bunkers", "Particles",

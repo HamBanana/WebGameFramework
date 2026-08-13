@@ -23,7 +23,13 @@
       var mx = e.centerX;
       var speed = -(cfg.bulletSpeed || 480);
 
-      var weaponMode = e.data.weaponMode || 'single';
+      // Derive weapon mode from active powerup flags (takes priority over stored mode)
+      var weaponMode = 'single';
+      if (e.data.megaLaser) weaponMode = 'mega';
+      else if (e.data.tripleShot) weaponMode = 'triple';
+      else if (e.data.spreadShot) weaponMode = 'spread';
+      else if (e.data.doubleShot) weaponMode = 'double';
+      else weaponMode = e.data.weaponMode || 'single';
       
       if (weaponMode === 'mega') {
         // Mega laser: wide beams

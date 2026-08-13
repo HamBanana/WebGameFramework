@@ -85,11 +85,12 @@
       // Check if all aliens are dead
       var alienCount = scene.world.count('alien');
 
-      if (alienCount === 0) {
-        var levelsCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.levels) || {};
-        var bossInterval = levelsCfg.bossInterval || 5;
-        var maxLevels = levelsCfg.maxLevels || 99;
+      var levelsCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.levels) || {};
+      var bossInterval = levelsCfg.bossInterval || 5;
+      var maxLevels = levelsCfg.maxLevels || 99;
 
+      // Start transition when wave cleared and no transition active
+      if (alienCount === 0 && !scene._levelTransition) {
         if (scene.state.level >= maxLevels) {
           scene.state.won = true;
           scene.setPhase('over');
@@ -97,16 +98,20 @@
           // Boss level — handled by Boss module
           scene.setPhase('boss');
         } else {
-          // Next level. The final-invader cinematic (zoom/slow-mo + explosion)
-          // is driven by Combat. Hold the respawn until it finishes so the
-          // burst plays out before the next wave spawns.
-          var vp = scene.module('Viewport');
-          if (vp && vp._cinematicActive) {
-            return; // cinematic still playing — hold the respawn
-          }
+          // Prepare next level immediately for seamless reveal
           scene.state.level++;
           scene.world.clear();
           this.spawnWave(scene, engine);
+          scene._levelTransition = { progress: 0, duration: 1.2 };
+        }
+      }
+
+      // Progress transition overlay
+      if (scene._levelTransition) {
+        var trans = scene._levelTransition;
+        trans.progress += dt / trans.duration;
+        if (trans.progress >= 1) {
+          scene._levelTransition = null;
         }
       }
     },

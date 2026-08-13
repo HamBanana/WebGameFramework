@@ -12,6 +12,7 @@
       this.shakeTime = 0;
       this.shakeIntensity = 0;
       scene.scaledDt = null;
+      scene.timeScale = 1;
       scene.world.scene = scene;
     },
 
@@ -21,7 +22,8 @@
     },
 
     update(dt, scene, engine) {
-      scene.scaledDt = dt;
+      var scale = (scene.timeScale != null) ? scene.timeScale : 1;
+      scene.scaledDt = dt * scale;
 
       // Screen shake
       if (this.shakeTime > 0) {

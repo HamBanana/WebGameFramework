@@ -97,6 +97,36 @@
           ctx.fillRect(st.x, st.y, st.size, st.size);
         }
       }
+
+      // Cool level transition: white flash + radial wipe
+      var trans = scene._levelTransition;
+      if (trans) {
+        var p = Math.min(1, trans.progress);
+        // Flash out
+        var flashAlpha = Math.max(0, 1 - p * 2);
+        ctx.fillStyle = 'rgba(255,255,255,' + (flashAlpha * 0.9) + ')';
+        ctx.fillRect(0, 0, W, H);
+        // Radial wipe from center
+        var radius = p * Math.max(W, H) * 0.9;
+        var grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, radius);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,' + (p * 0.8) + ')');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+        // Level text pop
+        if (p > 0.5) {
+          ctx.save();
+          ctx.globalAlpha = (p - 0.5) * 2;
+          ctx.fillStyle = '#ffccff';
+          ctx.font = 'bold 48px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#ff69b4';
+          ctx.shadowBlur = 20;
+          ctx.fillText('LEVEL ' + scene.state.level, W/2, H/2);
+          ctx.restore();
+        }
+      }
     },
   });
 })(window.GF = window.GF || {});

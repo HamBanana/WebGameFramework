@@ -81,6 +81,39 @@
           px += 70;
         }
       }
+
+      // Level transition overlay (cool flash + text)
+      var trans = scene._levelTransition;
+      if (trans) {
+        var p = Math.min(1, trans.progress);
+        var W = engine.config.width;
+        var H = engine.config.height;
+        // White flash out
+        ctx.fillStyle = 'rgba(255,255,255,' + Math.max(0, 1 - p * 1.5) + ')';
+        ctx.fillRect(0, 0, W, H);
+        // Dark vignette in
+        var grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)*0.7);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,' + (p * 0.85) + ')');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+        // Level up text
+        if (p > 0.3) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, (p - 0.3) * 2);
+          ctx.fillStyle = '#ffccff';
+          ctx.font = 'bold 56px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#ff69b4';
+          ctx.shadowBlur = 30;
+          ctx.fillText('LEVEL ' + scene.state.level, W/2, H/2 - 20);
+          ctx.font = '24px monospace';
+          ctx.fillStyle = '#aaffff';
+          ctx.fillText('Get Ready!', W/2, H/2 + 40);
+          ctx.restore();
+        }
+      }
     },
 
     highScore() {

@@ -4,7 +4,7 @@
   'use strict';
   
   GF.behavior('MinionBehavior', (cfg) => ({
-    onAdd(e) {
+    onAdd(e, world) {
       e.data.phase = 'dive';
       e.data.targetX = null;
       e.data.targetY = null;
@@ -12,7 +12,7 @@
       e.data.speed = cfg.speed || 120;
       
       // Record player position at start of dive (not continuously chasing)
-      var player = e.world.first('player');
+      var player = world && world.first ? world.first('player') : null;
       if (player) {
         e.data.targetX = player.x + player.w / 2;
         e.data.targetY = player.y;

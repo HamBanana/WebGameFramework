@@ -87,15 +87,20 @@
     spawnBoss(scene, engine) {
       var cfg = GF.GAME_CONFIG || {};
       var bossCfg = cfg.boss || {};
+      var levelsCfg = cfg.levels || {};
+      var bossInterval = levelsCfg.bossInterval || bossCfg.bossInterval || 4;
       var bossTypes = bossCfg.bossTypes || [];
       
       // Select boss type based on level (cycling through types)
       var level = scene.state.level || 1;
-      var typeIndex = (level / bossCfg.bossInterval - 1) % bossTypes.length;
-      var selectedType = bossTypes[Math.floor(typeIndex)];
+      var typeIndex = 0;
+      if (bossTypes.length > 0) {
+        typeIndex = Math.floor((level - 1) / bossInterval) % bossTypes.length;
+      }
+      var selectedType = (bossTypes[typeIndex] || bossTypes[0]) || {};
       
       // Map behavior types to actual behaviors
-      var behavior = selectedType.behavior;
+      var behavior = selectedType.behavior || 'patrol';
       var behaviors = [];
       
       if (behavior === 'patrol') {
@@ -112,15 +117,16 @@
         behaviors = ['BossMove', 'BossGun'];
       }
       
-      var boss = scene.world.spawn(selectedType.prefab,
+      var prefab = selectedType.prefab || 'boss';
+      var boss = scene.world.spawn(prefab,
         (engine.config.width / 2) - 48,
         50
       );
       if (boss) {
-        boss.data.hp = selectedType.hp || bossCfg.hp;
-        boss.data.maxHp = selectedType.hp || bossCfg.hp;
-        boss.data.fireRate = selectedType.fireRate || bossCfg.fireRate;
-        boss.data.speed = selectedType.speed || bossCfg.speed;
+        boss.data.hp = selectedType.hp || bossCfg.hp || 100;
+        boss.data.maxHp = boss.data.hp;
+        boss.data.fireRate = selectedType.fireRate || bossCfg.fireRate || 0.035;
+        boss.data.speed = selectedType.speed || bossCfg.speed || 60;
         boss.data.behavior = behavior;
       }
     },

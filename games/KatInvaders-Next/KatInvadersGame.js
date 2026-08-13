@@ -65,11 +65,11 @@
       titleFont: 'bold 42px monospace',
       subtitleFont: '20px monospace',
       confirmAction: 'confirm',
-      bossAction: 'boss',
+      menuAction: 'boss',
       onStart: function (engine) {
         engine.getSystem('SceneManager').replace(new MainScene(), engine);
       },
-      onBossStart: function (engine) {
+      onMenu: function (engine) {
         engine.getSystem('SceneManager').replace(new BossScene(), engine);
       },
     });
