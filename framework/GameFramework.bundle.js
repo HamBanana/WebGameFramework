@@ -1,5 +1,5 @@
 // GameFramework.bundle.js - AUTO-GENERATED, DO NOT EDIT
-// Built: 2026-08-14T04:16:40.509Z
+// Built: 2026-08-14T12:21:49.307Z
 // Source: framework/build.js (core)
 
 // -- utils/MathUtils.js ------------------------------------------
@@ -10116,6 +10116,11 @@ function _countAllEntities(engine) {
       var touch = new GF.TouchControls(touchOpts);
       // Added last so its overlay pass paints above every other system.
       engine.addSystem(touch);
+      // Add debug buttons to touch controls (was failing before because
+      // TouchControls wasn't created when DebugOverlay/DebugTools init ran)
+      if (useDebug && GF.DebugTools && GF.DebugTools.addTouchButtons) {
+        GF.DebugTools.addTouchButtons(touch);
+      }
     }
 
     // `scenes` also accepts an array of scene instances (a common way games

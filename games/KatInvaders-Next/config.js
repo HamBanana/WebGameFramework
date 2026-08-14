@@ -21,8 +21,8 @@
     }
   },
   "engine": {
-    "width": 480,
-    "height": 640,
+    "width": 640,
+    "height": 480,
     "physics": {
       "gravity": 0,
       "dt": 0.016666666666666666,
@@ -189,8 +189,8 @@
   "player": {
     "width": 40,
     "height": 26,
-    "startX": 240,
-    "startY": 590,
+    "startX": 320,
+    "startY": 430,
     "speed": 280,
     "fireRate": 0.22,
     "bulletSpeed": 520,
@@ -204,7 +204,7 @@
     "rows": 6,
     "cols": 9,
     "startX": 30,
-    "startY": 60,
+    "startY": 50,
     "spacingX": 38,
     "spacingY": 34,
     "initialSpeed": 18,
@@ -247,7 +247,7 @@
     "width": 52,
     "height": 40,
     "spacing": 110,
-    "startY": 510
+    "startY": 400
   },
   "boss": {
     "width": 100,

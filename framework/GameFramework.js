@@ -125,6 +125,11 @@
       var touch = new GF.TouchControls(touchOpts);
       // Added last so its overlay pass paints above every other system.
       engine.addSystem(touch);
+      // Add debug buttons to touch controls (was failing before because
+      // TouchControls wasn't created when DebugOverlay/DebugTools init ran)
+      if (useDebug && GF.DebugTools && GF.DebugTools.addTouchButtons) {
+        GF.DebugTools.addTouchButtons(touch);
+      }
     }
 
     // `scenes` also accepts an array of scene instances (a common way games

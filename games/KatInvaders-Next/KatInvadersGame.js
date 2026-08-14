@@ -132,7 +132,7 @@
     titleGradient.addColorStop(0.5, '#ff8ec4');
     titleGradient.addColorStop(1, '#ff66cc');
     ctx.fillStyle = titleGradient;
-    ctx.font = 'bold 44px monospace';
+    ctx.font = 'bold 48px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('KAT INVADERS', W / 2, H * 0.32);
     ctx.restore();
@@ -142,7 +142,7 @@
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#ffffff';
-    ctx.font = '22px monospace';
+    ctx.font = '24px monospace';
     ctx.fillText('Press SPACE to Start', W / 2, H * 0.52);
     ctx.restore();
 
@@ -151,7 +151,7 @@
     ctx.save();
     ctx.globalAlpha = controlAlpha;
     ctx.fillStyle = '#aaddff';
-    ctx.font = '16px monospace';
+    ctx.font = '18px monospace';
     ctx.fillText('← → or A D to move  |  SPACE to fire', W / 2, H * 0.68);
     ctx.fillText('Collect powerups • Defeat the boss • Save Earth!', W / 2, H * 0.78);
     ctx.fillText('Every 4 levels: BOSS BATTLE!', W / 2, H * 0.88);
@@ -166,7 +166,7 @@
     bossGradient.addColorStop(0.5, '#ffaa00');
     bossGradient.addColorStop(1, '#ff8800');
     ctx.fillStyle = bossGradient;
-    ctx.font = 'bold 20px monospace';
+    ctx.font = 'bold 22px monospace';
     ctx.fillText('Press B for Bossfight', W / 2, H * 0.96);
     ctx.restore();
     
