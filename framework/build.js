@@ -25,6 +25,7 @@ var CORE = [
   'systems/EntityWorld.js',
   'systems/SaveSystem.js',
   'systems/DebugOverlay.js',
+  'systems/DebugTools.js',
   'systems/DialogueSystem.js',
   'systems/ModelSystem.js',
   'systems/Three3DScene.js',

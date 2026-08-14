@@ -66,6 +66,9 @@
     { action: 'pause',   label: '⏸',  mode: 'tap',  cluster: 'system' },
     { action: 'cancel',  label: '✕',  mode: 'tap',  cluster: 'system' },
     { action: 'menu',    label: '☰',  mode: 'tap',  cluster: 'system' },
+    // debug (top-right, above system)
+    { action: 'debug',       label: '🔧',  mode: 'tap',  cluster: 'debug' },
+    { action: 'debugTools',  label: '⚙',  mode: 'tap',  cluster: 'debug' },
   ];
 
   class TouchControls {
@@ -299,7 +302,7 @@
       // Buttons, deduplicated by the key code they inject: a game that binds
       // both 'confirm' and 'start' to Space gets one button, not two.
       const usedCodes = {};
-      const clusters = { primary: [], menu: [], system: [] };
+      const clusters = { primary: [], menu: [], system: [], debug: [] };
       AUTO_BUTTONS.forEach(def => {
         if (!bound(def.action)) return;
         const code = input._codeFor(def.action);
@@ -338,13 +341,25 @@
         });
       });
 
-      // System actions down the top-right edge.
+      // Debug actions (🔧 F1 overlay, ⚙ F6 tools) — above system buttons
+      const dR = Math.round(21 * k);
+      clusters.debug.forEach((def, i) => {
+        this.addButton({
+          id: 'auto_' + def.action, action: def.action, label: def.label,
+          mode: def.mode, anchor: 'tr', r: dR,
+          x: Math.round(dR + 14 * k), y: Math.round(dR + 14 * k + i * 2.5 * dR),
+        });
+      });
+
+      // System actions down the top-right edge (below debug buttons).
+      // Offset starts after debug buttons to avoid overlap.
       const sR = Math.round(21 * k);
+      var sysStartOffset = clusters.debug.length * 2.5 * dR;
       clusters.system.forEach((def, i) => {
         this.addButton({
           id: 'auto_' + def.action, action: def.action, label: def.label,
           mode: def.mode, anchor: 'tr', r: sR,
-          x: Math.round(sR + 14 * k), y: Math.round(sR + 14 * k + i * 2.5 * sR),
+          x: Math.round(sR + 14 * k), y: Math.round(sR + 14 * k + (sysStartOffset + i) * 2.5 * sR),
         });
       });
     }

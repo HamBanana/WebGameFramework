@@ -40,6 +40,11 @@
           console.log('[DebugOverlay] ' + (this.enabled ? 'ON' : 'OFF'));
         }
       });
+      // Add 🔧 (F1 overlay) and ⚙ (F6 tools) buttons to touch controls
+      var touch = engine.getSystem && engine.getSystem('TouchControls');
+      if (touch && GF.DebugTools && GF.DebugTools.addTouchButtons) {
+        GF.DebugTools.addTouchButtons(touch);
+      }
     }
 
     update() {}

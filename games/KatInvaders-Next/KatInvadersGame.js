@@ -36,7 +36,7 @@
 
   // ── Scene: TitleScreen ─────────────────────────────────────────────────────
   function BossScene() {
-    var inst = new GF.GameScene('Main', {
+    var inst = new GF.GameScene('Boss', {
       phase: 'boss',
       state: {
         score: 0, lives: 3, level: 5, won: false,

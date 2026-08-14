@@ -6,5 +6,5 @@
   "prefabs":   ["player", "alien", "shot", "ufo", "powerup", "boss", "bunker"],
   "modules":   ["Controls", "Hud", "Waves", "Formation", "Combat",
                 "Powerups", "Ufo", "Boss", "GameOver", "Bunkers", "Particles",
-                "Combo", "Viewport", "MainSceneEnhancements", "HighScore"]
+                "Combo", "Viewport", "MainSceneEnhancements", "HighScore", "DebugTools"]
 }

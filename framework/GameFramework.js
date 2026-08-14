@@ -104,6 +104,14 @@
     // ParallaxSystem is intentionally NOT added to engine.systems by default;
     // games typically draw it themselves at the start of their scene's render.
 
+    // ── DebugTools panel (F6) — scrollable command menu ─────────────────────
+    // Only created when debug is enabled. Games can register commands via
+    // GF.DebugTools.registerCommands(sceneName, [{label, fn}, ...]).
+    var debugTools = (useDebug && GF.DebugTools && GF.DebugTools.createPanel)
+      ? GF.DebugTools.createPanel()
+      : null;
+    if (debugTools) engine.addSystem(debugTools);
+
     // Touch controls, on by default: on a phone or tablet the overlay lays
     // itself out from the actions the game binds (see systems/TouchControls).
     // GAME_CONFIG.touch (or opts.touch) is authoritative: false disables it,
@@ -130,7 +138,7 @@
       audio: audio, tweens: tweens, particles: particles, scenes: scenes,
       tilemap: tilemap, dialogue: dialogue, models: models, debug: debug,
       grids: grids, battle: battle, score: score, parallax: parallax,
-      touch: touch || null,
+      touch: touch || null, debugTools: debugTools || null,
     };
   };
 

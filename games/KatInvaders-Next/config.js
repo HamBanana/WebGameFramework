@@ -14,7 +14,10 @@
       "audio": true,
       "tweens": true,
       "particles": true,
-      "debug": false
+      "debug": {
+        "enabled": true,
+        "toggleKey": "F1"
+      }
     }
   },
   "engine": {
