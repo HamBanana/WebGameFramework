@@ -75,6 +75,10 @@
         if (met) {
           unlocked.push(id);
           changed = true;
+          // Remember what THIS run unlocked so the over screen can list it
+          // and the toast can announce it (R2-6).
+          state.runAchievements = state.runAchievements || [];
+          state.runAchievements.push(list[i]);
           console.log('[HighScore] Achievement unlocked:', list[i].name);
         }
       }
@@ -83,13 +87,39 @@
     },
 
     render(ctx, scene, engine) {
+      var W = engine.config.width, H = engine.config.height;
       var best = this._best || 0;
-      if (!best) return;
+      if (best) {
+        GF.UISystem.drawText(ctx, 'High Score: ' + best, W / 2, H * 0.68, {
+          align: 'center', font: 'bold 18px monospace', color: '#ffcc00',
+          shadow: true, glow: '#ffcc00', glowBlur: 8,
+        });
+      }
 
-      GF.UISystem.drawText(ctx, 'High Score: ' + best, engine.config.width / 2, engine.config.height * 0.68, {
-        align: 'center', font: 'bold 18px monospace', color: '#ffcc00',
-        shadow: true, glow: '#ffcc00', glowBlur: 8,
-      });
+      // Unlock toast (R2-6): slide in over the over screen, one per new
+      // achievement, staggered by 1.2 s.
+      var run = scene.state.runAchievements || [];
+      if (!run.length) return;
+      this._t = (this._t || 0) + 0.016;
+      for (var i = 0; i < run.length; i++) {
+        var start = i * 1.2;
+        var local = this._t - start;
+        if (local < 0 || local > 4) continue;
+        var slide = Math.min(1, local * 4);          // slide-in
+        var fade = local > 3.4 ? Math.max(0, 1 - (local - 3.4) / 0.6) : 1;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        var y = H * 0.44 - (1 - slide) * 24;
+        ctx.fillStyle = 'rgba(30,20,10,0.85)';
+        ctx.fillRect(W / 2 - 190, y - 16, 380, 30);
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(W / 2 - 190, y - 16, 380, 30);
+        GF.UISystem.drawText(ctx, '🏆 ' + run[i].name + ' — ' + (run[i].desc || ''), W / 2, y + 1, {
+          align: 'center', font: 'bold 14px monospace', color: '#ffdd66',
+        });
+        ctx.restore();
+      }
     },
   });
 })(window.GF = window.GF || {});

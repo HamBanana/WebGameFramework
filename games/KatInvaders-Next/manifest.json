@@ -4,7 +4,7 @@
                 "FormationMove", "BossMove", "BossGun", "MinionBehavior",
                 "PlayerFire", "PowerupCollect", "BossHover", "BossAggressive", "BossCircle", "BossComplex"],
   "prefabs":   ["player", "alien", "shot", "ufo", "powerup", "boss", "bunker"],
-  "modules":   ["Controls", "Hud", "Waves", "Formation", "Combat",
+  "modules":   ["Controls", "Pause", "Hud", "Waves", "Formation", "Combat",
                 "Powerups", "Ufo", "Boss", "GameOver", "Bunkers", "Particles",
                 "Combo", "Viewport", "MainSceneEnhancements", "HighScore", "DebugTools"]
 }

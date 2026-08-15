@@ -48,8 +48,16 @@
         playerCfg.startY || 590
       );
       if (player) {
-        player.data.lives = playerCfg.lives || 3;
+        // scene.state.lives is the source of truth (R2-2): only initialize it
+        // when this run hasn't recorded a value yet, never wipe progress.
+        var startLives = scene.state.lives != null ? scene.state.lives : (playerCfg.lives || 3);
+        player.data.lives = startLives;
+        scene.state.lives = startLives;
       }
+
+      // Rebuild bunkers for every wave (R2-5) — Bunkers.enter no longer spawns.
+      var bunkersMod = scene.module('Bunkers');
+      if (bunkersMod && bunkersMod.build) bunkersMod.build(scene, engine);
 
       // Spawn alien grid
       var rows = aliensCfg.rows || 5;
@@ -77,8 +85,6 @@
       });
 
 
-      // Bunkers module is registered for 'Main' scene — it's already attached.
-      // No need to manually push it.
     },
 
     update(dt, scene, engine) {

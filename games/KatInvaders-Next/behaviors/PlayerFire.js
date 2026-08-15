@@ -6,7 +6,10 @@
       e.data.fireTimer = 0;
       e.data.rapidFire = false;
       e.data.weaponMode = 'single';
-      e.data.baseFireRate = cfg.fireRate || 0.28;
+      // Read the configured player fire rate (R1-3); fall back to the
+      // behavior param, then a sane default.
+      var cfgRate = (GF.GAME_CONFIG && GF.GAME_CONFIG.player && GF.GAME_CONFIG.player.fireRate);
+      e.data.baseFireRate = cfg.fireRate || cfgRate || 0.22;
     },
     update(dt, e, world) {
       var dt = (world.scene && world.scene.scaledDt) || dt;

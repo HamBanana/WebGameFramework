@@ -71,19 +71,29 @@
         { label: '♡ God Mode', fn: function (ctx) {
           if (ctx.world) {
             var p = ctx.world.first('player');
-            if (p) { p.data.invincible = true; p.data.lives = 99; }
+            // invincibleTimer must be set too — PowerupCollect clears the
+            // flag when the timer hits 0 (R2-8).
+            if (p) {
+              p.data.invincible = true;
+              p.data.invincibleTimer = 1e9;
+              p.data.lives = 99;
+              if (ctx.scene && ctx.scene.state) ctx.scene.state.lives = 99;
+            }
           }
         }},
         { label: '♡ Clear God Mode', fn: function (ctx) {
           if (ctx.world) {
             var p = ctx.world.first('player');
-            if (p) p.data.invincible = false;
+            if (p) { p.data.invincible = false; p.data.invincibleTimer = 0; }
           }
         }},
         { label: '♡ Max Lives (99)', fn: function (ctx) {
           if (ctx.world) {
             var p = ctx.world.first('player');
-            if (p) p.data.lives = 99;
+            if (p) {
+              p.data.lives = 99;
+              if (ctx.scene && ctx.scene.state) ctx.scene.state.lives = 99;
+            }
           }
         }},
         { label: '♡ Shield Active', fn: function (ctx) {
@@ -240,10 +250,16 @@
       // Register for Boss phase too
       GF.DebugTools.registerCommands('Boss', [
         { label: '♡ God Mode', fn: function (ctx) {
-          if (ctx.world) { var p = ctx.world.first('player'); if (p) p.data.invincible = true; }
+          if (ctx.world) {
+            var p = ctx.world.first('player');
+            if (p) { p.data.invincible = true; p.data.invincibleTimer = 1e9; }
+          }
         }},
         { label: '♡ Max Lives', fn: function (ctx) {
-          if (ctx.world) { var p = ctx.world.first('player'); if (p) p.data.lives = 99; }
+          if (ctx.world) {
+            var p = ctx.world.first('player');
+            if (p) { p.data.lives = 99; if (ctx.scene && ctx.scene.state) ctx.scene.state.lives = 99; }
+          }
         }},
         { label: '💣 Kill Boss', fn: function (ctx) {
           if (ctx.world) {

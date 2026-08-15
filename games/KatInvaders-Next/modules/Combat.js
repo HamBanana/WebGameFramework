@@ -38,6 +38,13 @@
         ufo.destroy();
         var ufoPoints = (cfg.ufo && cfg.ufo.points) || [50, 100, 150, 200];
         this.award(scene, ufoPoints[Math.min(ufoPoints.length - 1, Math.floor(Math.random() * ufoPoints.length))]);
+        // UFO kill = guaranteed mystery reward (R2-10).
+        var pwrMod = scene.module('Powerups');
+        if (pwrMod && pwrMod.selectPowerup) {
+          var pwrCfg = (GF.GAME_CONFIG && GF.GAME_CONFIG.powerups) || {};
+          var sel = pwrMod.selectPowerup(pwrCfg);
+          if (sel) pwrMod.spawnPowerup(scene, { x: x, y: y }, pwrCfg, sel);
+        }
         scene.events.emit('ufo:killed', { x: x, y: y });
       });
 
@@ -109,6 +116,7 @@
 
         if (type === 'extraLife') {
           player.data.lives = Math.min((player.data.lives || 0) + 1, 5);
+          scene.state.lives = player.data.lives; // keep the run's lives in sync (R2-2)
         } else if (type === 'smartBomb') {
           player.data.bombPending = (player.data.bombPending || 0) + 1;
         } else {
@@ -129,9 +137,13 @@
         this.damageBunker(bunker, 1);
       });
 
-      // Alien → bunker
+      // Alien → bunker: the alien survives and keeps marching (R2-11), the
+      // bunker takes 2 damage. Per-bunker cooldown so a sustained overlap
+      // doesn't chew through it every frame.
       world.onOverlap('alien', 'bunker', (alien, bunker) => {
-        alien.destroy();
+        var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if ((bunker.data.lastAlienHit || 0) + 500 > now) return;
+        bunker.data.lastAlienHit = now;
         this.damageBunker(bunker, 2);
       });
     },
@@ -159,6 +171,7 @@
 
     hurt(scene, player) {
       player.data.lives--;
+      scene.state.lives = player.data.lives; // source of truth (R2-2)
       player.data.invincible = true;
       player.data.invincibleTimer = (GF.GAME_CONFIG && GF.GAME_CONFIG.player && GF.GAME_CONFIG.player.invincibleDuration) || 2.0;
 
@@ -197,16 +210,18 @@
       var aliens = scene.world.byTag('alien');
       this._armLastKill(scene, aliens);
 
-      // Log lowest alien position periodically
-      if (aliens.length > 0 && !this._logInterval) this._logInterval = 0;
-      this._logInterval = (this._logInterval || 0) + dt;
-      if (this._logInterval > 0.5) {
-        this._logInterval = 0;
+      // Approach warning (R1-4): flag when the formation's bottom row crosses
+      // 80% of the screen height so the HUD can pulse a danger vignette.
+      if (aliens.length > 0) {
         var lowestY = 0;
         for (var i = 0; i < aliens.length; i++) {
-          if (aliens[i].y > lowestY) lowestY = aliens[i].y;
+          var aBottom = aliens[i].bottom || aliens[i].y;
+          if (aBottom > lowestY) lowestY = aBottom;
         }
-
+        var H = engine.config.height || 480;
+        scene.state.danger = lowestY >= H * 0.8;
+      } else {
+        scene.state.danger = false;
       }
 
       // Invaders reaching player row — lose 1 life, reset formation

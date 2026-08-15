@@ -5,12 +5,16 @@
     scene: 'Main',
     layer: 1,
 
-    enter(scene, engine) {
+    // Called by Waves.spawnWave so every wave gets its four bunkers (R2-5).
+    // Per-level health scaling keeps them meaningful past level 1.
+    build(scene, engine) {
       var cfg = GF.GAME_CONFIG || {};
       var bunkerCfg = cfg.bunkers || {};
       var count = bunkerCfg.count || 4;
       var spacing = bunkerCfg.spacing || 100;
       var startY = bunkerCfg.startY || 520;
+      var level = scene.state.level || 1;
+      var health = (bunkerCfg.health || 8) + (level - 1) * 2;
       var W = engine.config.width;
       var startX = (W - (count - 1) * spacing) / 2 - (bunkerCfg.width || 48) / 2;
 
@@ -19,8 +23,9 @@
         var by = startY;
         var bunker = scene.world.spawn('bunker', bx, by);
         if (bunker) {
-          bunker.data.health = bunkerCfg.health || 8;
-          bunker.data.maxHealth = bunkerCfg.health || 8;
+          bunker.data.health = health;
+          bunker.data.maxHealth = health;
+          bunker.data.lastAlienHit = 0;
         }
       }
     },

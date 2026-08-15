@@ -19,6 +19,9 @@
       // Check if any alien hit the edge
       var W = world.engine ? world.engine.config.width : 480;
       var margin = cfg.edgeMargin || 8;
+      // Prefer the game config value (R2-9); the behavior cfg is usually empty.
+      var dropAmount = (GF.GAME_CONFIG && GF.GAME_CONFIG.aliens && GF.GAME_CONFIG.aliens.dropAmount)
+        || cfg.dropAmount || 16;
       var hitEdge = false;
       var allies = world.byTag('alien');
       for (var i = 0; i < allies.length; i++) {
@@ -34,7 +37,7 @@
         // Drop all aliens and pull them back in bounds
         for (var j = 0; j < allies.length; j++) {
           var ally = allies[j];
-          ally.y += cfg.dropAmount || 16;
+          ally.y += dropAmount;
           if (ally.x < margin) ally.x = margin;
           if (ally.x + ally.w > W - margin) ally.x = W - margin - ally.w;
         }

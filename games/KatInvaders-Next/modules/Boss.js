@@ -30,7 +30,10 @@
         playerCfg.startY || 590
       );
       if (player) {
-        player.data.lives = playerCfg.lives || 3;
+        // Keep the run's lives (R2-2) instead of resetting to the config default.
+        var startLives = scene.state.lives != null ? scene.state.lives : (playerCfg.lives || 3);
+        player.data.lives = startLives;
+        scene.state.lives = startLives;
       }
 
       // Warning phase

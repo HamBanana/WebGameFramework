@@ -6,6 +6,20 @@
   'use strict';
 
   GF.GAME_CONFIG = {
+  "scenes": {
+    "Main": {
+      "worldPhases": [
+        "play",
+        "boss"
+      ]
+    },
+    "Boss": {
+      "worldPhases": [
+        "play",
+        "boss"
+      ]
+    }
+  },
   "game": {
     "name": "KatInvaders",
     "startScene": "TitleScreen",
@@ -201,15 +215,15 @@
     "trailColor": "rgba(255, 100, 200, 0.6)"
   },
   "aliens": {
-    "rows": 6,
+    "rows": 5,
     "cols": 9,
     "startX": 30,
     "startY": 50,
     "spacingX": 38,
     "spacingY": 34,
-    "initialSpeed": 18,
-    "maxSpeed": 80,
-    "speedIncrease": 1.2,
+    "initialSpeed": 12,
+    "maxSpeed": 120,
+    "speedIncrease": 0.6,
     "dropAmount": 18,
     "fireRate": 0.0025,
     "bulletSpeed": 180,
@@ -310,7 +324,7 @@
     ]
   },
   "powerups": {
-    "dropChance": 0.12,
+    "dropChance": 0.2,
     "minionDropChance": 0.25,
     "types": [
       {

@@ -3,8 +3,10 @@
 (function (GF) {
   'use strict';
   GF.behavior('PowerupCollect', (cfg) => ({
-    onAdd(e) {
-      e.data.lives = 3;
+    onAdd(e, world) {
+      // Initialize from the run's lives (R2-2); fall back to the default.
+      var st = world && world.scene && world.scene.state;
+      e.data.lives = (st && st.lives != null) ? st.lives : 3;
       e.data.powerups = {};
       e.data.invincible = false;
       e.data.invincibleTimer = 0;

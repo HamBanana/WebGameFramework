@@ -11,6 +11,31 @@
 
     render(ctx, scene, engine) {
       var W = engine.config.width;
+      var H = engine.config.height;
+
+      // ── Approach warning: pulsing red vignette when the formation nears the player (R1-4)
+      if (scene.state.danger) {
+        this._warnT = (this._warnT || 0) + 0.016;
+        var pulse = 0.5 + 0.5 * Math.sin(this._warnT * 10);
+        ctx.save();
+        ctx.globalAlpha = 0.10 + 0.16 * pulse;
+        var warnGrad = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75);
+        warnGrad.addColorStop(0, 'rgba(255,0,60,0)');
+        warnGrad.addColorStop(1, 'rgba(255,0,60,1)');
+        ctx.fillStyle = warnGrad;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalAlpha = 0.55 + 0.45 * pulse;
+        GF.UISystem.drawText(ctx, '⚠ ALIENS APPROACHING ⚠', W / 2, H * 0.72, {
+          align: 'center', font: 'bold 22px monospace', color: '#ff3355',
+          shadow: true, glow: '#ff0033', glowBlur: 10,
+        });
+        ctx.restore();
+      } else {
+        this._warnT = 0;
+      }
 
       // ── Row 1: score / level / lives ────────────────────────────────────
       GF.UISystem.drawText(ctx, 'SCORE  ' + scene.state.score, 15, 12, {

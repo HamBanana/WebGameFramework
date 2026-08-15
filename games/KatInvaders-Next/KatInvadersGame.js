@@ -36,8 +36,12 @@
 
   // ── Scene: TitleScreen ─────────────────────────────────────────────────────
   function BossScene() {
+    // `modules: { from: 'Main' }` attaches Main's gameplay modules (Boss,
+    // Combat, Waves, Hud, …) to this scene, so the title-screen B bossfight
+    // is a real fight instead of an empty scene.
     var inst = new GF.GameScene('Boss', {
       phase: 'boss',
+      modules: { from: 'Main' },
       state: {
         score: 0, lives: 3, level: 5, won: false,
         combo: 0, comboTimer: 0, comboMultiplier: 1,
