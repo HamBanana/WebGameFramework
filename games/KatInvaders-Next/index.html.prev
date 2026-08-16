@@ -25,9 +25,9 @@
   </style>
 </head>
 <body>
-  <script src="config.js"></script>
+  <script src="config.js?v=8"></script>
   <script src="../../framework/GameFramework.bundle.js"></script>
-  <script>GF.loadGame('manifest.json');</script>
-  <script src="KatInvadersGame.js"></script>
+  <script>GF.loadGame('manifest.json?v=8');</script>
+  <script src="KatInvadersGame.js?v=8"></script>
 </body>
 </html>
