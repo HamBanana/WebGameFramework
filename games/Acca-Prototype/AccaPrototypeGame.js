@@ -461,7 +461,7 @@
 
     doExpand(tile) {
       const p = this.players[this.cur];
-      const area = this.areaById(tile.area);
+      const area = this.areaById(this.pendingLand.area);
       area.tiles.push(tile);
       tile.area = area.id;
       tile.owner = this.cur;
