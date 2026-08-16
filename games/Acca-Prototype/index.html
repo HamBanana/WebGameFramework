@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Acca Prototype – GameFramework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0b0f16;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: monospace;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 1024px;
+      height: 640px;
+    }
+
+    #gameCanvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="1024" height="640"></canvas>
+  </div>
+
+  <!-- ── Game config ──────────────────────────────────────────────── -->
+  <script src="config.js"></script>
+
+  <!-- ── GameFramework ────────────────────────────────────────────── -->
+  <script src="../../framework/GameFramework.bundle.js"></script>
+
+  <!-- ── Game logic ───────────────────────────────────────────────── -->
+  <script src="AccaPrototypeGame.js"></script>
+</body>
+</html>

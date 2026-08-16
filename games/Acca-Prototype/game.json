@@ -1,0 +1,58 @@
+{
+  "id": "Acca-Prototype",
+  "version": "0.1",
+  "title": "Acca Prototype",
+  "icon": "🎲",
+  "color": "#ffb347",
+  "tags": ["BOARD GAME", "2–4 PLAYERS", "CITY BUILDING"],
+  "desc": "Web port of the Unity Acca prototype. Roll the dice, wander the city grid, found cities with City Halls, grow your area, build properties, and collect rent as mayor.",
+  "config": [
+    {
+      "key": "Players",
+      "help": "Number of players (human turns in order).",
+      "opts": ["2", "3", "4"],
+      "def": "2",
+      "apply": {
+        "2": { "numberOfPlayers": 2 },
+        "3": { "numberOfPlayers": 3 },
+        "4": { "numberOfPlayers": 4 }
+      }
+    },
+    {
+      "key": "Starting Money",
+      "help": "Each player's starting cash.",
+      "opts": ["$500", "$1 000", "$1 500", "$2 500"],
+      "def": "$1 000",
+      "apply": {
+        "$500":   { "startingMoney": 500  },
+        "$1 000": { "startingMoney": 1000 },
+        "$1 500": { "startingMoney": 1500 },
+        "$2 500": { "startingMoney": 2500 }
+      }
+    },
+    {
+      "key": "Win Target",
+      "help": "Money on hand needed to win.",
+      "opts": ["$3 000", "$4 000", "$5 000", "$7 500"],
+      "def": "$4 000",
+      "apply": {
+        "$3 000": { "winTarget": 3000  },
+        "$4 000": { "winTarget": 4000  },
+        "$5 000": { "winTarget": 5000  },
+        "$7 500": { "winTarget": 7500  }
+      }
+    },
+    {
+      "key": "Turn Cap",
+      "help": "Full rounds before the richest player wins. None = play until someone reaches the target.",
+      "opts": ["40", "80", "120", "None"],
+      "def": "80",
+      "apply": {
+        "40":   { "turnCap": 40 },
+        "80":   { "turnCap": 80 },
+        "120":  { "turnCap": 120 },
+        "None": { "turnCap": 0 }
+      }
+    }
+  ]
+}
