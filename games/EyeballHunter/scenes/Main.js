@@ -90,7 +90,8 @@
       }
 
       // ── Collision rules ────────────────────────────────────────────
-      // Player vs enemy: jump on to defeat, touch side to steal eyeball
+      // Player vs enemy: jump on one to take its eye. Touch it any other way
+      // and it costs a life — blinded or not.
       this.world.onOverlap('player', 'enemy', (p, e) => {
         if (e.has('boss')) {
           this.onBossTouch(p, e);
@@ -106,9 +107,9 @@
         if (isFalling && isAbove && p.invuln <= 0) {
           // Stomp the enemy!
           this.stompEnemy(p, e);
-        } else if (e.hasEyeball && !e.stunned) {
-          // Touch from side/below -> steal eyeball
-          this.stealEyeball(p, e);
+        } else {
+          // Side/bottom contact -> lose a life (shield and i-frames inside)
+          this.damagePlayer(p, e.centerX);
         }
       });
 
@@ -136,7 +137,9 @@
         if (this.state === 'playing' && !this.isBossLevel) this.completeLevel();
       });
 
-      // Thrown eyeball hits enemy
+      // Thrown eyeball hits enemy — knocks their eye loose. Yours is spent and
+      // theirs is collected, so hitting a sighted enemy is net neutral; hitting
+      // a blind one just stuns it and costs you the eye.
       this.world.onOverlap('eyeball', 'enemy', (ball, e) => {
         if (e.has('boss')) return; // Boss has separate mechanic
         if (e.stunned > 0) return;
@@ -147,9 +150,10 @@
         // Stun the enemy
         e.stunned = 1.5;
         e.hurtFlash = 1;
-        e.hasEyeball = false; // Lose their eyeball too!
         
         this.burst(e.centerX, e.centerY, ['#fff', '#00e5ff', '#ffe066'], 12);
+        if (this.stealEyeball(this.player, e)) return;
+        
         this.spawnFloatingText('HIT!', e.centerX, e.y - 10, '#ffe066');
         
         const game = window.GAME && window.GAME.game;
@@ -178,38 +182,46 @@
     }
 
     // ── Gameplay helpers ─────────────────────────────────────────────
-    stealEyeball(p, e) {
+    // Blind an enemy: they survive, they just can't see — and they have
+    // nothing left to give. Single source of truth for both flags.
+    blindEnemy(e) {
+      const had = e.hasEyeball !== false;
       e.hasEyeball = false;
+      e.blinded = true;
       e.blindFlash = 0.3;
+      return had;
+    }
+
+    stealEyeball(p, e) {
+      if (!this.blindEnemy(e)) return false;
       window.EH.eyeballs++;
       window.EH.levelEyeballs++;
       this.spawnFloatingText('+1 👁️', e.centerX, e.y - 14, '#ffcc00');
       this.burst(e.centerX, e.centerY, ['#fff', '#00e5ff', '#cc0000'], 12);
       const game = window.GAME && window.GAME.game;
       if (game && game.audio) game.audio.play('pickup');
+      return true;
     }
 
     stompEnemy(p, e) {
-      // Player stomps enemy - bounce!
+      // The bounce is unconditional — a blinded enemy is still solid ground.
       p.bounceV = -400;
       p.invuln = 0.3;
       
       // Stun the enemy
       e.stunned = 2;
       e.hurtFlash = 1;
-      e.hasEyeball = false;
       
-      // Collect eyeball
-      window.EH.eyeballs++;
-      window.EH.levelEyeballs++;
-      this.spawnFloatingText('STOMP! +1 👁️', e.centerX, e.y - 20, '#ffcc00');
-      this.burst(e.centerX, e.centerY, ['#fff', '#ffe066', '#cc0000'], 20);
+      // Only the first stomp (the one that takes the eye) pays out.
+      if (!this.stealEyeball(p, e)) {
+        this.spawnFloatingText('BLIND!', e.centerX, e.y - 20, '#9aa0b5');
+        const game = window.GAME && window.GAME.game;
+        if (game && game.audio) game.audio.play('hit');
+        return;
+      }
       
       // Chance to drop powerup
       this.maybeDropPowerup(e.centerX, e.centerY);
-      
-      const game = window.GAME && window.GAME.game;
-      if (game && game.audio) game.audio.play('pickup');
     }
 
     maybeDropPowerup(x, y) {
@@ -543,7 +555,7 @@
       ctx.font = '11px monospace';
       ctx.fillStyle = '#667';
       ctx.textAlign = 'left';
-      ctx.fillText('← → / A D: Move   ↑ / W / Space: Jump   X / F: Throw Eyeball   Stomp enemies to defeat them!', 16, VH - 12);
+      ctx.fillText('← → / A D: Move   ↑ / W / Space: Jump   X / F: Throw Eyeball   Stomp enemies for eyes — touch one and lose a life!', 16, VH - 12);
     }
 
     drawBanner(ctx, text, color) {

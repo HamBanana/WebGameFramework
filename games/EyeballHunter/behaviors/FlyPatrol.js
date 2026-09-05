@@ -23,12 +23,15 @@
         e.direction = 1;
         e.hasEyeball = true;
         e.blinded = false;
+        e.blindFlash = 0;
         e.stunned = 0;
         e.hurtFlash = 0;
         e.flipX = false;
       },
 
       update(dt, e) {
+        if (e.blindFlash > 0) e.blindFlash = Math.max(0, e.blindFlash - dt);
+
         // Stunned state (when jumped on or hit by eyeball)
         if (e.stunned > 0) {
           e.stunned -= dt;
@@ -36,9 +39,12 @@
           return;
         }
 
+        // Blinded flies drift at half speed — still up here, still dangerous.
+        const spd = e.hasEyeball === false ? e.speed * 0.5 : e.speed;
+
         // Move in sine wave pattern
         e.time += dt * e.waveFreq;
-        e.x += e.direction * e.speed * dt;
+        e.x += e.direction * spd * dt;
         e.y = e.startY + Math.sin(e.time) * e.waveAmp;
 
         // Patrol back and forth
@@ -66,9 +72,13 @@
         const scale = e.flipX ? -1 : 1;
         ctx.scale(scale, 1);
 
+        // hasEyeball is the flag the scene flips when an eye is taken; `blinded`
+        // is kept in sync by the scene, so either one reads as blind here.
+        const blind = e.blinded === true || e.hasEyeball === false;
+
         // Wings (animated)
         const wingFlap = Math.sin(Date.now() / 80) * 0.4;
-        ctx.fillStyle = e.blinded ? '#4a4a5a' : '#6a5a8a';
+        ctx.fillStyle = blind ? '#4a4a5a' : '#6a5a8a';
         // Left wing
         ctx.beginPath();
         ctx.ellipse(-8, -4, 10, 6, -0.3 + wingFlap, 0, Math.PI * 2);
@@ -79,7 +89,7 @@
         ctx.fill();
 
         // Body
-        ctx.fillStyle = e.blinded ? '#3a3a4a' : '#5a4a7a';
+        ctx.fillStyle = blind ? '#3a3a4a' : '#5a4a7a';
         ctx.beginPath();
         ctx.ellipse(0, 0, 12, 10, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -88,7 +98,7 @@
         ctx.stroke();
 
         // Eyes
-        if (e.hasEyeball && !e.blinded) {
+        if (!blind) {
           // Glowing eyes with eyeball
           ctx.fillStyle = '#ffe066';
           ctx.beginPath();
@@ -131,6 +141,15 @@
         ctx.moveTo(-4, 8); ctx.lineTo(-6, 14);
         ctx.moveTo(4, 8); ctx.lineTo(6, 14);
         ctx.stroke();
+
+        // White pop the instant an eye is taken
+        if (e.blindFlash > 0) {
+          ctx.globalAlpha = e.blindFlash / 0.3;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(0, 0, 14, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
         ctx.restore();
 

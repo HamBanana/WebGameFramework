@@ -77,7 +77,8 @@
       ctx.fillStyle = '#8892a8';
       ctx.font = '14px monospace';
       ctx.fillText('← → / A D  Move      ↑ / W / Space  Jump', VW / 2, 410);
-      ctx.fillText('Touch enemies to snatch their eyes — blinded enemies are harmless.', VW / 2, 432);
+      ctx.fillText('Jump on enemies to snatch their eyes — touch one and lose a life.', VW / 2, 432);
+      ctx.fillText('Blinded enemies survive, stay standing, and give no more eyes.', VW / 2, 452);
 
       // Blinking prompt
       if (Math.floor(this.t * 2) % 2 === 0) {

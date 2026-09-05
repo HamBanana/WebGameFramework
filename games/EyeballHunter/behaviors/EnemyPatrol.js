@@ -20,6 +20,8 @@
     update(dt, e, world) {
       const solids = (world.data && world.data.solids) || [];
       
+      if (e.blindFlash > 0) e.blindFlash = Math.max(0, e.blindFlash - dt);
+
       // Stunned state (when jumped on or hit by eyeball)
       if (e.stunned > 0) {
         e.stunned -= dt;
@@ -40,10 +42,9 @@
         return;
       }
 
-      if (e.blindFlash > 0) e.blindFlash = Math.max(0, e.blindFlash - dt);
       const t = (world.data && world.data.t) || 0;
 
-      // Blinded enemies drift half speed — harmless, just wandering.
+      // Blinded enemies wander at half speed — still up there, still dangerous.
       const mult = e.hasEyeball ? 1 : 0.5;
       const spd = e.speed * mult;
       
