@@ -1,5 +1,10 @@
-// prefabs/spider.js — entity archetype (data + behavior list).
+// prefabs/spider.js — patrolling enemy carrying one eyeball.
 (function (GF) {
   'use strict';
-  GF.prefab('spider', {"behaviors": ["SpiderPatrol"], "h": 32, "tags": ["enemy"], "w": 32});
+  GF.prefab('spider', {
+    behaviors: ['EnemyPatrol'],
+    h: 28,
+    tags: ['enemy'],
+    w: 32,
+  });
 })(window.GF);

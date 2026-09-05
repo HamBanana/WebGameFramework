@@ -10,6 +10,7 @@
       audio: true, tweens: true, particles: true, scenes: true, debug: false,
     });
     G.game = game;                 // shared handle: scenes reach game.audio, game.grids, ...
+    if (game.audio && GF.Audio) GF.Audio.registerStandardSet(game.audio);
     const names = Object.keys(G.scenes);
     const startName = (cfg.game && cfg.game.startScene) || 'Main';
     const First = G.scenes[startName] || (names.length ? G.scenes[names[0]] : null);
